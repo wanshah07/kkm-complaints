@@ -77,13 +77,17 @@ def canonical_url(u: str) -> str:
 _TRACKING_PARAMS = re.compile(r"^(__cft__.*|__tn__|mibextid|igsh|igshid|utm_\w+|fbclid|ref|refsrc|rdid|_rdr)$", re.I)
 
 
+_POST_SUBVIEW = re.compile(r"/(media|liked|reposts|replies|photo|comments)/?$", re.I)
+
+
 def clean_post_url(u: str) -> str:
     """The URL stored in the sheet and quoted in the complaint: tracking parameters removed,
     identity parameters (story_fbid, id, v, fbid, set) kept, case preserved."""
     u = (u or "").strip()
     parts = urlsplit(u)
     keep = [kv for kv in parts.query.split("&") if kv and not _TRACKING_PARAMS.match(kv.split("=", 1)[0])]
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, "&".join(keep), ""))
+    path = _POST_SUBVIEW.sub("", parts.path)  # /post/ABC/media is the same post as /post/ABC
+    return urlunsplit((parts.scheme, parts.netloc, path, "&".join(keep), ""))
 
 
 def _dismiss_dialogs(page: Page) -> None:
@@ -230,7 +234,26 @@ def _diagnose_empty(page: Page, out_dir: str, tag: str) -> str:
     return hint
 
 
-def _collect_links(page: Page, patterns: List[str], base: str, limit: int) -> List[str]:
+def _owned_by(url: str, platform: str, handle: str) -> bool:
+    """
+    A brand profile page also links to reposts, quoted posts and commenters' posts. Those are other
+    people's content, not the brand's advertising, so they must not become complaints against it.
+    """
+    if not handle:
+        return True
+    h = re.escape(handle.strip().lstrip("@"))
+    path = urlsplit(url).path.lower()
+    if platform == "Threads":
+        return bool(re.match(rf"^/@{h}/post/", path, re.I))
+    if platform == "Facebook":
+        if re.search(r"/(story\.php|permalink\.php)", path, re.I):
+            return True  # identity lives in the query string, checked by the profile we came from
+        return bool(re.match(rf"^/{h}(/|$)", path, re.I))
+    return True  # Instagram grid links carry no handle in the path
+
+
+def _collect_links(page: Page, patterns: List[str], base: str, limit: int,
+                   platform: str = "", handle: str = "") -> List[str]:
     hrefs: List[str] = []
     for _ in range(6):  # scroll to load a few rows
         try:
@@ -252,14 +275,22 @@ def _collect_links(page: Page, patterns: List[str], base: str, limit: int) -> Li
             page.wait_for_timeout(1500)
         except Exception:
             break
-    # de-noise: drop profile-level and comment anchors
-    out = []
+    # de-noise: drop profile-level anchors, other people's posts, and duplicate sub-views
+    out: List[str] = []
+    seen_clean = set()
     for h in hrefs:
         if re.search(r"/(explore|accounts|login|hashtag|reels/audio|comments?)/", h, re.I):
             continue
         if "facebook.com" in h and re.search(r"/(photos/a\.|groups/)", h):
             continue
-        out.append(h)
+        if not _owned_by(h, platform, handle):
+            continue
+        c = clean_post_url(h)
+        key = canonical_url(c)
+        if key in seen_clean:
+            continue
+        seen_clean.add(key)
+        out.append(c)
     return out[:limit]
 
 
@@ -352,7 +383,8 @@ class Scraper:
             page.wait_for_timeout(2500)
             if not _wait_for_posts(page, pcfg["post_link_patterns"]):
                 log.info("[%s/%s] no post anchors after wait; scrolling anyway", brand, platform)
-            links = _collect_links(page, pcfg["post_link_patterns"], profile_url, limit)
+            links = _collect_links(page, pcfg["post_link_patterns"], profile_url, limit,
+                                   platform=platform, handle=handle)
             log.info("[%s/%s] %d post links", brand, platform, len(links))
             if not links:
                 hint = _diagnose_empty(page, self.out_dir, f"{brand}_{platform}")
