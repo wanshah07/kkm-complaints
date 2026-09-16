@@ -32,6 +32,20 @@ from playwright.sync_api import Browser, BrowserContext, Page, TimeoutError as P
 log = logging.getLogger("kkm.scraper")
 
 
+def env_str(name: str, default: str = "") -> str:
+    """
+    Read an environment variable, tolerating a .env line like
+        PW_CHROMIUM_PATH=            # optional: path to a system binary
+    Some parsers hand back the comment as the value, which then fails far away from
+    the cause. A value that is blank, or begins with #, means "not set".
+    """
+    v = (os.getenv(name) or "").strip()
+    if v.startswith("#"):
+        return default
+    v = re.split(r"\s+#", v, 1)[0].strip()
+    return v or default
+
+
 @dataclass
 class Post:
     brand: str
@@ -313,7 +327,7 @@ class Scraper:
     def _materialise_storage_state(self) -> Optional[str]:
         # 1. an explicit path, 2. storage_state.json sitting next to this file (the Windows
         # case, so no .env line is needed), 3. base64 in the environment (the CI case).
-        p = os.getenv("PW_STORAGE_STATE_PATH")
+        p = env_str("PW_STORAGE_STATE_PATH")
         if p and os.path.exists(p):
             log.info("using browser session from %s", p)
             return p
@@ -321,7 +335,7 @@ class Scraper:
         if os.path.exists(here):
             log.info("using browser session from %s", here)
             return here
-        b64 = os.getenv("PW_STORAGE_STATE_B64")
+        b64 = env_str("PW_STORAGE_STATE_B64")
         if b64:
             try:
                 raw = base64.b64decode(b64)
@@ -359,8 +373,12 @@ class Scraper:
                                  args=["--disable-blink-features=AutomationControlled"])
             # Use a system / pre-installed Chromium instead of the Playwright-managed one when asked
             # (VPS with distro Chromium, or a runner whose browser bundle does not match the pip version).
-            if os.getenv("PW_CHROMIUM_PATH"):
-                launch_kwargs["executable_path"] = os.getenv("PW_CHROMIUM_PATH")
+            chromium_path = env_str("PW_CHROMIUM_PATH")
+            if chromium_path and os.path.exists(chromium_path):
+                launch_kwargs["executable_path"] = chromium_path
+            elif chromium_path:
+                log.warning("PW_CHROMIUM_PATH points at %r which does not exist; using the bundled browser",
+                            chromium_path)
             browser = pw.chromium.launch(**launch_kwargs)
             try:
                 for brand in brands:

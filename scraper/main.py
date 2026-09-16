@@ -156,7 +156,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 1
 
     drive: Optional[DriveUploader] = None
-    if os.getenv("SCREENSHOT_MODE", "apps_script").lower() == "drive_api":
+    from scraper import env_str
+    if env_str("SCREENSHOT_MODE", "apps_script").lower() == "drive_api":
         try:
             drive = DriveUploader()
         except Exception as e:

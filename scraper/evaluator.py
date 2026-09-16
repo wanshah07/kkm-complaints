@@ -18,6 +18,15 @@ from npra_rules import RULEBOOK, acceptable_hints, offline_verdict, prescreen
 
 log = logging.getLogger("kkm.evaluator")
 
+
+def env_str(name: str, default: str = "") -> str:
+    """Same tolerance for inline comments as the scraper. See scraper.env_str."""
+    v = (os.getenv(name) or "").strip()
+    if v.startswith("#"):
+        return default
+    v = v.split("  #", 1)[0].split("\t#", 1)[0].strip()
+    return v or default
+
 # USD per million tokens, from the Anthropic pricing page. Update when prices change.
 # Cache reads bill at ~0.1x input, cache writes at ~1.25x input.
 MODEL_PRICES = {
@@ -191,9 +200,9 @@ def _review_anthropic(inp: ReviewInput) -> dict:
     import anthropic
 
     client = anthropic.Anthropic()
-    model = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5")
+    model = env_str("ANTHROPIC_MODEL", "claude-haiku-4-5")
     content = []
-    if inp.screenshot_path and os.getenv("LLM_USE_SCREENSHOT", "1") == "1":
+    if inp.screenshot_path and env_str("LLM_USE_SCREENSHOT", "1") == "1":
         blk = _image_block_anthropic(inp.screenshot_path)
         if blk:
             content.append(blk)
@@ -201,7 +210,7 @@ def _review_anthropic(inp: ReviewInput) -> dict:
 
     output_config = {"format": {"type": "json_schema", "schema": VERDICT_SCHEMA}}
     if _supports_effort(model):
-        output_config["effort"] = os.getenv("ANTHROPIC_EFFORT", "high")
+        output_config["effort"] = env_str("ANTHROPIC_EFFORT", "high")
     kwargs = dict(
         model=model,
         max_tokens=4000,
@@ -210,7 +219,7 @@ def _review_anthropic(inp: ReviewInput) -> dict:
         output_config=output_config,
     )
 
-    use_fallbacks = os.getenv("ANTHROPIC_FALLBACKS", "1") == "1"
+    use_fallbacks = env_str("ANTHROPIC_FALLBACKS", "1") == "1"
     try:
         if use_fallbacks:
             # Server-side refusal fallback: a policy decline re-runs on a fallback model in the same call.
@@ -249,9 +258,9 @@ def _review_openai(inp: ReviewInput) -> dict:
     from openai import OpenAI
 
     client = OpenAI()
-    model = os.getenv("OPENAI_MODEL", "gpt-4.1")
+    model = env_str("OPENAI_MODEL", "gpt-4.1")
     content = [{"type": "text", "text": _user_prompt(inp)}]
-    if inp.screenshot_path and os.getenv("LLM_USE_SCREENSHOT", "1") == "1":
+    if inp.screenshot_path and env_str("LLM_USE_SCREENSHOT", "1") == "1":
         try:
             with open(inp.screenshot_path, "rb") as f:
                 b64 = base64.standard_b64encode(f.read()).decode("utf-8")
@@ -303,7 +312,7 @@ def review(inp: ReviewInput, use_llm: bool = True) -> dict:
     Rule engine short-circuit: when the regex bank finds nothing at all and there is no
     screenshot, the post is Acceptable without an LLM call (saves the bulk of the spend).
     """
-    provider = os.getenv("LLM_PROVIDER", "anthropic").lower()
+    provider = env_str("LLM_PROVIDER", "anthropic").lower()
     has_key = bool(os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN")) if provider == "anthropic" else bool(os.getenv("OPENAI_API_KEY"))
     if not use_llm or not has_key:
         if use_llm and not has_key:

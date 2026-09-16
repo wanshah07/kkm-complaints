@@ -220,6 +220,8 @@ Open the run: GitHub → **Actions** → click the run. The summary at the end o
 | Instagram fails from GitHub but works in your browser | Instagram blocks datacenter addresses | Run from your own PC (section 7); GitHub cannot fix this |
 | `posted <date>, outside on/after 2025-09-01` | Working as intended | Widen `min_post_date` if you want older posts |
 | `already in sheet` | Working as intended | Nothing |
+| `Failed to launch chromium because executable doesn't exist at # optional: …` | A `.env` line has a comment after the value, and the comment was read as the value | Put comments on their own line. Blank means "not set". |
+| `PW_STORAGE_STATE_B64 invalid … codec can't decode` | Same cause as above | Same fix; leave it blank on Windows and keep `storage_state.json` beside `main.py` |
 | `No time zone found with key Asia/Kuala_Lumpur` (Windows) | The `tzdata` package is missing from `.venv` | In the scraper folder: `.venv\Scripts\activate` then `pip install tzdata`, or re-run `setup_windows.bat` |
 | `LLM review failed … falling back to rules` | API key missing, out of credit, or a transient error | Check credit at console.anthropic.com; the run still completes on the regex rules alone |
 | Dashboard says `Unauthorised` | Wrong dashboard key, or Apps Script not redeployed after a code change | Re-enter the key; in Apps Script, Deploy → Manage deployments → New version |

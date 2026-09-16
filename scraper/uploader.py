@@ -23,6 +23,8 @@ from PIL import Image
 
 log = logging.getLogger("kkm.uploader")
 
+from scraper import env_str  # shared .env tolerance
+
 
 # ---------------------------------------------------------------------------
 # image compression
@@ -46,8 +48,8 @@ def compress_screenshot(path: str, max_width: int = 1200, quality: int = 80) -> 
 # ---------------------------------------------------------------------------
 class DriveUploader:
     def __init__(self):
-        raw = os.getenv("GDRIVE_SA_JSON", "")
-        self.folder_id = os.getenv("GDRIVE_FOLDER_ID", "")
+        raw = env_str("GDRIVE_SA_JSON")
+        self.folder_id = env_str("GDRIVE_FOLDER_ID")
         if not raw or not self.folder_id:
             raise RuntimeError("GDRIVE_SA_JSON and GDRIVE_FOLDER_ID are required for SCREENSHOT_MODE=drive_api")
         try:
@@ -79,8 +81,8 @@ class DriveUploader:
 # ---------------------------------------------------------------------------
 class AppsScriptClient:
     def __init__(self, url: Optional[str] = None, token: Optional[str] = None, timeout: int = 120):
-        self.url = url or os.getenv("APPS_SCRIPT_WEBHOOK_URL", "")
-        self.token = token or os.getenv("APPS_SCRIPT_API_TOKEN", "")
+        self.url = url or env_str("APPS_SCRIPT_WEBHOOK_URL")
+        self.token = token or env_str("APPS_SCRIPT_API_TOKEN")
         self.timeout = timeout
         if not self.url or not self.token:
             raise RuntimeError("APPS_SCRIPT_WEBHOOK_URL and APPS_SCRIPT_API_TOKEN are required")
@@ -148,7 +150,7 @@ class AppsScriptClient:
 def attach_screenshot(record: dict, screenshot_path: Optional[str], run_cfg: dict,
                       drive: Optional[DriveUploader], filename: str) -> None:
     """Mutates `record` in place with either screenshot_base64 or screenshot_link."""
-    mode = os.getenv("SCREENSHOT_MODE", "apps_script").lower()
+    mode = env_str("SCREENSHOT_MODE", "apps_script").lower()
     if mode == "none" or not screenshot_path or not os.path.exists(screenshot_path):
         return
     try:
