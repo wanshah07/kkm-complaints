@@ -66,19 +66,30 @@ The scraper reads this tab at the start of every run. `scraper/config.yaml` is o
 
 ### Getting a handle right
 
-**The handle is the part of the profile URL after the slash, not the page's display name.**
+**You can paste either the bare handle or the full profile URL — the sheet now cleans it up for you.**
 
-| Platform | Profile URL | Handle to enter |
+| Platform | You can paste | Becomes |
 |---|---|---|
-| Instagram | `instagram.com/eucerin_my` | `eucerin_my` |
-| Facebook | `facebook.com/EucerinMalaysia` | `EucerinMalaysia` |
-| Threads | `threads.net/@qvskincare` | `qvskincare` |
+| Instagram | `instagram.com/eucerin_my` or `eucerin_my` | `eucerin_my` |
+| Facebook | `facebook.com/EucerinMalaysia` or `EucerinMalaysia` | `EucerinMalaysia` |
+| Threads | `threads.net/@qvskincare` or `qvskincare` | `qvskincare` |
 
-No `@`, no spaces, no `https://`. **A handle with spaces in it is a display name and will fail**: Facebook's page *QV Skincare Malaysia* might live at `facebook.com/QVSkincareMY`, and only the URL tells you which.
+Easiest: open the profile in your browser, copy the address bar, paste the whole thing into the cell. `sanitizeHandle_()` in `Code.gs` strips the domain, the `@`, the query string (`?hl=en`), and stray path segments (e.g. Instagram's `/popular/…` prefix) down to just the handle, before the scraper ever sees it. A handle with spaces in it is still a display name and will fail: Facebook's page *QV Skincare Malaysia* might live at `facebook.com/QVSkincareMY`, and only the URL tells you which.
 
-To check one: open the profile in your browser and read the address bar. If the URL shows a long number instead of a name, that numeric ID works too, paste it as the handle.
+If the URL shows a long number instead of a name, that numeric ID works too, paste it as the handle (or the full URL containing it).
 
 **A wrong handle is not silent.** The run log says `no post links found — profile not available (handle wrong or region-blocked)` and saves a screenshot of what it saw into the run artefact.
+
+### Adding a new brand and taking it live — the whole flow
+
+1. Sheet → `Targets` tab → new row. Type the brand name in **Brand**, tick **Active**.
+2. Paste a handle or the full profile URL into **Instagram** / **Facebook** / **Threads** — whichever the brand actually has. Leave the rest blank.
+3. Optional: comma-separated product lines in **Product hints**, so the reviewer names the product correctly in the row.
+4. That's it — **no code change, no redeploy.** The next run (scheduled or manual) reads the sheet fresh and picks the brand up automatically.
+5. To check it immediately rather than waiting for Friday: GitHub → Actions → *KKM complaint scraper* → Run workflow → set **brand** to the exact name you typed → Run. Tick **dry_run** first if you just want to see what it would find without writing to the sheet.
+6. Read the run's log/summary (section 8) for that brand's rows: `posts=N  ok` means the handle resolved and it looked at real posts; `profile not available` means the handle is wrong — open the profile in your own browser and re-copy the URL into the cell; `different account: post is by @X, not @Y` means the handle you configured isn't the account actually posting — find the real @handle and update the cell.
+
+A **redeploy** (Apps Script → Deploy → Manage deployments → New version) is only needed when `Code.gs` or `Index.html` itself changes — never for adding, editing or pausing a brand, and never for a new platform column left unconfigured on the scraper side (section 3).
 
 ---
 
@@ -240,6 +251,8 @@ Open the run: GitHub → **Actions** → click the run. The summary at the end o
 | A row's Post URL is on an account you didn't configure (e.g. a global/US handle you never set) | Instagram's profile page can surface "Suggested for you" or related-account content; the scraper now checks the actual poster of each post against the Targets handle and skips a mismatch, but a row filed before that check went in is real content from the wrong account | Dismiss the row — it is not the Malaysian brand's own post |
 | `posted <date>, outside on/after 2025-09-01` | Working as intended | Widen `min_post_date` if you want older posts |
 | `already in sheet` | Working as intended | Nothing |
+| A Targets handle cell held a full profile URL and the run log showed a doubled address (`instagram.com/https://www.instagram.com/...`) | Fixed 16 Sep 2026: `sanitizeHandle_()` now strips a pasted URL down to the handle before the scraper ever sees it | Nothing to do — paste bare handles or full URLs, both work now |
+| `different account: post is by @X, not @Y` | The configured handle isn't the account actually posting anymore (brand changed handles, or it was never right) | Find the real @handle in your browser and update the Targets cell |
 | `Failed to launch chromium because executable doesn't exist at # optional: …` | A `.env` line has a comment after the value, and the comment was read as the value | Put comments on their own line. Blank means "not set". |
 | `PW_STORAGE_STATE_B64 invalid … codec can't decode` | Same cause as above | Same fix; leave it blank on Windows and keep `storage_state.json` beside `main.py` |
 | `No time zone found with key Asia/Kuala_Lumpur` (Windows) | The `tzdata` package is missing from `.venv` | In the scraper folder: `.venv\Scripts\activate` then `pip install tzdata`, or re-run `setup_windows.bat` |
@@ -263,6 +276,8 @@ Open the run: GitHub → **Actions** → click the run. The summary at the end o
 | `PW_STORAGE_STATE_B64` | GitHub secret | The recorded browser session |
 
 The dashboard key is not a password to an account. It gates the page; the sheet itself is protected by your Google login.
+
+**This guide, on the dashboard itself**: click **Guide** in the header, or open the dashboard URL with `?view=guide` instead of `?key=...`. That route ignores `DASHBOARD_KEY` entirely — it only opens when you're signed into the Google account in `OWNER_EMAIL` in that browser. Anyone else sees a locked page.
 
 ---
 
