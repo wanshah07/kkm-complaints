@@ -211,6 +211,27 @@ function ensureTargets_(ss) {
   return sheet;
 }
 
+function sanitizeHandle_(raw) {
+  // A Targets cell should hold a bare handle, but it's easy to paste the full profile URL
+  // instead (e.g. copied straight from the address bar). Reduce either form to just the
+  // handle so `profile_url.format(handle=...)` never doubles the domain.
+  if (raw === null || raw === undefined) return '';
+  var v = String(raw).trim();
+  if (!v) return '';
+  var looksLikeUrl = /^https?:\/\//i.test(v) || /(?:^|\.)(?:instagram|facebook|threads)\.(?:com|net)\b/i.test(v);
+  if (!looksLikeUrl) return v.replace(/^\/+|\/+$/g, '').replace(/^@/, '');
+  var withoutScheme = v.replace(/^https?:\/\//i, '');
+  var slash = withoutScheme.indexOf('/');
+  var path = slash === -1 ? '' : withoutScheme.slice(slash);
+  path = path.split(/[?#]/)[0];
+  var IGNORE = ['popular', 'explore', 'reel', 'reels', 'p', 'stories', 'tv', 'tags', 'hashtag', 'profile.php'];
+  var segments = path.split('/')
+    .filter(function (s) { return s.length > 0; })
+    .filter(function (s) { return IGNORE.indexOf(s.toLowerCase()) < 0; });
+  var handle = segments.length ? segments[segments.length - 1] : '';
+  return handle.replace(/^@/, '');
+}
+
 function targets_() {
   // Reads the Targets tab. Returns [{name, active, handles: {Platform: handle}, product_hints: [..], notes}].
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -231,7 +252,7 @@ function targets_() {
     var active = iActive >= 0 ? (row[iActive] === true || String(row[iActive]).toLowerCase() === 'true') : true;
     var handles = {};
     platformCols.forEach(function (pc) {
-      var v = String(row[pc.i] || '').trim().replace(/^@/, '');
+      var v = sanitizeHandle_(row[pc.i]);
       if (v) handles[pc.name] = v;
     });
     var hints = iHints >= 0 ? String(row[iHints] || '').split(',').map(function (x) { return x.trim(); }).filter(String) : [];
