@@ -146,6 +146,25 @@ That file is a live login. Do not leave it on the desktop and do not email it.
 
 Posts whose date cannot be read anywhere always pass the date filter. Skipping them would create blind spots.
 
+### Pacing (how human the browsing looks)
+
+`scraper/config.yaml`, section `run:`. Each is a `[min, max]` in seconds, waited at random.
+
+| Setting | Default | Waited before |
+|---|---|---|
+| `pause_between_posts` | `[8, 25]` | each post page after the first |
+| `pause_between_profiles` | `[45, 120]` | each brand/platform after the first |
+| `pause_after_scroll` | `[1.5, 3.5]` | each scroll on a profile grid |
+
+This is what keeps an account from being restricted: opening a dozen profiles in ninety
+seconds reads as a bot. The waits are random, not fixed, because a constant interval is itself
+a signature. Defaults turn a two-minute run into roughly fifteen, which does not matter for a
+weekly overnight job. Set a pair to `[0, 0]` to disable it, for example when testing one brand
+and you want the answer quickly.
+
+If an account does get restricted, raising these will not lift the restriction on its own.
+Warm the account first (section 4), then keep the pacing on so it does not happen again.
+
 ### Which model reviews
 
 Set the repository **variable** `ANTHROPIC_MODEL` under Settings → Secrets and variables → Actions → Variables.

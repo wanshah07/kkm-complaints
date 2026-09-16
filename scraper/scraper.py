@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import base64
 import json
+import random
 import logging
 import os
 import re
@@ -106,6 +107,28 @@ def clean_post_url(u: str) -> str:
     path = _POST_SUBVIEW.sub("", parts.path)  # /post/ABC/media is the same post as /post/ABC
     host = "www.facebook.com" if _MIRROR_HOST.match(parts.netloc) else parts.netloc
     return urlunsplit((parts.scheme, host, path, "&".join(keep), ""))
+
+
+def _pace(cfg_pair, what: str = "") -> float:
+    """
+    Sleep a random time inside [min, max] seconds. Randomised rather than fixed: a constant
+    interval is itself a bot signature. Returns the seconds waited (0 when disabled).
+    """
+    try:
+        lo, hi = float(cfg_pair[0]), float(cfg_pair[1])
+    except (TypeError, ValueError, IndexError):
+        return 0.0
+    if hi <= 0:
+        return 0.0
+    if lo > hi:
+        lo, hi = hi, lo
+    secs = random.uniform(max(lo, 0.0), hi)
+    if secs <= 0:
+        return 0.0
+    if secs >= 5 and what:
+        log.info("pacing: waiting %.0fs before %s", secs, what)
+    time.sleep(secs)
+    return secs
 
 
 def _dismiss_dialogs(page: Page) -> None:
@@ -271,7 +294,8 @@ def _owned_by(url: str, platform: str, handle: str) -> bool:
 
 
 def _collect_links(page: Page, patterns: List[str], base: str, limit: int,
-                   platform: str = "", handle: str = "") -> List[str]:
+                   platform: str = "", handle: str = "", scroll_pause=None) -> List[str]:
+    scroll_pause = scroll_pause or [1.5, 3.5]
     hrefs: List[str] = []
     for _ in range(6):  # scroll to load a few rows
         try:
@@ -289,8 +313,8 @@ def _collect_links(page: Page, patterns: List[str], base: str, limit: int,
         if len(hrefs) >= limit * 2:
             break
         try:
-            page.mouse.wheel(0, 1600)
-            page.wait_for_timeout(1500)
+            page.mouse.wheel(0, random.randint(1200, 2000))
+            page.wait_for_timeout(int(_pace(scroll_pause) * 1000) or 1500)
         except Exception:
             break
     # de-noise: drop profile-level anchors, other people's posts, and duplicate sub-views
@@ -389,6 +413,8 @@ class Scraper:
                             continue
                         if platform not in self.platforms or not handle:
                             continue
+                        if results:  # no wait before the very first profile
+                            _pace(self.run_cfg.get("pause_between_profiles"), f"{brand['name']} on {platform}")
                         results.append(self._scrape_target(browser, brand["name"], platform, str(handle)))
             finally:
                 browser.close()
@@ -415,7 +441,8 @@ class Scraper:
             if not _wait_for_posts(page, pcfg["post_link_patterns"]):
                 log.info("[%s/%s] no post anchors after wait; scrolling anyway", brand, platform)
             links = _collect_links(page, pcfg["post_link_patterns"], profile_url, limit,
-                                   platform=platform, handle=handle)
+                                   platform=platform, handle=handle,
+                                   scroll_pause=self.run_cfg.get("pause_after_scroll"))
             log.info("[%s/%s] %d post links", brand, platform, len(links))
 
             # Some platforms only render their feed with JavaScript. Where a plain-HTML mirror
@@ -433,7 +460,8 @@ class Scraper:
                         log.info("[%s/%s] fallback hit a login wall", brand, platform)
                         continue
                     links = _collect_links(page, pcfg["post_link_patterns"], alt, limit,
-                                           platform=platform, handle=handle)
+                                           platform=platform, handle=handle,
+                                           scroll_pause=self.run_cfg.get("pause_after_scroll"))
                     log.info("[%s/%s] %d post links via fallback", brand, platform, len(links))
                 except PWTimeout:
                     log.info("[%s/%s] fallback timed out", brand, platform)
@@ -444,7 +472,9 @@ class Scraper:
                 hint = _diagnose_empty(page, self.out_dir, f"{brand}_{platform}")
                 res.error = "no post links found" + (f" — {hint}" if hint else " (layout change or restricted profile)")
                 log.warning("[%s/%s] %s", brand, platform, res.error)
-            for link in links:
+            for i, link in enumerate(links):
+                if i:  # no wait before the first post of a profile
+                    _pace(self.run_cfg.get("pause_between_posts"), "the next post")
                 res.posts.append(self._scrape_post(ctx, brand, platform, link))
         except PWTimeout as e:
             res.error = f"timeout: {e}"

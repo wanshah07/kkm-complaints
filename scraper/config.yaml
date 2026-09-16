@@ -14,6 +14,14 @@ run:
   headless: true
   locale: en-MY
   timezone: Asia/Kuala_Lumpur
+  # Pacing. Opening a dozen profiles and dozens of posts back to back reads as a bot and is
+  # what gets an account restricted. Each wait is randomised between its min and max so the
+  # rhythm is not machine-regular. Set any pair to 0 to disable that wait.
+  # Defaults turn a ~2 minute run into ~15, which is irrelevant for a weekly overnight job.
+  pause_between_posts: [8, 25]        # seconds, before each post page
+  pause_between_profiles: [45, 120]   # seconds, before each new brand/platform profile
+  pause_after_scroll: [1.5, 3.5]      # seconds, between scrolls on a profile grid
+
   user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 
 platforms:
