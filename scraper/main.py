@@ -161,6 +161,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
 
     hints = {b["name"]: b.get("product_hints", []) for b in brands}
+    spend = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0,
+             "cache_creation_input_tokens": 0, "usd": 0.0, "models": {}}
     lookback = int(run_cfg.get("lookback_days", 0) or 0)
     min_date = str(run_cfg.get("min_post_date", "") or "")
     date_rule = f"on/after {min_date}" if min_date else (f"within {lookback} days" if lookback else "any date")
@@ -194,6 +196,13 @@ def main(argv: Optional[List[str]] = None) -> int:
                                               "verdict": v["verdict"], "confidence": v.get("confidence"), "type": v.get("violation_type")})
                     known.add(cu)
                     continue
+            u = v.get("usage")
+            if u:
+                spend["calls"] += 1
+                for k in ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"):
+                    spend[k] += u.get(k, 0) or 0
+                spend["usd"] += u.get("usd", 0.0) or 0.0
+                spend["models"][u.get("model", "?")] = spend["models"].get(u.get("model", "?"), 0) + 1
             entry = {"url": post.url, "verdict": v["verdict"], "confidence": v.get("confidence"),
                      "type": v.get("violation_type"), "reviewer": v.get("reviewer"),
                      "product": v.get("product_name", ""), "reason": (v.get("violation_reason") or "")[:600]}
@@ -208,6 +217,12 @@ def main(argv: Optional[List[str]] = None) -> int:
                 report["skipped"].append(entry)
             known.add(cu)
 
+    spend["usd"] = round(spend["usd"], 4)
+    rate = float(run_cfg.get("usd_to_myr") or 0)
+    if rate > 0:
+        spend["myr"] = round(spend["usd"] * rate, 2)
+        spend["myr_rate_used"] = rate
+    report["spend"] = spend
     log.info("%d non-compliant post(s) to push, %d skipped", len(records), len(report["skipped"]))
 
     # --- push -----------------------------------------------------------------------
@@ -308,6 +323,23 @@ def _print_summary(report: dict) -> None:
             print(f"    · skip {p.get('why')}  {p['url']}")
     if report.get("insert"):
         print(f"  sheet insert: {report['insert'].get('inserted')} new, {len(report['insert'].get('duplicates', []))} duplicate(s)")
+    sp = report.get("spend") or {}
+    if sp.get("calls"):
+        models = ", ".join(f"{m}x{n}" for m, n in sp.get("models", {}).items())
+        per = sp["usd"] / sp["calls"] if sp["calls"] else 0
+        print("\n  --- reviewer spend ---")
+        print(f"  calls         {sp['calls']}   ({models})")
+        print(f"  input tokens  {sp['input_tokens']:,}   (+{sp['cache_read_input_tokens']:,} cached read, "
+              f"{sp['cache_creation_input_tokens']:,} cache write)")
+        print(f"  output tokens {sp['output_tokens']:,}")
+        line = f"  cost          USD {sp['usd']:.4f}   (USD {per:.4f} per reviewed post)"
+        if sp.get("myr") is not None:
+            line += f"   ~ RM {sp['myr']:.2f} at {sp['myr_rate_used']}"
+        print(line)
+        if sp["usd"] == 0 and sp["calls"]:
+            print("  note: no price table for this provider; tokens counted, cost not estimated")
+    elif report.get("targets"):
+        print("\n  reviewer spend: no model calls (nothing reached the reviewer)")
 
 
 if __name__ == "__main__":

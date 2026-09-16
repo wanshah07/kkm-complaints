@@ -18,6 +18,48 @@ from npra_rules import RULEBOOK, acceptable_hints, offline_verdict, prescreen
 
 log = logging.getLogger("kkm.evaluator")
 
+# USD per million tokens, from the Anthropic pricing page. Update when prices change.
+# Cache reads bill at ~0.1x input, cache writes at ~1.25x input.
+MODEL_PRICES = {
+    "claude-fable-5-1":  (10.0, 50.0),
+    "claude-fable-5":    (10.0, 50.0),
+    "claude-opus-5":     (5.0, 25.0),
+    "claude-opus-4-8":   (5.0, 25.0),
+    "claude-opus-4-7":   (5.0, 25.0),
+    "claude-opus-4-6":   (5.0, 25.0),
+    "claude-sonnet-5":   (2.0, 10.0),
+    "claude-sonnet-4-6": (3.0, 15.0),
+    "claude-haiku-4-5":  (1.0, 5.0),
+}
+
+# output_config.effort is rejected by Haiku 4.5 and the 4.5-generation models.
+def _supports_effort(model: str) -> bool:
+    m = (model or "").lower()
+    return not ("haiku" in m or "-4-5" in m)
+
+
+def price_for(model: str):
+    m = (model or "").lower()
+    if m in MODEL_PRICES:
+        return MODEL_PRICES[m]
+    for key, val in MODEL_PRICES.items():  # tolerate suffixes or aliases
+        if m.startswith(key):
+            return val
+    return None
+
+
+def usd_cost(model: str, usage: dict) -> float:
+    p = price_for(model)
+    if not p or not usage:
+        return 0.0
+    inp, out = p
+    fresh = usage.get("input_tokens", 0) or 0
+    cread = usage.get("cache_read_input_tokens", 0) or 0
+    cwrite = usage.get("cache_creation_input_tokens", 0) or 0
+    otok = usage.get("output_tokens", 0) or 0
+    return ((fresh + cwrite * 1.25 + cread * 0.1) * inp + otok * out) / 1_000_000
+
+
 VERDICT_SCHEMA = {
     "type": "object",
     "properties": {
@@ -149,7 +191,7 @@ def _review_anthropic(inp: ReviewInput) -> dict:
     import anthropic
 
     client = anthropic.Anthropic()
-    model = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5")
+    model = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5")
     content = []
     if inp.screenshot_path and os.getenv("LLM_USE_SCREENSHOT", "1") == "1":
         blk = _image_block_anthropic(inp.screenshot_path)
@@ -157,12 +199,15 @@ def _review_anthropic(inp: ReviewInput) -> dict:
             content.append(blk)
     content.append({"type": "text", "text": _user_prompt(inp)})
 
+    output_config = {"format": {"type": "json_schema", "schema": VERDICT_SCHEMA}}
+    if _supports_effort(model):
+        output_config["effort"] = os.getenv("ANTHROPIC_EFFORT", "high")
     kwargs = dict(
         model=model,
         max_tokens=4000,
         system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": content}],
-        output_config={"effort": "high", "format": {"type": "json_schema", "schema": VERDICT_SCHEMA}},
+        output_config=output_config,
     )
 
     use_fallbacks = os.getenv("ANTHROPIC_FALLBACKS", "1") == "1"
@@ -184,7 +229,19 @@ def _review_anthropic(inp: ReviewInput) -> dict:
         raise RuntimeError("model refused the request (stop_reason=refusal)")
     text = next((b.text for b in response.content if b.type == "text"), "")
     data = json.loads(text)
-    data["reviewer"] = f"anthropic:{getattr(response, 'model', model)}"
+    served = getattr(response, "model", model) or model
+    data["reviewer"] = f"anthropic:{served}"
+    u = getattr(response, "usage", None)
+    if u is not None:
+        usage = {
+            "input_tokens": getattr(u, "input_tokens", 0) or 0,
+            "output_tokens": getattr(u, "output_tokens", 0) or 0,
+            "cache_read_input_tokens": getattr(u, "cache_read_input_tokens", 0) or 0,
+            "cache_creation_input_tokens": getattr(u, "cache_creation_input_tokens", 0) or 0,
+        }
+        usage["model"] = served
+        usage["usd"] = round(usd_cost(served, usage), 6)
+        data["usage"] = usage
     return data
 
 
@@ -210,12 +267,19 @@ def _review_openai(inp: ReviewInput) -> dict:
     )
     data = json.loads(resp.choices[0].message.content or "{}")
     data["reviewer"] = f"openai:{model}"
+    u = getattr(resp, "usage", None)
+    if u is not None:
+        # No price table for OpenAI here: tokens are reported, cost is left at 0 rather than guessed.
+        data["usage"] = {"model": model, "input_tokens": getattr(u, "prompt_tokens", 0) or 0,
+                         "output_tokens": getattr(u, "completion_tokens", 0) or 0,
+                         "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0, "usd": 0.0}
     return data
 
 
 def _normalise(data: dict) -> dict:
     data.setdefault("claims", [])
     data.setdefault("notes", "")
+    data.setdefault("usage", None)
     data.setdefault("product_name", "")
     data.setdefault("complaint_description_bm", "")
     pd = str(data.get("post_date") or "").strip()

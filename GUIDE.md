@@ -150,13 +150,30 @@ Posts whose date cannot be read anywhere always pass the date filter. Skipping t
 
 Set the repository **variable** `ANTHROPIC_MODEL` under Settings → Secrets and variables → Actions → Variables.
 
-| Value | Cost per reviewed post | When |
+| Value | USD per reviewed post | When |
 |---|---|---|
-| `claude-sonnet-5` | about 3 sen | Default, good judgement |
-| `claude-opus-5` | about 8 sen | Heavy week, or a call you want to be sure of |
-| `claude-haiku-4-5` | about 1.5 sen | Obvious cases only, more Risky calls |
+| `claude-haiku-4-5` | about 0.015 | Default. Cheapest; hedges more on borderline calls |
+| `claude-sonnet-5` | about 0.031 | Better judgement on ambiguous claims |
+| `claude-opus-5` | about 0.078 | A call you want to be sure of |
 
-No code change, takes effect on the next run. Delete the variable to fall back to Sonnet.
+No code change, takes effect on the next run. Delete the variable to fall back to the default.
+Figures assume no cache hit; a warm cache roughly halves the input side.
+
+### Knowing what it actually cost
+
+Every run ends with a **reviewer spend** block in the log and a `spend` object in `run_report.json`:
+
+```
+  --- reviewer spend ---
+  calls         6   (claude-haiku-4-5x6)
+  input tokens  4,100   (+41,000 cached read, 8,200 cache write)
+  output tokens 9,300
+  cost          USD 0.0930   (USD 0.0155 per reviewed post)
+```
+
+Set `usd_to_myr` in `scraper/config.yaml` to your card's rate and the line also shows RM. Left at
+`0` it reports USD only, because a made-up exchange rate is worse than none. Posts that never
+reach the model, because the regex pre-screen found nothing, cost zero and are not counted.
 
 ### The rules themselves
 
