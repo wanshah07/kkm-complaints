@@ -183,6 +183,15 @@ def main(argv: Optional[List[str]] = None) -> int:
             v = review(ReviewInput(brand=post.brand, platform=post.platform, url=post.url, text=post.text,
                                    screenshot_path=post.screenshot_path, product_hints=hints.get(post.brand)),
                        use_llm=not args.no_llm)
+            # The platform often hides the timestamp from anonymous visitors; when the reviewer can read
+            # it off the screenshot, use it for the Date column and the lookback filter.
+            if not post.posted_at and v.get("post_date"):
+                post.posted_at = v["post_date"]
+                if not within_lookback(post.posted_at, lookback):
+                    report["skipped"].append({"url": post.url, "why": f"older than {lookback} days per screenshot ({post.posted_at})",
+                                              "verdict": v["verdict"], "confidence": v.get("confidence"), "type": v.get("violation_type")})
+                    known.add(cu)
+                    continue
             entry = {"url": post.url, "verdict": v["verdict"], "confidence": v.get("confidence"),
                      "type": v.get("violation_type"), "reviewer": v.get("reviewer"),
                      "product": v.get("product_name", ""), "reason": (v.get("violation_reason") or "")[:600]}

@@ -40,6 +40,7 @@ VERDICT_SCHEMA = {
         ]},
         "violation_reason": {"type": "string"},
         "product_name": {"type": "string"},
+        "post_date": {"type": "string", "description": "Date the post was published, YYYY-MM-DD, only if visible in the screenshot or text; else \"\""},
         "claims": {
             "type": "array",
             "items": {
@@ -58,7 +59,7 @@ VERDICT_SCHEMA = {
         "complaint_description_bm": {"type": "string"},
         "notes": {"type": "string"}
     },
-    "required": ["verdict", "confidence", "violation_type", "violation_reason", "product_name",
+    "required": ["verdict", "confidence", "violation_type", "violation_reason", "product_name", "post_date",
                  "claims", "complaint_description_bm", "notes"],
     "additionalProperties": False
 }
@@ -87,6 +88,8 @@ METHOD
    (e.g. 'Annex I Part 8, Skin products: "Heals, treats or stops acne" — unacceptable'). This text goes
    into a regulator complaint, so no speculation and no facts you cannot see in the post.
 6. product_name: the product as named in the post, else "".
+6b. post_date: the publication date of the post as shown by the platform (timestamp under the page name in the
+   screenshot, or a dated line in the text), as YYYY-MM-DD. Not an event or promotion date. "" if not visible.
 7. complaint_description_bm: when the verdict is Unacceptable, write the "Deskripsi Aduan" for the KKM
    form in Bahasa Malaysia (Malaysia, never Indonesia: ubat not obat, syarikat not perusahaan, kualiti
    not kualitas). Structure: apa yang diiklankan · dakwaan tepat (petik) · kenapa tidak dibenarkan
@@ -159,7 +162,7 @@ def _review_anthropic(inp: ReviewInput) -> dict:
         max_tokens=4000,
         system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": content}],
-        output_config={"effort": "medium", "format": {"type": "json_schema", "schema": VERDICT_SCHEMA}},
+        output_config={"effort": "high", "format": {"type": "json_schema", "schema": VERDICT_SCHEMA}},
     )
 
     use_fallbacks = os.getenv("ANTHROPIC_FALLBACKS", "1") == "1"
@@ -215,6 +218,8 @@ def _normalise(data: dict) -> dict:
     data.setdefault("notes", "")
     data.setdefault("product_name", "")
     data.setdefault("complaint_description_bm", "")
+    pd = str(data.get("post_date") or "").strip()
+    data["post_date"] = pd if len(pd) == 10 and pd[4] == "-" and pd[7] == "-" else ""
     try:
         data["confidence"] = min(1.0, max(0.0, float(data.get("confidence") or 0)))
     except (TypeError, ValueError):
