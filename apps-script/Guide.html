@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KKM Operating Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+<script>
+  tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] } } } };
+</script>
+<style>
+  body { font-family: Inter, ui-sans-serif, system-ui; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+
+<header class="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-slate-200">
+  <div class="max-w-4xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center gap-3">
+    <div class="h-9 w-9 rounded-xl bg-slate-900 text-white grid place-items-center font-bold">K</div>
+    <div class="min-w-0">
+      <h1 class="text-base sm:text-lg font-semibold leading-tight">KKM Operating Guide</h1>
+      <p class="text-xs text-slate-500 truncate">Admin only &middot; signed in as <?= adminEmail ?></p>
+    </div>
+    <div class="ml-auto">
+      <a href="<?= dashboardUrl ?>" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">&larr; Dashboard</a>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-4xl mx-auto px-4 sm:px-6 py-8">
+<article class="prose prose-slate prose-sm sm:prose-base max-w-none prose-table:text-sm prose-code:before:content-none prose-code:after:content-none">
+
+<p class="text-sm text-slate-500">Everything you do week to week, and everything you change without touching code.</p>
+
+<table>
+<thead><tr><th>I want to&hellip;</th><th>Where</th><th>Section</th></tr></thead>
+<tbody>
+<tr><td>Work through this week's findings</td><td>Dashboard</td><td><a href="#sec1">1. The weekly routine</a></td></tr>
+<tr><td>Add or remove a brand</td><td>Google Sheet, <code>Targets</code> tab</td><td><a href="#sec2">2. Brands and handles</a></td></tr>
+<tr><td>Fix a handle that stopped working</td><td>Google Sheet, <code>Targets</code> tab</td><td><a href="#sec2">2. Brands and handles</a></td></tr>
+<tr><td>Add a platform (TikTok, YouTube&hellip;)</td><td>Sheet + repo, needs me</td><td><a href="#sec3">3. Adding a platform</a></td></tr>
+<tr><td>Fix "login wall" errors</td><td>Your PC, Option A</td><td><a href="#sec4">4. Refreshing the login session</a></td></tr>
+<tr><td>Change how far back it reviews</td><td><code>scraper/config.yaml</code></td><td><a href="#sec5">5. Tuning the review</a></td></tr>
+<tr><td>Change which Claude model reviews</td><td>GitHub variable</td><td><a href="#sec5">5. Tuning the review</a></td></tr>
+<tr><td>Skip a Friday, or change the time</td><td><code>.github/workflows/scraper.yml</code></td><td><a href="#sec6">6. The schedule</a></td></tr>
+<tr><td>Run it right now</td><td>GitHub Actions</td><td><a href="#sec7">7. Running on demand</a></td></tr>
+<tr><td>Work out why nothing was found</td><td>Run log + artefact</td><td><a href="#sec8">8. Troubleshooting</a></td></tr>
+</tbody>
+</table>
+
+<p><strong>The three places this system lives</strong></p>
+<table>
+<thead><tr><th>Piece</th><th>Address</th></tr></thead>
+<tbody>
+<tr><td>Dashboard</td><td>https://aduan.kkmhalalconsultant.com</td></tr>
+<tr><td>Database (Google Sheet)</td><td><code>Complaints</code>, <code>Targets</code> and <code>Lookups</code> tabs</td></tr>
+<tr><td>Code and schedule</td><td>https://github.com/wanshah07/kkm-complaints</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2 id="sec1">1. The weekly routine</h2>
+<p>The scraper runs Friday 23:30 MYT. Saturday morning, open the dashboard.</p>
+<ol>
+<li><strong>New</strong> rows are this week's findings. Click one. It moves to <strong>In-Progress</strong> automatically, so you never lose your place.</li>
+<li>Read the <strong>Violation Reason</strong>. It quotes each failing claim and cites the Annex I part and clause. This is the reviewer's work, not yours to redo, but it is a screen and not a verdict.</li>
+<li>Check the <strong>screenshot</strong> in the drawer. Most violations here are on the artwork, not in the caption. Confirm the claim is really on screen.</li>
+<li><strong>Verify the notification number.</strong> Click <em>Semak QUEST3+</em>, search the product, copy the NOT number into <strong>Nombor Notifikasi</strong>. The scraper never guesses this.</li>
+<li>Edit <strong>Deskripsi Aduan</strong> if you want to sharpen it. It is written in BM and ready to paste. Replace any <code>[SAHKAN: &hellip;]</code> marker before filing.</li>
+<li>Click <strong>Copy Deskripsi</strong>, then <strong>Open KKM form</strong>, and submit.</li>
+<li>Back in the dashboard, click <strong>Mark Complete</strong>. Today's date is stamped into <strong>Tarikh Melapor</strong>.</li>
+</ol>
+<p><strong>Dismiss</strong> is for false positives. The row stays for the record but stops showing as New, and its URL is remembered so it never returns.</p>
+<p><strong>Verdicts you will see</strong></p>
+<table>
+<thead><tr><th>Verdict</th><th>What it means</th><th>Typical action</th></tr></thead>
+<tbody>
+<tr><td>Unacceptable</td><td>Matches a prohibited claim or presentation</td><td>File it</td></tr>
+<tr><td><code>Risky: &hellip;</code></td><td>Depends on substantiation or context</td><td>Judge it; often file, sometimes dismiss</td></tr>
+</tbody>
+</table>
+<p>Risky rows only appear because <code>push_risky</code> is on. Turn it off in <code>scraper/config.yaml</code> if they become noise.</p>
+
+<hr>
+
+<h2 id="sec2">2. Brands and handles</h2>
+<p><strong>All of this is the <code>Targets</code> tab in your sheet. Nothing else, no code, no redeploy.</strong></p>
+<table>
+<thead><tr><th>Brand</th><th>Active</th><th>Instagram</th><th>Facebook</th><th>Threads</th><th>Product hints</th><th>Notes</th></tr></thead>
+<tbody></tbody>
+</table>
+<ul>
+<li><strong>Add a brand</strong>: new row, brand name, tick <strong>Active</strong>, fill the handles you want watched.</li>
+<li><strong>Pause a brand</strong>: untick <strong>Active</strong>. The row stays, the scraper skips it.</li>
+<li><strong>Remove a platform for one brand</strong>: clear that cell. Blank is skipped cleanly.</li>
+<li><strong>Product hints</strong>: comma-separated product lines. Only helps the reviewer name the product in the row. Optional.</li>
+</ul>
+<p>The scraper reads this tab at the start of every run. <code>scraper/config.yaml</code> is only a fallback used when the sheet cannot be reached.</p>
+
+<h3>Getting a handle right</h3>
+<p><strong>You can paste either the bare handle or the full profile URL &mdash; the sheet now cleans it up for you.</strong></p>
+<table>
+<thead><tr><th>Platform</th><th>You can paste</th><th>Becomes</th></tr></thead>
+<tbody>
+<tr><td>Instagram</td><td><code>instagram.com/eucerin_my</code> or <code>eucerin_my</code></td><td><code>eucerin_my</code></td></tr>
+<tr><td>Facebook</td><td><code>facebook.com/EucerinMalaysia</code> or <code>EucerinMalaysia</code></td><td><code>EucerinMalaysia</code></td></tr>
+<tr><td>Threads</td><td><code>threads.net/@qvskincare</code> or <code>qvskincare</code></td><td><code>qvskincare</code></td></tr>
+</tbody>
+</table>
+<p>Easiest: open the profile in your browser, copy the address bar, paste the whole thing into the cell. <code>sanitizeHandle_()</code> in <code>Code.gs</code> strips the domain, the <code>@</code>, the query string (<code>?hl=en</code>), and stray path segments (e.g. Instagram's <code>/popular/&hellip;</code> prefix) down to just the handle, before the scraper ever sees it. A handle with spaces in it is still a display name and will fail: Facebook's page <em>QV Skincare Malaysia</em> might live at <code>facebook.com/QVSkincareMY</code>, and only the URL tells you which.</p>
+<p>If the URL shows a long number instead of a name, that numeric ID works too, paste it as the handle (or the full URL containing it).</p>
+<p><strong>A wrong handle is not silent.</strong> The run log says <code>no post links found &mdash; profile not available (handle wrong or region-blocked)</code> and saves a screenshot of what it saw into the run artefact.</p>
+
+<h3 id="sec2b">Adding a new brand and taking it live &mdash; the whole flow</h3>
+<ol>
+<li>Sheet &rarr; <code>Targets</code> tab &rarr; new row. Type the brand name in <strong>Brand</strong>, tick <strong>Active</strong>.</li>
+<li>Paste a handle or the full profile URL into <strong>Instagram</strong> / <strong>Facebook</strong> / <strong>Threads</strong> &mdash; whichever the brand actually has. Leave the rest blank.</li>
+<li>Optional: comma-separated product lines in <strong>Product hints</strong>, so the reviewer names the product correctly in the row.</li>
+<li>That's it &mdash; <strong>no code change, no redeploy.</strong> The next run (scheduled or manual) reads the sheet fresh and picks the brand up automatically.</li>
+<li>To check it immediately rather than waiting for Friday: GitHub &rarr; Actions &rarr; <em>KKM complaint scraper</em> &rarr; Run workflow &rarr; set <strong>brand</strong> to the exact name you typed &rarr; Run. Tick <strong>dry_run</strong> first if you just want to see what it would find without writing to the sheet.</li>
+<li>Read the run's log/summary (section 8) for that brand's rows: <code>posts=N &nbsp; ok</code> means the handle resolved and it looked at real posts; <code>profile not available</code> means the handle is wrong &mdash; open the profile in your own browser and re-copy the URL into the cell.</li>
+</ol>
+<p class="text-sm text-slate-500">A <strong>redeploy</strong> (Apps Script &rarr; Deploy &rarr; Manage deployments &rarr; New version) is only needed when <code>Code.gs</code> or <code>Index.html</code> itself changes &mdash; never for adding, editing or pausing a brand, and never for a new platform column left unconfigured on the scraper side (section 3).</p>
+
+<hr>
+
+<h2 id="sec3">3. Adding a platform</h2>
+<p>Instagram, Facebook and Threads work today. Anything else is a three-part job:</p>
+<ol>
+<li><strong>You</strong>: add a column to the <code>Targets</code> tab with the platform's name, and fill in handles.</li>
+<li><strong>Me</strong>: add an entry to <code>scraper/config.yaml</code> describing that platform's profile URL shape and how its post links look.</li>
+<li><strong>You</strong>: log into that platform during the next session recording (section 4), otherwise it hits a login wall.</li>
+</ol>
+<p>Ask me and I do part two in a few minutes. A column added without part two is ignored with a warning in the log, so nothing breaks.</p>
+
+<hr>
+
+<h2 id="sec4">4. Refreshing the login session</h2>
+<p>Instagram, Facebook and Threads hide most content from visitors who are not logged in. The scraper carries a recorded browser session to get past that. It expires every few weeks; you will know because the run log fills with <code>login wall</code>.</p>
+<p>On your Windows PC, in PowerShell:</p>
+<pre><code>py -m playwright codegen --save-storage=storage_state.json https://www.instagram.com/</code></pre>
+<p>A browser window opens. In that one window, in order:</p>
+<ol>
+<li>Log into <strong>Instagram</strong> with the throwaway account.</li>
+<li>Address bar &rarr; <code>facebook.com</code> &rarr; log in &rarr; wait for the feed.</li>
+<li>Address bar &rarr; <code>threads.net</code> &rarr; log in &rarr; wait for it to load.</li>
+<li>Visit each brand profile once, so the session looks used.</li>
+<li><strong>Close the window.</strong> Closing is what writes the file.</li>
+</ol>
+<p>Then convert and upload:</p>
+<pre><code>[Convert]::ToBase64String([IO.File]::ReadAllBytes("storage_state.json")) | Set-Clipboard</code></pre>
+<p>GitHub &rarr; repo &rarr; <strong>Settings &rarr; Secrets and variables &rarr; Actions</strong> &rarr; <code>PW_STORAGE_STATE_B64</code> &rarr; <strong>Update</strong> &rarr; Ctrl+V &rarr; save. Finally:</p>
+<pre><code>Remove-Item storage_state.json</code></pre>
+<p>That file is a live login. Do not leave it on the desktop and do not email it.</p>
+<p><strong>Use a throwaway account, never your own.</strong> Automated browsing can get an account rate-limited or locked.</p>
+
+<hr>
+
+<h2 id="sec5">5. Tuning the review</h2>
+<h3>Date range, thresholds, volume</h3>
+<p><code>scraper/config.yaml</code>, section <code>run:</code></p>
+<table>
+<thead><tr><th>Setting</th><th>Now</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>min_post_date</code></td><td><code>2025-09-01</code></td><td>Only posts published on or after this date are reviewed</td></tr>
+<tr><td><code>lookback_days</code></td><td><code>0</code> (off)</td><td>Rolling alternative: only the last N days</td></tr>
+<tr><td><code>max_posts_per_profile</code></td><td><code>6</code></td><td>Newest posts examined per brand per platform</td></tr>
+<tr><td><code>push_risky</code></td><td><code>true</code></td><td>Risky verdicts go to the sheet too</td></tr>
+<tr><td><code>min_confidence</code></td><td><code>0.6</code></td><td>Unacceptable verdicts below this are dropped</td></tr>
+</tbody>
+</table>
+<p>Posts whose date cannot be read anywhere always pass the date filter. Skipping them would create blind spots.</p>
+
+<h3>Pacing (how human the browsing looks)</h3>
+<p><code>scraper/config.yaml</code>, section <code>run:</code>. Each is a <code>[min, max]</code> in seconds, waited at random.</p>
+<table>
+<thead><tr><th>Setting</th><th>Default</th><th>Waited before</th></tr></thead>
+<tbody>
+<tr><td><code>pause_between_posts</code></td><td><code>[8, 25]</code></td><td>each post page after the first</td></tr>
+<tr><td><code>pause_between_profiles</code></td><td><code>[45, 120]</code></td><td>each brand/platform after the first</td></tr>
+<tr><td><code>pause_after_scroll</code></td><td><code>[1.5, 3.5]</code></td><td>each scroll on a profile grid</td></tr>
+</tbody>
+</table>
+<p>This is what keeps an account from being restricted: opening a dozen profiles in ninety seconds reads as a bot. The waits are random, not fixed, because a constant interval is itself a signature. Defaults turn a two-minute run into roughly fifteen, which does not matter for a weekly overnight job. Set a pair to <code>[0, 0]</code> to disable it, for example when testing one brand and you want the answer quickly.</p>
+<p>If an account does get restricted, raising these will not lift the restriction on its own. Warm the account first (section 4), then keep the pacing on so it does not happen again.</p>
+
+<h3>Which model reviews</h3>
+<p>Set the repository <strong>variable</strong> <code>ANTHROPIC_MODEL</code> under Settings &rarr; Secrets and variables &rarr; Actions &rarr; Variables.</p>
+<table>
+<thead><tr><th>Value</th><th>USD per reviewed post</th><th>When</th></tr></thead>
+<tbody>
+<tr><td><code>claude-haiku-4-5</code></td><td>about 0.015</td><td>Default. Cheapest; hedges more on borderline calls</td></tr>
+<tr><td><code>claude-sonnet-5</code></td><td>about 0.031</td><td>Better judgement on ambiguous claims</td></tr>
+<tr><td><code>claude-opus-5</code></td><td>about 0.078</td><td>A call you want to be sure of</td></tr>
+</tbody>
+</table>
+<p>No code change, takes effect on the next run. Delete the variable to fall back to the default. Figures assume no cache hit; a warm cache roughly halves the input side.</p>
+
+<h3>Knowing what it actually cost</h3>
+<p>Every run ends with a <strong>reviewer spend</strong> block in the log and a <code>spend</code> object in <code>run_report.json</code>:</p>
+<pre><code>  --- reviewer spend ---
+  calls         6   (claude-haiku-4-5x6)
+  input tokens  4,100   (+41,000 cached read, 8,200 cache write)
+  output tokens 9,300
+  cost          USD 0.0930   (USD 0.0155 per reviewed post)</code></pre>
+<p>Set <code>usd_to_myr</code> in <code>scraper/config.yaml</code> to your card's rate and the line also shows RM. Left at <code>0</code> it reports USD only, because a made-up exchange rate is worse than none. Posts that never reach the model, because the regex pre-screen found nothing, cost zero and are not counted.</p>
+
+<h3>The rules themselves</h3>
+<p><code>scraper/npra_rules.py</code> holds the regex pre-screen and the rulebook handed to the reviewer, both citing Annex I Part 8 and Part 10. Changing these is my side. Tell me what NPRA changed and I update it.</p>
+
+<hr>
+
+<h2 id="sec6">6. The schedule</h2>
+<p><code>.github/workflows/scraper.yml</code></p>
+<ul>
+<li><strong>Time</strong>: <code>cron: '30 15 * * 5'</code> is UTC, which is Friday 23:30 MYT. GitHub only accepts UTC, so subtract 8 hours from the Malaysian time you want.</li>
+<li><strong>Skip a week</strong>: add the date to <code>SKIP_DATES</code> in the <em>Skip suppressed scheduled dates</em> step, space-separated, <code>YYYY-MM-DD</code>, Malaysian date. Manual runs are never affected. Entries expire by themselves.</li>
+<li><strong>Dormancy</strong>: GitHub pauses schedules in a repository with no commits for 60 days. Any push, or one manual run, re-arms it.</li>
+</ul>
+
+<hr>
+
+<h2 id="sec7">7. Running on demand</h2>
+<p>GitHub &rarr; repo &rarr; <strong>Actions</strong> &rarr; <em>KKM complaint scraper</em> &rarr; <strong>Run workflow</strong>.</p>
+<table>
+<thead><tr><th>Input</th><th>Use</th></tr></thead>
+<tbody>
+<tr><td><code>dry_run</code></td><td>Tick to scrape and review but write nothing to the sheet. Results appear in the log and artefact.</td></tr>
+<tr><td><code>brand</code></td><td>One brand only, exact name from the <code>Targets</code> tab</td></tr>
+<tr><td><code>platform</code></td><td><code>Instagram</code>, <code>Facebook</code> or <code>Threads</code></td></tr>
+</tbody>
+</table>
+<p>Running twice never duplicates rows. Dedupe is by post URL, normalised so tracking parameters do not fool it.</p>
+<p><strong>From your own PC</strong> instead, in the <code>scraper</code> folder: <code>run_windows.bat --dry-run</code>, or <code>run_windows.bat</code> for a live run. Your home connection is treated more kindly by Instagram than GitHub's servers are, so this is the more reliable route if datacenter blocks persist.</p>
+
+<hr>
+
+<h2 id="sec8">8. Troubleshooting</h2>
+<p>Open the run: GitHub &rarr; <strong>Actions</strong> &rarr; click the run. The summary at the end of the <em>Run scraper</em> step lists every brand and platform. The <strong>Artifacts</strong> section holds the full report, screenshots, and a picture of any profile that came back empty.</p>
+<table>
+<thead><tr><th>Log says</th><th>Cause</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><code>login wall</code></td><td>Session expired or that platform was not logged in during recording</td><td>Section 4</td></tr>
+<tr><td><code>no post links found &mdash; profile not available</code></td><td>Handle wrong, or the platform is blocking the runner</td><td>Check the handle in your browser (section 2); if it loads for you, run from your PC instead (section 7)</td></tr>
+<tr><td><code>no post links found &mdash; platform soft-block</code></td><td>Too much traffic from that address</td><td>Wait a few hours, or run from your PC</td></tr>
+<tr><td><code>retrying via mbasic&hellip;</code> then still nothing</td><td>Facebook handle wrong, or the page has no public posts</td><td>Open <code>mbasic.facebook.com/&lt;handle&gt;</code> in your browser and see what it shows</td></tr>
+<tr><td>Instagram fails from GitHub but works in your browser</td><td>Instagram blocks datacenter addresses</td><td>Run from your own PC (section 7); GitHub cannot fix this</td></tr>
+<tr><td>A row's Post URL is on an account you didn't configure</td><td>Instagram's profile page can surface "Suggested for you" content; the scraper checks the actual poster against the Targets handle and skips a mismatch, but a row filed before that check went in is real content from the wrong account</td><td>Dismiss the row &mdash; it is not the Malaysian brand's own post</td></tr>
+<tr><td><code>posted &lt;date&gt;, outside on/after 2025-09-01</code></td><td>Working as intended</td><td>Widen <code>min_post_date</code> if you want older posts</td></tr>
+<tr><td><code>already in sheet</code></td><td>Working as intended</td><td>Nothing</td></tr>
+<tr><td>A Targets handle cell held a full profile URL and the run log showed a doubled address</td><td>Fixed 16 Sep 2026: <code>sanitizeHandle_()</code> now strips a pasted URL down to the handle before the scraper ever sees it</td><td>Nothing to do &mdash; paste bare handles or full URLs, both work now</td></tr>
+<tr><td><code>Failed to launch chromium because executable doesn't exist at # optional: &hellip;</code></td><td>A <code>.env</code> line has a comment after the value, and the comment was read as the value</td><td>Put comments on their own line. Blank means "not set".</td></tr>
+<tr><td><code>PW_STORAGE_STATE_B64 invalid &hellip; codec can't decode</code></td><td>Same cause as above</td><td>Same fix; leave it blank on Windows and keep <code>storage_state.json</code> beside <code>main.py</code></td></tr>
+<tr><td><code>No time zone found with key Asia/Kuala_Lumpur</code> (Windows)</td><td>The <code>tzdata</code> package is missing from <code>.venv</code></td><td>In the scraper folder: <code>.venv\Scripts\activate</code> then <code>pip install tzdata</code>, or re-run <code>setup_windows.bat</code></td></tr>
+<tr><td><code>LLM review failed &hellip; falling back to rules</code></td><td>API key missing, out of credit, or a transient error</td><td>Check credit at console.anthropic.com; the run still completes on the regex rules alone</td></tr>
+<tr><td>Dashboard says <code>Unauthorised</code></td><td>Wrong dashboard key, or Apps Script not redeployed after a code change</td><td>Re-enter the key; in Apps Script, Deploy &rarr; Manage deployments &rarr; New version</td></tr>
+<tr><td>Dashboard says non-JSON response</td><td>Apps Script deployment is old or not set to <em>Anyone</em></td><td>Redeploy as Web app, Execute as Me, Access Anyone</td></tr>
+</tbody>
+</table>
+<p><strong>Nothing found is a normal result.</strong> Most weeks compliant brands produce nothing. An empty run with all profiles reporting <code>ok</code> means the system worked.</p>
+
+<hr>
+
+<h2 id="sec9">9. Keys and access</h2>
+<table>
+<thead><tr><th>Name</th><th>Where it lives</th><th>What it is</th></tr></thead>
+<tbody>
+<tr><td><code>DASHBOARD_KEY</code></td><td>Apps Script &rarr; Project Settings &rarr; Script properties</td><td>Opens the dashboard. Paste once per browser.</td></tr>
+<tr><td><code>API_TOKEN</code></td><td>Same place</td><td>Lets the scraper write to the sheet. Rotate from the sheet's <em>KKM Complaints</em> menu.</td></tr>
+<tr><td><code>APPS_SCRIPT_WEBHOOK_URL</code></td><td>GitHub secret</td><td>Your <code>/exec</code> address</td></tr>
+<tr><td><code>APPS_SCRIPT_API_TOKEN</code></td><td>GitHub secret</td><td>Copy of <code>API_TOKEN</code></td></tr>
+<tr><td><code>ANTHROPIC_API_KEY</code></td><td>GitHub secret</td><td>Billing at console.anthropic.com</td></tr>
+<tr><td><code>PW_STORAGE_STATE_B64</code></td><td>GitHub secret</td><td>The recorded browser session</td></tr>
+</tbody>
+</table>
+<p>The dashboard key is not a password to an account. It gates the page; the sheet itself is protected by your Google login. <strong>This guide page is different: it ignores the dashboard key entirely and only opens for the admin Google account in <code>OWNER_EMAIL</code>.</strong></p>
+
+<hr>
+
+<h2 id="sec10">10. What this system does not do</h2>
+<p>Being clear about this matters for how you use the output.</p>
+<ul>
+<li><strong>It screens, it does not decide.</strong> Every row is a first-pass reading. The regulatory verdict and the decision to file are yours.</li>
+<li><strong>It reads what is public.</strong> It does not log into brand accounts, read private posts, or touch anything behind a paywall.</li>
+<li><strong>It cannot verify a notification number.</strong> QUEST3+ has no API here. That lookup is manual, by design, because a wrong NOT number in a complaint is worse than a blank one.</li>
+<li><strong>It does not judge ingredients.</strong> Annex II to VII questions need the live PDFs, which change often. This system covers Part 8 claims and Part 10 presentation only.</li>
+<li><strong>It does not submit to KKM.</strong> The form is filled by you. Nothing is sent to a regulator automatically, and that is deliberate.</li>
+</ul>
+
+</article>
+</main>
+
+</body>
+</html>

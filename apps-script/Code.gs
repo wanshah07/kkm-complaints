@@ -292,6 +292,9 @@ function ensureFolder_() {
 // ---------------------------------------------------------------------------
 function doGet(e) {
   e = e || {}; var p = e.parameter || {};
+  if (p.view === 'guide') {
+    return serveGuide_();
+  }
   if (p.action) {
     return jsonResponse_(handleApi_(p.action, p, p));
   }
@@ -305,6 +308,7 @@ function doGet(e) {
   var t = HtmlService.createTemplateFromFile('Index');
   t.dashboardKey = p.key || '';
   t.kkmFormUrl = PROPS.getProperty('KKM_FORM_URL') || '';
+  t.guideUrl = ScriptApp.getService().getUrl() + '?view=guide';
   return t.evaluate()
     .setTitle('KKM Cosmetic Complaints')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
@@ -705,12 +709,43 @@ function checkToken_(token) {
 function isAuthorisedViewer_(key) {
   var expected = PROPS.getProperty('DASHBOARD_KEY');
   if (expected && key && constantTimeEquals_(String(key), expected)) return true;
+  if (isAdminEmail_()) return true;
+  return false;
+}
+
+function isAdminEmail_() {
   try {
     var email = Session.getActiveUser().getEmail();
     var owner = PROPS.getProperty('OWNER_EMAIL');
-    if (email && owner && email.toLowerCase() === owner.toLowerCase()) return true;
-  } catch (err) { /* anonymous */ }
-  return false;
+    return !!(email && owner && email.toLowerCase() === owner.toLowerCase());
+  } catch (err) {
+    return false; // anonymous / identity not disclosed
+  }
+}
+
+// The guide ignores DASHBOARD_KEY entirely: it only opens for the signed-in admin
+// Google account (OWNER_EMAIL). Anyone else, including a key holder, sees a locked page.
+function serveGuide_() {
+  var owner = PROPS.getProperty('OWNER_EMAIL') || '(not set — run setup())';
+  if (!isAdminEmail_()) {
+    var email = '';
+    try { email = Session.getActiveUser().getEmail(); } catch (err) { /* anonymous */ }
+    return HtmlService.createHtmlOutput(
+      '<!doctype html><html><body style="font-family:system-ui;padding:40px;color:#0f172a;max-width:560px">' +
+      '<h2>KKM Operating Guide — locked</h2>' +
+      '<p>This page only opens for the admin Google account.</p>' +
+      '<p>Signed in as: <code>' + (email || '(not signed in)') + '</code><br>' +
+      'Required: <code>' + owner + '</code></p>' +
+      '<p>Sign in to that Google account in this browser, then reload this page.</p></body></html>')
+      .setTitle('KKM Guide — locked');
+  }
+  var t = HtmlService.createTemplateFromFile('Guide');
+  t.adminEmail = owner;
+  t.dashboardUrl = ScriptApp.getService().getUrl();
+  return t.evaluate()
+    .setTitle('KKM Operating Guide')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
 function requireViewer_(key) {
