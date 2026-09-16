@@ -74,7 +74,9 @@ def canonical_url(u: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, path, "&".join(keep), "")).lower()
 
 
-_TRACKING_PARAMS = re.compile(r"^(__cft__.*|__tn__|mibextid|igsh|igshid|utm_\w+|fbclid|ref|refsrc|rdid|_rdr)$", re.I)
+_TRACKING_PARAMS = re.compile(
+    r"^(__cft__.*|__tn__|mibextid|igsh|igshid|utm_\w+|fbclid|ref|refid|refsrc|rdid|_rdr|eav|paipv|_ft_|sfnsn|extid|hc_\w+)$",
+    re.I)
 
 
 _POST_SUBVIEW = re.compile(r"/(media|liked|reposts|replies|photo|comments)/?$", re.I)
