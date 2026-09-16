@@ -103,12 +103,19 @@ def _dismiss_dialogs(page: Page) -> None:
 
 def _is_login_wall(page: Page) -> bool:
     url = page.url.lower()
-    if "/login" in url or "login.php" in url or "/accounts/login" in url:
+    if "/login" in url or "login.php" in url or "/accounts/login" in url or "/r.php" in url:
         return True
     try:
-        return page.locator("input[name='password']").first.is_visible(timeout=500)
+        if not page.locator("input[name='password'], input[type='password']").first.is_visible(timeout=800):
+            return False
     except Exception:
         return False
+    # A password box can also belong to a dismissible prompt on an otherwise readable page.
+    # Treat it as a wall only when no post content is present behind it.
+    try:
+        return page.locator("article, [role='article'], div[data-pressable-container]").count() == 0
+    except Exception:
+        return True
 
 
 def _meta(page: Page, prop: str) -> str:
@@ -187,9 +194,45 @@ def _extract_date(page: Page) -> Optional[str]:
     return None
 
 
+def _wait_for_posts(page: Page, patterns: List[str], timeout_ms: int = 15000) -> bool:
+    """Wait until at least one anchor matching a post pattern is in the DOM. Instagram and
+    Threads render the grid well after domcontentloaded, so harvesting too early finds nothing."""
+    sel = ", ".join(f'a[href*="{p}"]' for p in patterns if "=" not in p) or "a[href]"
+    try:
+        page.wait_for_selector(sel, timeout=timeout_ms, state="attached")
+        return True
+    except PWTimeout:
+        return False
+
+
+def _diagnose_empty(page: Page, out_dir: str, tag: str) -> str:
+    """No post links: save the profile page so the cause is visible next time, and return a hint."""
+    hint = ""
+    try:
+        body = (page.locator("body").inner_text(timeout=3000) or "")[:400].replace("\n", " ")
+    except Exception:
+        body = ""
+    low = body.lower()
+    if "log in" in low or "sign up" in low:
+        hint = "page shows a login prompt"
+    elif "sorry, this page isn" in low or "page isn't available" in low:
+        hint = "profile not available (handle wrong or region-blocked)"
+    elif "something went wrong" in low or "try again later" in low:
+        hint = "platform soft-block, try again later or slow the run down"
+    elif "private" in low:
+        hint = "profile is private to this account"
+    try:
+        path = os.path.join(out_dir, f"EMPTY_{re.sub(r'[^a-z0-9]+', '_', tag.lower())}.png")
+        page.screenshot(path=path, full_page=False, type="png")
+        hint = (hint + "; " if hint else "") + f"profile screenshot saved as {os.path.basename(path)}"
+    except Exception:
+        pass
+    return hint
+
+
 def _collect_links(page: Page, patterns: List[str], base: str, limit: int) -> List[str]:
     hrefs: List[str] = []
-    for _ in range(4):  # scroll to load a few rows
+    for _ in range(6):  # scroll to load a few rows
         try:
             found = page.locator("a[href]").evaluate_all("els => els.map(e => e.getAttribute('href'))")
         except Exception:
@@ -205,8 +248,8 @@ def _collect_links(page: Page, patterns: List[str], base: str, limit: int) -> Li
         if len(hrefs) >= limit * 2:
             break
         try:
-            page.mouse.wheel(0, 1800)
-            page.wait_for_timeout(1200)
+            page.mouse.wheel(0, 1600)
+            page.wait_for_timeout(1500)
         except Exception:
             break
     # de-noise: drop profile-level and comment anchors
@@ -306,10 +349,15 @@ class Scraper:
                 res.error = "login wall (provide PW_STORAGE_STATE_B64)"
                 log.warning("[%s/%s] %s", brand, platform, res.error)
                 return res
+            page.wait_for_timeout(2500)
+            if not _wait_for_posts(page, pcfg["post_link_patterns"]):
+                log.info("[%s/%s] no post anchors after wait; scrolling anyway", brand, platform)
             links = _collect_links(page, pcfg["post_link_patterns"], profile_url, limit)
             log.info("[%s/%s] %d post links", brand, platform, len(links))
             if not links:
-                res.error = "no post links found (layout change or restricted profile)"
+                hint = _diagnose_empty(page, self.out_dir, f"{brand}_{platform}")
+                res.error = "no post links found" + (f" — {hint}" if hint else " (layout change or restricted profile)")
+                log.warning("[%s/%s] %s", brand, platform, res.error)
             for link in links:
                 res.posts.append(self._scrape_post(ctx, brand, platform, link))
         except PWTimeout as e:
