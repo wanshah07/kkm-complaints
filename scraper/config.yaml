@@ -5,7 +5,7 @@
 run:
   max_posts_per_profile: 6        # newest posts examined per brand × platform
   lookback_days: 14               # skip posts older than this when a date is visible
-  push_risky: false               # true = also push "Risky" verdicts (status New, type prefixed "Risky:")
+  push_risky: true                # also push "Risky" verdicts (status New, type prefixed "Risky:")
   min_confidence: 0.6             # drop Unacceptable verdicts below this reviewer confidence
   screenshot_max_width: 1200      # px, before JPEG compression
   screenshot_jpeg_quality: 80
