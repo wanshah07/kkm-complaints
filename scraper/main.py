@@ -184,7 +184,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                                    screenshot_path=post.screenshot_path, product_hints=hints.get(post.brand)),
                        use_llm=not args.no_llm)
             entry = {"url": post.url, "verdict": v["verdict"], "confidence": v.get("confidence"),
-                     "type": v.get("violation_type"), "reviewer": v.get("reviewer")}
+                     "type": v.get("violation_type"), "reviewer": v.get("reviewer"),
+                     "product": v.get("product_name", ""), "reason": (v.get("violation_reason") or "")[:600]}
             if v["verdict"] == "Unacceptable" and v.get("confidence", 0) >= min_conf:
                 records.append(build_record(post, v, run_cfg, drive))
                 report["pushed"].append(entry)
@@ -290,6 +291,8 @@ def _print_summary(report: dict) -> None:
     for p in report["skipped"]:
         if p.get("verdict"):
             print(f"    · skip {p['verdict']} ({p.get('confidence')}) {p.get('type') or '-'} [{p.get('reviewer')}]  {p['url']}")
+            if p.get("reason"):
+                print(f"        {p.get('product') or ''} :: {p['reason'].replace(chr(10), ' ')[:400]}")
         else:
             print(f"    · skip {p.get('why')}  {p['url']}")
     if report.get("insert"):
