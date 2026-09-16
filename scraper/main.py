@@ -29,6 +29,12 @@ from zoneinfo import ZoneInfo
 
 import yaml
 
+try:  # .env next to this file is loaded when present (local / Windows runs); CI uses real env vars
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+except ImportError:
+    pass
+
 from evaluator import ReviewInput, review
 from scraper import Scraper, canonical_url, within_lookback
 from uploader import AppsScriptClient, DriveUploader, attach_screenshot

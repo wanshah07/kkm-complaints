@@ -136,6 +136,17 @@ GitHub Actions: add the secrets listed at the top of
 Actions**. The schedule is `30 15 * * 5` (UTC) = Friday 23:30 MYT. Use *Run workflow* for
 a manual or dry run. Each run uploads `out/` (report + screenshots) as an artefact for 30 days.
 
+**Windows PC alternative (Option B, residential IP, your own logged-in browser session):**
+
+1. Install Python 3.12 from python.org, ticking *Add python.exe to PATH*.
+2. Download this repo (Code → Download ZIP) or `git clone`, open the `scraper` folder.
+3. Double-click `setup_windows.bat` (creates `.venv`, installs dependencies and Chromium, copies `.env.example` to `.env`).
+4. Open `.env` in Notepad and fill in `APPS_SCRIPT_WEBHOOK_URL`, `APPS_SCRIPT_API_TOKEN`, `ANTHROPIC_API_KEY`.
+   For login walls add `PW_STORAGE_STATE_PATH=storage_state.json` and create that file with
+   `.venv\Scripts\playwright codegen --save-storage=storage_state.json https://www.instagram.com/` (log in to Instagram, Facebook and Threads in that window, then close it).
+5. Test: `run_windows.bat --dry-run`, then read `logs\run-<date>.log` and `out\<run>\payload_preview.json`.
+6. Double-click `schedule_windows.bat` once. It registers *KKM complaint scraper* in Task Scheduler for every Friday 23:30 local time. The PC must be awake then; set *Power Options → Sleep → Never* or wake it by 23:25.
+
 VPS alternative (`crontab -e`, server clock in UTC):
 
 ```
