@@ -286,7 +286,12 @@ def _print_summary(report: dict) -> None:
         print(f"  {t['brand']:<16} {t['platform']:<10} posts={t['posts']:<3} {('ERR ' + t['error']) if t['error'] else 'ok'}")
     print(f"  pushed: {len(report['pushed'])}   skipped: {len(report['skipped'])}   errors: {len(report['errors'])}")
     for p in report["pushed"]:
-        print(f"    → {p['verdict']} ({p['confidence']}) {p['type']}  {p['url']}")
+        print(f"    → PUSH {p['verdict']} ({p['confidence']}) {p['type']}  {p['url']}")
+    for p in report["skipped"]:
+        if p.get("verdict"):
+            print(f"    · skip {p['verdict']} ({p.get('confidence')}) {p.get('type') or '-'} [{p.get('reviewer')}]  {p['url']}")
+        else:
+            print(f"    · skip {p.get('why')}  {p['url']}")
     if report.get("insert"):
         print(f"  sheet insert: {report['insert'].get('inserted')} new, {len(report['insert'].get('duplicates', []))} duplicate(s)")
 
