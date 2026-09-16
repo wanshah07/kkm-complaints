@@ -64,7 +64,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # One-off suppressions of the Friday schedule, e.g. when a manual run already
+      # covered that week. Dates are MYT (the job runs with TZ=Asia/Kuala_Lumpur) and
+      # apply to scheduled runs only — a manual "Run workflow" always proceeds.
+      # Entries expire by themselves once the date has passed; delete them when tidy.
+      - name: Skip suppressed scheduled dates
+        id: gate
+        env:
+          SKIP_DATES: "2026-09-18"   # covered by the manual run on 16 Sep 2026 (Wan)
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            TODAY=$(date +%Y-%m-%d)
+            for d in $SKIP_DATES; do
+              if [ "$d" = "$TODAY" ]; then
+                echo "skip=true" >> "$GITHUB_OUTPUT"
+                echo "::notice::Scheduled run on $TODAY is suppressed; next Friday proceeds as normal."
+                exit 0
+              fi
+            done
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
       - name: Set up Python
+        if: steps.gate.outputs.skip != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -72,22 +94,26 @@ jobs:
           cache-dependency-path: scraper/requirements.txt
 
       - name: Install dependencies
+        if: steps.gate.outputs.skip != 'true'
         working-directory: scraper
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Cache Playwright browsers
+        if: steps.gate.outputs.skip != 'true'
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: pw-${{ runner.os }}-${{ hashFiles('scraper/requirements.txt') }}
 
       - name: Install Chromium
+        if: steps.gate.outputs.skip != 'true'
         working-directory: scraper
         run: python -m playwright install --with-deps chromium
 
       - name: Run scraper
+        if: steps.gate.outputs.skip != 'true'
         working-directory: scraper
         run: |
           ARGS=""
@@ -97,7 +123,7 @@ jobs:
           eval python main.py $ARGS
 
       - name: Upload run artefacts (report + screenshots)
-        if: always()
+        if: always() && steps.gate.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: kkm-run-${{ github.run_id }}

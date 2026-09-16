@@ -134,6 +134,11 @@ with a service account instead; `none` skips screenshots.
 
 ### 3. Cron (Module D)
 
+**Skipping a scheduled week.** `.github/workflows/scraper.yml` has a `SKIP_DATES` list in the
+*Skip suppressed scheduled dates* step: a space-separated list of MYT dates (`YYYY-MM-DD`) on which
+the Friday cron does nothing. Manual *Run workflow* is never affected. Entries expire on their own
+once the date passes.
+
 GitHub Actions: add the secrets listed at the top of
 `.github/workflows/scraper.yml` under **Settings → Secrets and variables →
 Actions**. The schedule is `30 15 * * 5` (UTC) = Friday 23:30 MYT. Use *Run workflow* for
