@@ -45,10 +45,11 @@ var HEADERS = [
   'Jenis Aduan',        // 13 Iklan Kosmetik | Kualiti Kosmetik
   'Deskripsi Aduan',    // 14 ready-to-paste complaint description (BM)
   'Tarikh Melapor',     // 15 date the report was submitted to KKM
-  'Source',             // 16 scraper | manual
-  'Confidence',         // 17 0–1 from the LLM reviewer, blank for manual
-  'Created At',         // 18 ISO timestamp
-  'Updated At'          // 19 ISO timestamp
+  'KKM Feedback',       // 16 NPRA/KKM reply pasted in by Wan after submission
+  'Source',             // 17 scraper | manual
+  'Confidence',         // 18 0–1 from the LLM reviewer, blank for manual
+  'Created At',         // 19 ISO timestamp
+  'Updated At'          // 20 ISO timestamp
 ];
 var COL = {};
 HEADERS.forEach(function (h, i) { COL[h] = i; });
@@ -139,15 +140,28 @@ function getOrCreateSheet_(ss, name) {
 
 function ensureHeaders_(sheet) {
   var lastCol = Math.max(sheet.getLastColumn(), 1);
-  var existing = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var existing = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
   var same = existing.length >= HEADERS.length && HEADERS.every(function (h, i) { return existing[i] === h; });
   if (!same) {
+    // Insert any header that is missing at its own position, so the sheet's own data moves
+    // with it. Writing the header row straight over the old one would silently misalign every
+    // existing row by the number of inserted columns.
+    var hasData = sheet.getLastRow() > 1;
+    if (hasData && existing.filter(String).length) {
+      HEADERS.forEach(function (h, i) {
+        if (existing.indexOf(h) >= 0) return;              // already somewhere, leave it
+        if (i === 0) sheet.insertColumnBefore(1); else sheet.insertColumnAfter(i);
+        sheet.getRange(1, i + 1).setValue(h);
+        existing.splice(i, 0, h);
+        console.log('Schema migration: inserted column "' + h + '" at position ' + (i + 1));
+      });
+    }
     sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
   }
   var hdr = sheet.getRange(1, 1, 1, HEADERS.length);
   hdr.setFontWeight('bold').setBackground('#0f172a').setFontColor('#ffffff').setWrap(false);
   sheet.setFrozenRows(1);
-  var widths = [150, 95, 130, 100, 260, 220, 380, 220, 380, 100, 220, 200, 150, 130, 420, 110, 80, 90, 160, 160];
+  var widths = [150, 95, 130, 100, 260, 220, 380, 220, 380, 100, 220, 200, 150, 130, 420, 110, 320, 80, 90, 160, 160];
   widths.forEach(function (w, i) { sheet.setColumnWidth(i + 1, w); });
   if (sheet.getMaxColumns() > HEADERS.length) {
     sheet.deleteColumns(HEADERS.length + 1, sheet.getMaxColumns() - HEADERS.length);
@@ -349,7 +363,8 @@ function openRecord_(id) {
 }
 
 var EDITABLE_FIELDS = ['Remarks', 'Nama Kosmetik', 'Nombor Notifikasi', 'Jenis Aduan', 'Deskripsi Aduan',
-                       'Violation Type', 'Violation Reason', 'Brand', 'Platform', 'Screenshot Link', 'Extracted Text'];
+                       'KKM Feedback', 'Violation Type', 'Violation Reason', 'Brand', 'Platform',
+                       'Screenshot Link', 'Extracted Text'];
 
 function updateFields_(id, fields) {
   return withLock_(function () {
@@ -477,6 +492,7 @@ function apiInsertRecords_(records, source) {
         row[COL['Jenis Aduan']] = rec['Jenis Aduan'] || 'Iklan Kosmetik';
         row[COL['Deskripsi Aduan']] = rec['Deskripsi Aduan'] || buildComplaintDescription_(rec);
         row[COL['Tarikh Melapor']] = '';
+        row[COL['KKM Feedback']] = rec['KKM Feedback'];
         row[COL['Source']] = rec['Source'] || source || 'scraper';
         row[COL['Confidence']] = rec['Confidence'];
         row[COL['Created At']] = nowIso_();
@@ -503,7 +519,7 @@ function normaliseRecord_(rec) {
     reason: 'Violation Reason', remarks: 'Remarks', product_name: 'Nama Kosmetik', nama_kosmetik: 'Nama Kosmetik',
     notification_number: 'Nombor Notifikasi', nombor_notifikasi: 'Nombor Notifikasi', jenis_aduan: 'Jenis Aduan',
     complaint_type: 'Jenis Aduan', deskripsi_aduan: 'Deskripsi Aduan', complaint_description: 'Deskripsi Aduan',
-    source: 'Source', confidence: 'Confidence'
+    source: 'Source', confidence: 'Confidence', kkm_feedback: 'KKM Feedback', feedback: 'KKM Feedback'
   };
   var out = { screenshot_base64: rec.screenshot_base64 || '', screenshot_mime: rec.screenshot_mime || '' };
   HEADERS.forEach(function (h) { out[h] = rec[h] != null ? rec[h] : ''; });
@@ -511,7 +527,7 @@ function normaliseRecord_(rec) {
     if (rec[k] != null && rec[k] !== '' && !out[map[k]]) out[map[k]] = rec[k];
   });
   ['Brand', 'Platform', 'Post URL', 'Extracted Text', 'Violation Type', 'Violation Reason', 'Remarks',
-   'Nama Kosmetik', 'Nombor Notifikasi', 'Jenis Aduan', 'Deskripsi Aduan', 'Source'].forEach(function (h) {
+   'Nama Kosmetik', 'Nombor Notifikasi', 'Jenis Aduan', 'Deskripsi Aduan', 'KKM Feedback', 'Source'].forEach(function (h) {
     out[h] = out[h] == null ? '' : String(out[h]).trim();
   });
   if (out['Extracted Text'].length > 45000) out['Extracted Text'] = out['Extracted Text'].slice(0, 45000) + ' …';

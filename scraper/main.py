@@ -203,6 +203,16 @@ def main(argv: Optional[List[str]] = None) -> int:
             v = review(ReviewInput(brand=post.brand, platform=post.platform, url=post.url, text=post.text,
                                    screenshot_path=post.screenshot_path, product_hints=hints.get(post.brand)),
                        use_llm=not args.no_llm)
+            # Count every call as soon as it returns: later branches can skip the post, and a
+            # call that was paid for must still appear in the spend total.
+            u = v.get("usage")
+            if u:
+                spend["calls"] += 1
+                for k in ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"):
+                    spend[k] += u.get(k, 0) or 0
+                spend["usd"] += u.get("usd", 0.0) or 0.0
+                spend["models"][u.get("model", "?")] = spend["models"].get(u.get("model", "?"), 0) + 1
+
             # The platform often hides the timestamp from anonymous visitors; when the reviewer can read
             # it off the screenshot, use it for the Date column and the lookback filter.
             if not post.posted_at and v.get("post_date"):
@@ -212,13 +222,6 @@ def main(argv: Optional[List[str]] = None) -> int:
                                               "verdict": v["verdict"], "confidence": v.get("confidence"), "type": v.get("violation_type")})
                     known.add(cu)
                     continue
-            u = v.get("usage")
-            if u:
-                spend["calls"] += 1
-                for k in ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"):
-                    spend[k] += u.get(k, 0) or 0
-                spend["usd"] += u.get("usd", 0.0) or 0.0
-                spend["models"][u.get("model", "?")] = spend["models"].get(u.get("model", "?"), 0) + 1
             entry = {"url": post.url, "verdict": v["verdict"], "confidence": v.get("confidence"),
                      "type": v.get("violation_type"), "reviewer": v.get("reviewer"),
                      "product": v.get("product_name", ""), "reason": (v.get("violation_reason") or "")[:600]}

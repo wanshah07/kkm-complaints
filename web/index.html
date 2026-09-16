@@ -161,6 +161,10 @@
           <div id="dTarikh" class="mt-1 text-sm py-2">—</div>
         </div>
         <label class="block sm:col-span-2">
+          <span class="text-xs font-medium text-slate-600">Maklum Balas KKM / NPRA (paste the reply here after submitting)</span>
+          <textarea id="eFeedback" rows="4" placeholder="Paste NPRA's acknowledgement or reply, with its reference number and date." class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3"></textarea>
+        </label>
+        <label class="block sm:col-span-2">
           <span class="text-xs font-medium text-slate-600">Deskripsi Aduan (paste into the form)</span>
           <textarea id="eDeskripsi" rows="8" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 font-mono text-[13px]"></textarea>
         </label>
@@ -453,7 +457,7 @@ function filtered() {
     (!f.status || r['Status'] === f.status) &&
     (!f.brand || r['Brand'] === f.brand) &&
     (!f.platform || r['Platform'] === f.platform) &&
-    (!q || ['Extracted Text','Nama Kosmetik','Violation Reason','Violation Type','Post URL','Remarks','ID'].some(k => String(r[k] || '').toLowerCase().includes(q))));
+    (!q || ['Extracted Text','Nama Kosmetik','Violation Reason','Violation Type','Post URL','Remarks','ID','KKM Feedback'].some(k => String(r[k] || '').toLowerCase().includes(q))));
 }
 
 function renderTable() {
@@ -468,7 +472,7 @@ function renderTable() {
       <td class="px-4 py-3">${esc(r['Platform'])}</td>
       <td class="px-4 py-3 max-w-[200px] truncate">${esc(r['Nama Kosmetik'] || '—')}</td>
       <td class="px-4 py-3 max-w-[340px]"><div class="font-medium">${esc(r['Violation Type'])}</div><div class="text-xs text-slate-500 clamp-2">${esc(r['Violation Reason'])}</div></td>
-      <td class="px-4 py-3"><span class="badge ${STATUS_STYLE[r['Status']] || 'bg-slate-100'}">${esc(r['Status'])}</span></td>
+      <td class="px-4 py-3"><span class="badge ${STATUS_STYLE[r['Status']] || 'bg-slate-100'}">${esc(r['Status'])}</span>${r['KKM Feedback'] ? '<div class="text-[11px] text-emerald-700 mt-1">KKM replied</div>' : ''}</td>
       <td class="px-4 py-3 whitespace-nowrap text-xs">
         <a href="${esc(r['Post URL'])}" target="_blank" rel="noopener" class="text-blue-700 underline mr-2" onclick="event.stopPropagation()">post</a>
         ${r['Screenshot Link'] ? `<a href="${esc(r['Screenshot Link'])}" target="_blank" rel="noopener" class="text-blue-700 underline" onclick="event.stopPropagation()">shot</a>` : '<span class="text-slate-400">no shot</span>'}
@@ -523,6 +527,7 @@ function fillDrawer(r) {
   $('eJenis').value = r['Jenis Aduan'] || 'Iklan Kosmetik';
   $('dTarikh').textContent = r['Tarikh Melapor'] || '— (set when marked Complete)';
   $('eDeskripsi').value = r['Deskripsi Aduan'] || '';
+  $('eFeedback').value = r['KKM Feedback'] || '';
   $('eRemarks').value = r['Remarks'] || '';
   $('dMeta').textContent = `Updated ${r['Updated At'] || '—'}`;
 }
@@ -538,7 +543,8 @@ async function saveDrawer() {
   const fields = {
     'Violation Type': $('eViolationType').value, 'Violation Reason': $('eViolationReason').value,
     'Nama Kosmetik': $('eNama').value, 'Nombor Notifikasi': $('eNot').value, 'Jenis Aduan': $('eJenis').value,
-    'Deskripsi Aduan': $('eDeskripsi').value, 'Remarks': $('eRemarks').value
+    'Deskripsi Aduan': $('eDeskripsi').value, 'KKM Feedback': $('eFeedback').value,
+    'Remarks': $('eRemarks').value
   };
   $('btnSave').disabled = true;
   try { const r = await rpc('apiUpdateFields', state.current['ID'], fields); mergeRow(r.row); fillDrawer(r.row); toast('Saved'); }
