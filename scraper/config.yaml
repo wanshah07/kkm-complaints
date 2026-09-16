@@ -22,7 +22,13 @@ platforms:
     post_link_patterns: ["/p/", "/reel/"]
   Facebook:
     profile_url: "https://www.facebook.com/{handle}"
-    post_link_patterns: ["/posts/", "/photos/", "/videos/", "/reel/", "story_fbid=", "/permalink/"]
+    # www renders its feed with JavaScript and often yields no anchors to a logged-out or
+    # datacenter visitor. mbasic serves plain HTML with ordinary links, so it is tried when
+    # the main URL finds nothing. Each fallback is attempted in order.
+    profile_url_fallbacks:
+      - "https://mbasic.facebook.com/{handle}"
+      - "https://m.facebook.com/{handle}"
+    post_link_patterns: ["/posts/", "/photos/", "/videos/", "/reel/", "story_fbid=", "/permalink/", "/story.php"]
   Threads:
     profile_url: "https://www.threads.net/@{handle}"
     post_link_patterns: ["/post/"]

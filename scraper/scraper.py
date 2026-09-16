@@ -67,7 +67,7 @@ def canonical_url(u: str) -> str:
     """Same normalisation as the Apps Script side so dedupe agrees across both."""
     u = (u or "").strip()
     u = re.sub(r"^http://", "https://", u, flags=re.I)
-    u = re.sub(r"^https://(m|www|web)\.", "https://", u, flags=re.I)
+    u = re.sub(r"^https://(mbasic|touch|m|www|web)\.", "https://", u, flags=re.I)
     parts = urlsplit(u)
     keep = [kv for kv in parts.query.split("&") if re.match(r"^(story_fbid|id|v|fbid|set)=", kv, re.I)]
     path = parts.path.rstrip("/")
@@ -78,6 +78,7 @@ _TRACKING_PARAMS = re.compile(r"^(__cft__.*|__tn__|mibextid|igsh|igshid|utm_\w+|
 
 
 _POST_SUBVIEW = re.compile(r"/(media|liked|reposts|replies|photo|comments)/?$", re.I)
+_MIRROR_HOST = re.compile(r"^(mbasic|m|touch)\.facebook\.com$", re.I)
 
 
 def clean_post_url(u: str) -> str:
@@ -87,7 +88,8 @@ def clean_post_url(u: str) -> str:
     parts = urlsplit(u)
     keep = [kv for kv in parts.query.split("&") if kv and not _TRACKING_PARAMS.match(kv.split("=", 1)[0])]
     path = _POST_SUBVIEW.sub("", parts.path)  # /post/ABC/media is the same post as /post/ABC
-    return urlunsplit((parts.scheme, parts.netloc, path, "&".join(keep), ""))
+    host = "www.facebook.com" if _MIRROR_HOST.match(parts.netloc) else parts.netloc
+    return urlunsplit((parts.scheme, host, path, "&".join(keep), ""))
 
 
 def _dismiss_dialogs(page: Page) -> None:
@@ -386,6 +388,29 @@ class Scraper:
             links = _collect_links(page, pcfg["post_link_patterns"], profile_url, limit,
                                    platform=platform, handle=handle)
             log.info("[%s/%s] %d post links", brand, platform, len(links))
+
+            # Some platforms only render their feed with JavaScript. Where a plain-HTML mirror
+            # exists (Facebook's mbasic), try it before giving up.
+            for alt_tpl in (pcfg.get("profile_url_fallbacks") or []):
+                if links:
+                    break
+                alt = alt_tpl.format(handle=handle)
+                log.info("[%s/%s] retrying via %s", brand, platform, alt)
+                try:
+                    page.goto(alt, wait_until="domcontentloaded", timeout=45000)
+                    page.wait_for_timeout(2000)
+                    _dismiss_dialogs(page)
+                    if _is_login_wall(page):
+                        log.info("[%s/%s] fallback hit a login wall", brand, platform)
+                        continue
+                    links = _collect_links(page, pcfg["post_link_patterns"], alt, limit,
+                                           platform=platform, handle=handle)
+                    log.info("[%s/%s] %d post links via fallback", brand, platform, len(links))
+                except PWTimeout:
+                    log.info("[%s/%s] fallback timed out", brand, platform)
+                except Exception as e:
+                    log.info("[%s/%s] fallback failed: %s", brand, platform, e)
+
             if not links:
                 hint = _diagnose_empty(page, self.out_dir, f"{brand}_{platform}")
                 res.error = "no post links found" + (f" — {hint}" if hint else " (layout change or restricted profile)")

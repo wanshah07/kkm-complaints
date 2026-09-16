@@ -216,6 +216,8 @@ Open the run: GitHub → **Actions** → click the run. The summary at the end o
 | `login wall` | Session expired or that platform was not logged in during recording | Section 4 |
 | `no post links found — profile not available` | Handle wrong, or the platform is blocking the runner | Check the handle in your browser (section 2); if it loads for you, run from your PC instead (section 7) |
 | `no post links found — platform soft-block` | Too much traffic from that address | Wait a few hours, or run from your PC |
+| `retrying via mbasic…` then still nothing | Facebook handle wrong, or the page has no public posts | Open `mbasic.facebook.com/<handle>` in your browser and see what it shows |
+| Instagram fails from GitHub but works in your browser | Instagram blocks datacenter addresses | Run from your own PC (section 7); GitHub cannot fix this |
 | `posted <date>, outside on/after 2025-09-01` | Working as intended | Widen `min_post_date` if you want older posts |
 | `already in sheet` | Working as intended | Nothing |
 | `LLM review failed … falling back to rules` | API key missing, out of credit, or a transient error | Check credit at console.anthropic.com; the run still completes on the regex rules alone |
