@@ -355,14 +355,30 @@ class Scraper:
         return post
 
 
-def within_lookback(posted_at: Optional[str], days: int) -> bool:
-    """Unknown dates pass (we cannot prove they are old); known dates must be recent."""
+def date_allowed(posted_at: Optional[str], lookback_days: int = 0, min_post_date: str = "") -> bool:
+    """
+    Unknown dates pass (we cannot prove they are old). Known dates must satisfy both rules that are on:
+    lookback_days (0 = off) and min_post_date (YYYY-MM-DD, "" = off).
+    """
     if not posted_at:
         return True
     try:
         d = dateparser.parse(posted_at)
         if d.tzinfo is None:
             d = d.replace(tzinfo=timezone.utc)
-        return d >= datetime.now(timezone.utc) - timedelta(days=days)
     except Exception:
         return True
+    if lookback_days and d < datetime.now(timezone.utc) - timedelta(days=int(lookback_days)):
+        return False
+    if min_post_date:
+        try:
+            m = dateparser.parse(str(min_post_date)).replace(tzinfo=timezone.utc)
+            if d < m:
+                return False
+        except Exception:
+            pass
+    return True
+
+
+def within_lookback(posted_at: Optional[str], days: int) -> bool:  # backwards-compatible alias
+    return date_allowed(posted_at, days, "")

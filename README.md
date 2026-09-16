@@ -110,7 +110,10 @@ python main.py                                # full run, pushes to the sheet
 python main.py --review-only caption.txt --brand "QV" --platform Facebook   # review a pasted caption
 ```
 
-Brands come from the sheet's `Targets` tab (see above); `config.yaml` is the fallback and the place platforms are defined. `run.push_risky: true`
+Brands come from the sheet's `Targets` tab (see above); `config.yaml` is the fallback and the place platforms are defined.
+`run.min_post_date` (default `2025-09-01`) limits review to posts published on or after that date; the
+reviewer reads the date off the screenshot when the platform hides it. `run.lookback_days` is the
+rolling alternative (0 = off). `run.push_risky: true`
 also pushes *Risky* verdicts (typed `Risky: …`). `run.min_confidence` drops low-confidence
 Unacceptable calls.
 

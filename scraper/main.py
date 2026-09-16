@@ -36,7 +36,7 @@ except ImportError:
     pass
 
 from evaluator import ReviewInput, review
-from scraper import Scraper, canonical_url, within_lookback
+from scraper import Scraper, canonical_url, date_allowed
 from uploader import AppsScriptClient, DriveUploader, attach_screenshot
 
 MYT = ZoneInfo("Asia/Kuala_Lumpur")
@@ -161,7 +161,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
 
     hints = {b["name"]: b.get("product_hints", []) for b in brands}
-    lookback = int(run_cfg.get("lookback_days", 14))
+    lookback = int(run_cfg.get("lookback_days", 0) or 0)
+    min_date = str(run_cfg.get("min_post_date", "") or "")
+    date_rule = f"on/after {min_date}" if min_date else (f"within {lookback} days" if lookback else "any date")
     push_risky = bool(run_cfg.get("push_risky", False))
     min_conf = float(run_cfg.get("min_confidence", 0.6))
     records: List[dict] = []
@@ -174,8 +176,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             if cu in known:
                 report["skipped"].append({"url": post.url, "why": "already in sheet"})
                 continue
-            if not within_lookback(post.posted_at, lookback):
-                report["skipped"].append({"url": post.url, "why": f"older than {lookback} days ({post.posted_at})"})
+            if not date_allowed(post.posted_at, lookback, min_date):
+                report["skipped"].append({"url": post.url, "why": f"posted {post.posted_at}, outside {date_rule}"})
                 continue
             if not post.text and not post.screenshot_path:
                 report["skipped"].append({"url": post.url, "why": "nothing extracted"})
@@ -187,8 +189,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             # it off the screenshot, use it for the Date column and the lookback filter.
             if not post.posted_at and v.get("post_date"):
                 post.posted_at = v["post_date"]
-                if not within_lookback(post.posted_at, lookback):
-                    report["skipped"].append({"url": post.url, "why": f"older than {lookback} days per screenshot ({post.posted_at})",
+                if not date_allowed(post.posted_at, lookback, min_date):
+                    report["skipped"].append({"url": post.url, "why": f"posted {post.posted_at} per screenshot, outside {date_rule}",
                                               "verdict": v["verdict"], "confidence": v.get("confidence"), "type": v.get("violation_type")})
                     known.add(cu)
                     continue
