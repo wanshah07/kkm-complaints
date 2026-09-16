@@ -1,0 +1,58 @@
+# Publishes web/ (the standalone dashboard) to GitHub Pages on every push to main.
+#
+# Custom domain: set a repository variable PAGES_CUSTOM_DOMAIN (Settings → Secrets and
+# variables → Actions → Variables), e.g. aduan.kkmhalalconsultant.com, and add a DNS
+# CNAME record for that host pointing to wanshah07.github.io. The workflow writes the
+# CNAME file from the variable, so the domain is never hard-coded in the repo.
+
+name: Deploy dashboard to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths: ['web/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write CNAME from PAGES_CUSTOM_DOMAIN (if set)
+        env:
+          DOMAIN: ${{ vars.PAGES_CUSTOM_DOMAIN }}
+        run: |
+          if [ -n "$DOMAIN" ]; then
+            echo "$DOMAIN" > web/CNAME
+            echo "Custom domain: $DOMAIN"
+          else
+            rm -f web/CNAME
+            echo "No PAGES_CUSTOM_DOMAIN set; serving at the github.io URL"
+          fi
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

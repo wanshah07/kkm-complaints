@@ -1,0 +1,9 @@
+playwright>=1.47,<2
+anthropic>=1.0
+openai>=1.50
+pyyaml>=6.0
+requests>=2.32
+pillow>=10.4
+python-dateutil>=2.9
+google-api-python-client>=2.140
+google-auth>=2.34

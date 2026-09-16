@@ -1,0 +1,52 @@
+# KKM Cosmetic Complaint System — scraper targets.
+# Add a brand or a platform by adding an entry; nothing else changes.
+# Handles are the public profile slugs. Facebook accepts a page slug or a numeric page ID.
+
+run:
+  max_posts_per_profile: 6        # newest posts examined per brand × platform
+  lookback_days: 14               # skip posts older than this when a date is visible
+  push_risky: false               # true = also push "Risky" verdicts (status New, type prefixed "Risky:")
+  min_confidence: 0.6             # drop Unacceptable verdicts below this reviewer confidence
+  screenshot_max_width: 1200      # px, before JPEG compression
+  screenshot_jpeg_quality: 80
+  headless: true
+  locale: en-MY
+  timezone: Asia/Kuala_Lumpur
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+
+platforms:
+  Instagram:
+    profile_url: "https://www.instagram.com/{handle}/"
+    post_link_patterns: ["/p/", "/reel/"]
+  Facebook:
+    profile_url: "https://www.facebook.com/{handle}"
+    post_link_patterns: ["/posts/", "/photos/", "/videos/", "/reel/", "story_fbid=", "/permalink/"]
+  Threads:
+    profile_url: "https://www.threads.net/@{handle}"
+    post_link_patterns: ["/post/"]
+
+brands:
+  - name: "La Roche-Posay"
+    handles:
+      Instagram: larocheposaymy
+      Facebook: LaRochePosayMalaysia
+      Threads: larocheposaymy
+    product_hints: ["Effaclar", "Cicaplast", "Anthelios", "Toleriane", "Lipikar", "Mela B3", "Hyalu B5"]
+  - name: "Eucerin"
+    handles:
+      Instagram: eucerin_malaysia
+      Facebook: EucerinMalaysia
+      Threads: eucerin_malaysia
+    product_hints: ["Spotless Brightening", "Ultrasensitive", "Atopicontrol", "Sun Gel-Creme", "Dermopurifyer", "Urea Repair", "Hyaluron-Filler"]
+  - name: "QV"
+    handles:
+      Instagram: qvskincaremy
+      Facebook: QVSkincareMalaysia
+      Threads: qvskincaremy
+    product_hints: ["QV Gentle Wash", "QV Cream", "QV Face", "QV Baby", "QV Intensive"]
+  - name: "The Raw"
+    handles:
+      Instagram: therawmy
+      Facebook: therawmy
+      Threads: therawmy
+    product_hints: []

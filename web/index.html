@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KKM Cosmetic Complaints</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] } } } };
+</script>
+<style>
+  body { font-family: Inter, ui-sans-serif, system-ui; }
+  .badge { display: inline-flex; align-items: center; border-radius: 9999px; padding: 2px 10px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .row-hover:hover { background: #f8fafc; }
+  .drawer { transition: transform .25s ease; }
+  .clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+  .spinner { border: 3px solid #e2e8f0; border-top-color: #0f172a; border-radius: 50%; width: 22px; height: 22px; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+
+<!-- Header -->
+<header class="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-slate-200">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
+    <div class="h-9 w-9 rounded-xl bg-slate-900 text-white grid place-items-center font-bold">K</div>
+    <div class="min-w-0">
+      <h1 class="text-base sm:text-lg font-semibold leading-tight">KKM Cosmetic Complaints</h1>
+      <p class="text-xs text-slate-500 truncate">NPRA Annex I Part 8 / Part 10 monitoring · Pelaporan Aduan Kosmetik Bernotifikasi</p>
+    </div>
+    <div class="ml-auto flex items-center gap-2">
+      <a id="kkmFormLink" target="_blank" rel="noopener" class="hidden sm:inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">
+        Open KKM form ↗
+      </a>
+      <button id="btnRefresh" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">⟳ Refresh</button>
+      <button id="btnNew" class="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">+ Manual entry</button>
+      <button id="btnSettings" title="Backend connection" class="inline-flex items-center rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm hover:bg-slate-50">⚙</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+  <!-- Stats -->
+  <section id="stats" class="grid grid-cols-2 lg:grid-cols-5 gap-3"></section>
+
+  <!-- Filters -->
+  <section class="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap items-center gap-3">
+    <div id="statusChips" class="flex flex-wrap gap-2"></div>
+    <select id="fBrand" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white"><option value="">All brands</option></select>
+    <select id="fPlatform" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white"><option value="">All platforms</option></select>
+    <input id="fSearch" type="search" placeholder="Search text, product, reason, URL…" class="flex-1 min-w-[200px] rounded-lg border border-slate-300 text-sm py-2 px-3">
+    <span id="count" class="text-xs text-slate-500"></span>
+  </section>
+
+  <!-- Table -->
+  <section class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="text-left px-4 py-3 font-semibold">Date</th>
+            <th class="text-left px-4 py-3 font-semibold">Brand</th>
+            <th class="text-left px-4 py-3 font-semibold">Platform</th>
+            <th class="text-left px-4 py-3 font-semibold">Product</th>
+            <th class="text-left px-4 py-3 font-semibold">Violation</th>
+            <th class="text-left px-4 py-3 font-semibold">Status</th>
+            <th class="text-left px-4 py-3 font-semibold">Links</th>
+          </tr>
+        </thead>
+        <tbody id="rows" class="divide-y divide-slate-100"></tbody>
+      </table>
+    </div>
+    <div id="empty" class="hidden p-10 text-center text-slate-500 text-sm">No complaints match these filters.</div>
+    <div id="loading" class="p-10 grid place-items-center"><div class="spinner"></div></div>
+  </section>
+</main>
+
+<!-- Drawer -->
+<div id="overlay" class="fixed inset-0 bg-slate-900/40 z-40 hidden"></div>
+<aside id="drawer" class="drawer fixed top-0 right-0 h-full w-full sm:w-[640px] bg-white z-50 shadow-2xl translate-x-full overflow-y-auto">
+  <div class="sticky top-0 bg-white border-b border-slate-200 px-5 py-3 flex items-center gap-3 z-10">
+    <div class="min-w-0">
+      <div id="dTitle" class="font-semibold truncate">—</div>
+      <div id="dSub" class="text-xs text-slate-500 truncate">—</div>
+    </div>
+    <div class="ml-auto flex items-center gap-2">
+      <span id="dStatus" class="badge"></span>
+      <button id="btnClose" class="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm hover:bg-slate-50">✕</button>
+    </div>
+  </div>
+
+  <div class="p-5 space-y-5">
+    <!-- Status actions -->
+    <div class="flex flex-wrap gap-2">
+      <button data-status="In-Progress" class="stBtn rounded-lg bg-amber-100 text-amber-900 px-3 py-1.5 text-sm font-medium hover:bg-amber-200">Mark In-Progress</button>
+      <button data-status="Complete" class="stBtn rounded-lg bg-emerald-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-emerald-700">Mark Complete (submitted to KKM)</button>
+      <button data-status="Dismissed" class="stBtn rounded-lg bg-slate-200 text-slate-800 px-3 py-1.5 text-sm font-medium hover:bg-slate-300">Dismiss (false positive)</button>
+      <button data-status="New" class="stBtn rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">Reset to New</button>
+    </div>
+
+    <!-- Screenshot -->
+    <div>
+      <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Screenshot</div>
+      <div id="dShot" class="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden"></div>
+    </div>
+
+    <!-- Post + text -->
+    <div class="grid sm:grid-cols-2 gap-4">
+      <div class="sm:col-span-2">
+        <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Post URL</div>
+        <a id="dUrl" target="_blank" rel="noopener" class="text-sm text-blue-700 underline break-all"></a>
+      </div>
+      <div class="sm:col-span-2">
+        <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Extracted text</div>
+        <pre id="dText" class="whitespace-pre-wrap text-sm bg-slate-50 rounded-xl border border-slate-200 p-3 max-h-64 overflow-auto"></pre>
+      </div>
+    </div>
+
+    <!-- Violation -->
+    <div class="grid sm:grid-cols-2 gap-4">
+      <label class="block">
+        <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">Violation type</span>
+        <select id="eViolationType" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white"></select>
+      </label>
+      <label class="block">
+        <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">Confidence</span>
+        <div id="dConf" class="mt-1 text-sm py-2">—</div>
+      </label>
+      <label class="block sm:col-span-2">
+        <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">Violation reason (with citation)</span>
+        <textarea id="eViolationReason" rows="4" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3"></textarea>
+      </label>
+    </div>
+
+    <!-- KKM form fields -->
+    <div class="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+      <div class="flex items-center justify-between">
+        <div class="font-semibold text-sm">Borang KKM — Pelaporan Aduan Kosmetik Bernotifikasi</div>
+        <a id="questLink" target="_blank" rel="noopener" class="text-xs text-blue-700 underline">Semak QUEST3+ ↗</a>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-3">
+        <label class="block">
+          <span class="text-xs font-medium text-slate-600">Nama kosmetik</span>
+          <input id="eNama" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3">
+        </label>
+        <label class="block">
+          <span class="text-xs font-medium text-slate-600">Nombor Notifikasi (NOT)</span>
+          <input id="eNot" placeholder="NOTxxxxxxxxK — verify on QUEST3+" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3">
+        </label>
+        <label class="block">
+          <span class="text-xs font-medium text-slate-600">Jenis Aduan</span>
+          <select id="eJenis" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white"></select>
+        </label>
+        <div class="block">
+          <span class="text-xs font-medium text-slate-600">Tarikh Melapor</span>
+          <div id="dTarikh" class="mt-1 text-sm py-2">—</div>
+        </div>
+        <label class="block sm:col-span-2">
+          <span class="text-xs font-medium text-slate-600">Deskripsi Aduan (paste into the form)</span>
+          <textarea id="eDeskripsi" rows="8" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 font-mono text-[13px]"></textarea>
+        </label>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button id="btnCopyDesc" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50">Copy Deskripsi</button>
+        <button id="btnCopyUrl" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50">Copy Sumber iklan (URL)</button>
+        <a id="btnOpenForm" target="_blank" rel="noopener" class="rounded-lg bg-slate-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-slate-800">Open KKM form ↗</a>
+      </div>
+    </div>
+
+    <label class="block">
+      <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">Remarks</span>
+      <textarea id="eRemarks" rows="3" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3"></textarea>
+    </label>
+
+    <div class="flex items-center gap-2 pb-6">
+      <button id="btnSave" class="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-semibold hover:bg-slate-800">Save changes</button>
+      <span id="dMeta" class="text-xs text-slate-500"></span>
+    </div>
+  </div>
+</aside>
+
+<!-- Manual entry modal -->
+<div id="modal" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-slate-900/40" data-close></div>
+  <div class="absolute inset-x-0 top-6 mx-auto max-w-2xl bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+    <div class="px-5 py-4 border-b border-slate-200 flex items-center">
+      <h2 class="font-semibold">Manual entry</h2>
+      <button data-close class="ml-auto rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm hover:bg-slate-50">✕</button>
+    </div>
+    <form id="manualForm" class="p-5 grid sm:grid-cols-2 gap-4">
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600">Brand *</span>
+        <input list="brandList" id="mBrand" required class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3">
+        <datalist id="brandList"></datalist>
+      </label>
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600">Platform *</span>
+        <input list="platformList" id="mPlatform" required class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3">
+        <datalist id="platformList"></datalist>
+      </label>
+      <label class="block sm:col-span-2">
+        <span class="text-xs font-medium text-slate-600">Post URL *</span>
+        <input id="mUrl" type="url" required placeholder="https://www.instagram.com/p/…" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3">
+      </label>
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600">Screenshot link (Drive / any URL)</span>
+        <input id="mShot" type="url" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3">
+      </label>
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600">…or upload a screenshot (≤ 8 MB)</span>
+        <input id="mFile" type="file" accept="image/*" class="mt-1 w-full text-sm">
+      </label>
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600">Nama kosmetik (product)</span>
+        <input id="mNama" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3">
+      </label>
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600">Violation type</span>
+        <select id="mType" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white"></select>
+      </label>
+      <label class="block sm:col-span-2">
+        <span class="text-xs font-medium text-slate-600">Violation reason (quote the claim, cite Annex I Part 8 / Part 10)</span>
+        <textarea id="mReason" rows="3" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3"></textarea>
+      </label>
+      <label class="block sm:col-span-2">
+        <span class="text-xs font-medium text-slate-600">Extracted text (caption / on-image text)</span>
+        <textarea id="mText" rows="4" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3"></textarea>
+      </label>
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600">Jenis Aduan</span>
+        <select id="mJenis" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white"></select>
+      </label>
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600">Remarks</span>
+        <input id="mRemarks" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3">
+      </label>
+      <div class="sm:col-span-2 flex items-center gap-2 pt-2">
+        <button type="submit" id="mSubmit" class="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-semibold hover:bg-slate-800">Add to database</button>
+        <button type="button" data-close class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50">Cancel</button>
+        <span id="mHint" class="text-xs text-slate-500"></span>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Connect screen -->
+<div id="connect" class="fixed inset-0 z-[55] hidden">
+  <div class="absolute inset-0 bg-slate-900/60"></div>
+  <div class="absolute inset-x-0 top-16 mx-auto max-w-md bg-white rounded-2xl shadow-2xl p-6 space-y-4">
+    <div>
+      <h2 class="font-semibold text-lg">Connect to the complaint database</h2>
+      <p class="text-sm text-slate-500 mt-1">The key is stored only in this browser. Find it under the sheet's Apps Script → Project Settings → Script properties → <code>DASHBOARD_KEY</code>.</p>
+    </div>
+    <label class="block">
+      <span class="text-xs font-medium text-slate-600">Apps Script web app URL (…/exec)</span>
+      <input id="cBackend" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3" placeholder="https://script.google.com/macros/s/…/exec">
+    </label>
+    <label class="block">
+      <span class="text-xs font-medium text-slate-600">Dashboard key</span>
+      <input id="cKey" type="password" autocomplete="current-password" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3">
+    </label>
+    <div id="cErr" class="text-sm text-rose-700 hidden"></div>
+    <div class="flex items-center gap-2">
+      <button id="cGo" class="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-semibold hover:bg-slate-800">Connect</button>
+      <button id="cForget" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50">Forget key</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] hidden rounded-xl bg-slate-900 text-white text-sm px-4 py-2.5 shadow-lg"></div>
+
+<script>
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+// Backend connection. The web app URL is the Apps Script deployment; the key is DASHBOARD_KEY.
+// Both live in this browser's localStorage only. Nothing secret ships in this file.
+const DEFAULT_BACKEND = 'https://script.google.com/macros/s/AKfycby91EcJyeKo29Lr9kMx0vbrfRaZOj7RuZGkxh-brRah0mIBXhc6Psqylg_ChV1cRZmaOw/exec';
+const cfg = { backend: DEFAULT_BACKEND, key: '' };
+try { cfg.backend = localStorage.getItem('kkm.backend') || DEFAULT_BACKEND; cfg.key = localStorage.getItem('kkm.key') || ''; } catch (e) {}
+let KKM_FORM_URL = '';
+const STATUS_STYLE = {
+  'New':         'bg-blue-100 text-blue-800',
+  'In-Progress': 'bg-amber-100 text-amber-900',
+  'Complete':    'bg-emerald-100 text-emerald-800',
+  'Dismissed':   'bg-slate-200 text-slate-700'
+};
+const state = { rows: [], stats: null, lookups: null, statuses: [], filter: { status: '', brand: '', platform: '', q: '' }, current: null, questUrl: '' };
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function toast(msg, ms = 2600) {
+  const t = $('toast'); t.textContent = msg; t.classList.remove('hidden');
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.add('hidden'), ms);
+}
+
+// POST as text/plain: a "simple" request, so the browser sends no CORS preflight
+// (Apps Script cannot answer OPTIONS). Apps Script replies with a 302 that fetch follows.
+async function api(action, payload = {}) {
+  if (!cfg.backend || !cfg.key) throw new Error('Not connected');
+  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 90000);
+  let r;
+  try {
+    r = await fetch(cfg.backend, {
+      method: 'POST', redirect: 'follow', signal: controller.signal,
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(Object.assign({ action, key: cfg.key }, payload))
+    });
+  } catch (e) {
+    throw new Error('Cannot reach the backend (' + e.message + '). Check the web app URL and that it is deployed with access "Anyone".');
+  } finally { clearTimeout(timer); }
+  let data;
+  try { data = await r.json(); }
+  catch (e) { throw new Error('Backend returned a non-JSON response (HTTP ' + r.status + '). Redeploy the Apps Script as a Web app, Execute as Me, Access Anyone.'); }
+  if (!data.ok) throw new Error(data.error || 'Backend error');
+  return data;
+}
+
+// Same call names as the Apps Script-hosted page, mapped onto webhook actions.
+function rpc(fn, ...a) {
+  switch (fn) {
+    case 'apiBootstrap':        return api('bootstrap');
+    case 'apiList':             return api('list', a[0] || {});
+    case 'apiOpen':             return api('open', { id: a[0] }).then(d => d.row);
+    case 'apiSetStatus':        return api('update_status', { id: a[0], status: a[1], remarks: a[2] });
+    case 'apiUpdateFields':     return api('update_fields', { id: a[0], fields: a[1] });
+    case 'apiCreateManual':     return api('insert_manual', { record: a[0] });
+    case 'apiUploadScreenshot': return api('upload_screenshot', { base64: a[0], mime: a[1], filename: a[2] });
+    case 'apiSetKkmFormUrl':    return api('set_form_url', { url: a[0] });
+    default: return Promise.reject(new Error('Unknown call ' + fn));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Connect screen
+// ---------------------------------------------------------------------------
+function showConnect(open, err) {
+  $('connect').classList.toggle('hidden', !open);
+  if (open) {
+    $('cBackend').value = cfg.backend || DEFAULT_BACKEND;
+    $('cKey').value = cfg.key || '';
+    const e = $('cErr'); e.textContent = err || ''; e.classList.toggle('hidden', !err);
+    setTimeout(() => (cfg.key ? $('cGo') : $('cKey')).focus(), 50);
+  }
+}
+async function connect() {
+  cfg.backend = $('cBackend').value.trim().replace(/\/+$/, '');
+  cfg.key = $('cKey').value.trim();
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(cfg.backend)) { showConnect(true, 'The URL must look like https://script.google.com/macros/s/…/exec'); return; }
+  if (!cfg.key) { showConnect(true, 'Dashboard key is required.'); return; }
+  $('cGo').disabled = true;
+  try {
+    try { localStorage.setItem('kkm.backend', cfg.backend); localStorage.setItem('kkm.key', cfg.key); } catch (e) {}
+    await boot(true);
+    showConnect(false); toast('Connected');
+  } catch (e) { showConnect(true, e.message); }
+  finally { $('cGo').disabled = false; }
+}
+function forgetKey() {
+  cfg.key = ''; try { localStorage.removeItem('kkm.key'); } catch (e) {}
+  state.rows = []; $('rows').innerHTML = ''; $('stats').innerHTML = ''; showConnect(true, 'Key removed from this browser.');
+}
+
+// ---------------------------------------------------------------------------
+// Boot
+// ---------------------------------------------------------------------------
+async function boot(rethrow) {
+  if (!cfg.key) { $('loading').innerHTML = '<div class="text-sm text-slate-500">Not connected.</div>'; showConnect(true); return; }
+  $('loading').classList.remove('hidden'); $('loading').innerHTML = '<div class="spinner"></div>';
+  try {
+    const b = await rpc('apiBootstrap');
+    state.rows = b.rows; state.stats = b.stats; state.lookups = b.lookups; state.statuses = b.statuses;
+    state.questUrl = b.questUrl; KKM_FORM_URL = b.kkmFormUrl || KKM_FORM_URL;
+    renderLookups(); renderAll();
+  } catch (e) {
+    $('loading').innerHTML = `<div class="text-sm text-rose-700">${esc(e.message)}</div>`;
+    if (rethrow) throw e;
+    showConnect(true, e.message);
+  }
+}
+
+async function refresh(silent) {
+  try {
+    const r = await rpc('apiList', {});
+    state.rows = r.rows; state.stats = r.stats; renderAll();
+    if (!silent) toast('Refreshed');
+  } catch (e) { toast('Refresh failed: ' + e.message); }
+}
+
+// ---------------------------------------------------------------------------
+// Render
+// ---------------------------------------------------------------------------
+function renderLookups() {
+  const L = state.lookups;
+  const fill = (sel, list, keepFirst) => {
+    const el = $(sel); const first = keepFirst ? el.options[0].outerHTML : '';
+    el.innerHTML = first + list.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+  };
+  fill('fBrand', L.brands, true); fill('fPlatform', L.platforms, true);
+  fill('eViolationType', L.violationTypes); fill('mType', L.violationTypes);
+  fill('eJenis', L.jenisAduan); fill('mJenis', L.jenisAduan);
+  $('brandList').innerHTML = L.brands.map(v => `<option value="${esc(v)}">`).join('');
+  $('platformList').innerHTML = L.platforms.map(v => `<option value="${esc(v)}">`).join('');
+  $('questLink').href = state.questUrl;
+  const f = $('kkmFormLink'); const o = $('btnOpenForm');
+  if (KKM_FORM_URL) { f.href = KKM_FORM_URL; o.href = KKM_FORM_URL; f.classList.remove('hidden'); }
+  else { o.addEventListener('click', ev => { ev.preventDefault(); const u = prompt('Paste the KKM Google Form URL (saved once):'); if (u) rpc('apiSetKkmFormUrl', u).then(() => { KKM_FORM_URL = u; renderLookups(); toast('Form URL saved'); }); }); }
+}
+
+function renderAll() { renderStats(); renderChips(); renderTable(); }
+
+function renderStats() {
+  const c = state.stats.counts;
+  const tiles = [
+    ['New', c['New'] || 0, 'text-blue-700'], ['In-Progress', c['In-Progress'] || 0, 'text-amber-700'],
+    ['Complete', c['Complete'] || 0, 'text-emerald-700'], ['Dismissed', c['Dismissed'] || 0, 'text-slate-600'],
+    ['Total', c.total || 0, 'text-slate-900']
+  ];
+  $('stats').innerHTML = tiles.map(([label, n, cls]) => `
+    <button data-tile="${label === 'Total' ? '' : label}" class="text-left bg-white rounded-2xl border ${state.filter.status === label ? 'border-slate-900' : 'border-slate-200'} p-4 hover:border-slate-400">
+      <div class="text-xs text-slate-500">${label}</div>
+      <div class="text-2xl font-bold ${cls}">${n}</div>
+    </button>`).join('');
+  $('stats').querySelectorAll('[data-tile]').forEach(b => b.onclick = () => { state.filter.status = b.dataset.tile; renderAll(); });
+}
+
+function renderChips() {
+  const all = ['', ...state.statuses];
+  $('statusChips').innerHTML = all.map(s => `
+    <button data-chip="${s}" class="rounded-full px-3 py-1.5 text-xs font-semibold border ${state.filter.status === s ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-300 hover:bg-slate-50'}">${s || 'All'}</button>`).join('');
+  $('statusChips').querySelectorAll('[data-chip]').forEach(b => b.onclick = () => { state.filter.status = b.dataset.chip; renderAll(); });
+}
+
+function filtered() {
+  const f = state.filter; const q = f.q.trim().toLowerCase();
+  return state.rows.filter(r =>
+    (!f.status || r['Status'] === f.status) &&
+    (!f.brand || r['Brand'] === f.brand) &&
+    (!f.platform || r['Platform'] === f.platform) &&
+    (!q || ['Extracted Text','Nama Kosmetik','Violation Reason','Violation Type','Post URL','Remarks','ID'].some(k => String(r[k] || '').toLowerCase().includes(q))));
+}
+
+function renderTable() {
+  $('loading').classList.add('hidden');
+  const rows = filtered();
+  $('count').textContent = `${rows.length} of ${state.rows.length}`;
+  $('empty').classList.toggle('hidden', rows.length > 0);
+  $('rows').innerHTML = rows.map(r => `
+    <tr data-id="${esc(r['ID'])}" class="row-hover cursor-pointer">
+      <td class="px-4 py-3 whitespace-nowrap text-slate-600">${esc(r['Date'])}</td>
+      <td class="px-4 py-3 font-medium">${esc(r['Brand'])}</td>
+      <td class="px-4 py-3">${esc(r['Platform'])}</td>
+      <td class="px-4 py-3 max-w-[200px] truncate">${esc(r['Nama Kosmetik'] || '—')}</td>
+      <td class="px-4 py-3 max-w-[340px]"><div class="font-medium">${esc(r['Violation Type'])}</div><div class="text-xs text-slate-500 clamp-2">${esc(r['Violation Reason'])}</div></td>
+      <td class="px-4 py-3"><span class="badge ${STATUS_STYLE[r['Status']] || 'bg-slate-100'}">${esc(r['Status'])}</span></td>
+      <td class="px-4 py-3 whitespace-nowrap text-xs">
+        <a href="${esc(r['Post URL'])}" target="_blank" rel="noopener" class="text-blue-700 underline mr-2" onclick="event.stopPropagation()">post</a>
+        ${r['Screenshot Link'] ? `<a href="${esc(r['Screenshot Link'])}" target="_blank" rel="noopener" class="text-blue-700 underline" onclick="event.stopPropagation()">shot</a>` : '<span class="text-slate-400">no shot</span>'}
+      </td>
+    </tr>`).join('');
+  $('rows').querySelectorAll('tr[data-id]').forEach(tr => tr.onclick = () => openRow(tr.dataset.id));
+}
+
+// ---------------------------------------------------------------------------
+// Drawer
+// ---------------------------------------------------------------------------
+function driveThumb(link) {
+  const m = /drive\.google\.com\/file\/d\/([^/]+)/.exec(link || '') || /[?&]id=([^&]+)/.exec(link || '');
+  return m ? `https://drive.google.com/thumbnail?id=${m[1]}&sz=w1400` : link;
+}
+
+async function openRow(id) {
+  const local = state.rows.find(r => r['ID'] === id);
+  if (local) fillDrawer(local);
+  showDrawer(true);
+  try {
+    const fresh = await rpc('apiOpen', id);   // New → In-Progress happens server-side
+    mergeRow(fresh); fillDrawer(fresh);
+    if (local && local['Status'] === 'New' && fresh['Status'] === 'In-Progress') { toast('Status → In-Progress'); refreshStatsOnly(); }
+  } catch (e) { toast('Open failed: ' + e.message); }
+}
+
+function mergeRow(row) {
+  const i = state.rows.findIndex(r => r['ID'] === row['ID']);
+  if (i >= 0) state.rows[i] = row; else state.rows.unshift(row);
+  renderTable();
+}
+async function refreshStatsOnly() { try { const r = await rpc('apiList', {}); state.stats = r.stats; state.rows = r.rows; renderAll(); } catch (e) {} }
+
+function fillDrawer(r) {
+  state.current = r;
+  $('dTitle').textContent = `${r['Brand']} · ${r['Platform']} · ${r['ID']}`;
+  $('dSub').textContent = `Detected ${r['Date']} · source ${r['Source'] || '—'}`;
+  const st = $('dStatus'); st.textContent = r['Status']; st.className = 'badge ' + (STATUS_STYLE[r['Status']] || '');
+  const shot = $('dShot');
+  shot.innerHTML = r['Screenshot Link']
+    ? `<a href="${esc(r['Screenshot Link'])}" target="_blank" rel="noopener"><img src="${esc(driveThumb(r['Screenshot Link']))}" alt="screenshot" class="w-full max-h-[420px] object-contain bg-white" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'p-4 text-sm',textContent:'Preview unavailable — open the link.'}))"></a>`
+    : `<div class="p-4 text-sm text-slate-500">No screenshot.</div>`;
+  $('dUrl').textContent = r['Post URL']; $('dUrl').href = r['Post URL'];
+  $('dText').textContent = r['Extracted Text'] || '—';
+  $('eViolationType').value = r['Violation Type'] || '';
+  if ($('eViolationType').value !== (r['Violation Type'] || '')) { const o = document.createElement('option'); o.value = o.textContent = r['Violation Type']; $('eViolationType').appendChild(o); $('eViolationType').value = r['Violation Type']; }
+  $('eViolationReason').value = r['Violation Reason'] || '';
+  $('dConf').textContent = r['Confidence'] !== '' && r['Confidence'] != null ? `${Math.round(Number(r['Confidence']) * 100)}%` : '—';
+  $('eNama').value = r['Nama Kosmetik'] || '';
+  $('eNot').value = r['Nombor Notifikasi'] || '';
+  $('eJenis').value = r['Jenis Aduan'] || 'Iklan Kosmetik';
+  $('dTarikh').textContent = r['Tarikh Melapor'] || '— (set when marked Complete)';
+  $('eDeskripsi').value = r['Deskripsi Aduan'] || '';
+  $('eRemarks').value = r['Remarks'] || '';
+  $('dMeta').textContent = `Updated ${r['Updated At'] || '—'}`;
+}
+
+function showDrawer(open) {
+  $('overlay').classList.toggle('hidden', !open);
+  $('drawer').classList.toggle('translate-x-full', !open);
+  document.body.style.overflow = open ? 'hidden' : '';
+}
+
+async function saveDrawer() {
+  if (!state.current) return;
+  const fields = {
+    'Violation Type': $('eViolationType').value, 'Violation Reason': $('eViolationReason').value,
+    'Nama Kosmetik': $('eNama').value, 'Nombor Notifikasi': $('eNot').value, 'Jenis Aduan': $('eJenis').value,
+    'Deskripsi Aduan': $('eDeskripsi').value, 'Remarks': $('eRemarks').value
+  };
+  $('btnSave').disabled = true;
+  try { const r = await rpc('apiUpdateFields', state.current['ID'], fields); mergeRow(r.row); fillDrawer(r.row); toast('Saved'); }
+  catch (e) { toast('Save failed: ' + e.message); }
+  finally { $('btnSave').disabled = false; }
+}
+
+async function setStatus(status) {
+  if (!state.current) return;
+  if (status === 'Complete' && !confirm('Mark as Complete? This records today as Tarikh Melapor.')) return;
+  try {
+    const r = await rpc('apiSetStatus', state.current['ID'], status, $('eRemarks').value);
+    if (!r.ok) throw new Error(r.error);
+    mergeRow(r.row); fillDrawer(r.row); state.stats = r.stats; renderStats(); toast('Status → ' + status);
+  } catch (e) { toast('Status change failed: ' + e.message); }
+}
+
+function copy(text, label) {
+  navigator.clipboard.writeText(text || '').then(() => toast(label + ' copied')).catch(() => toast('Copy blocked by browser'));
+}
+
+// ---------------------------------------------------------------------------
+// Manual entry
+// ---------------------------------------------------------------------------
+function showModal(open) { $('modal').classList.toggle('hidden', !open); if (open) $('mBrand').focus(); }
+
+function fileToBase64(file) {
+  return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result)); fr.onerror = rej; fr.readAsDataURL(file); });
+}
+
+async function submitManual(ev) {
+  ev.preventDefault();
+  const btn = $('mSubmit'); btn.disabled = true; $('mHint').textContent = '';
+  try {
+    let shot = $('mShot').value.trim();
+    const file = $('mFile').files[0];
+    if (!shot && file) {
+      if (file.size > 8 * 1024 * 1024) throw new Error('Screenshot over 8 MB — paste a Drive link instead.');
+      $('mHint').textContent = 'Uploading screenshot…';
+      const b64 = await fileToBase64(file);
+      const up = await rpc('apiUploadScreenshot', b64, file.type || 'image/png', file.name);
+      shot = up.link;
+    }
+    $('mHint').textContent = 'Saving…';
+    const rec = {
+      'Brand': $('mBrand').value.trim(), 'Platform': $('mPlatform').value.trim(), 'Post URL': $('mUrl').value.trim(),
+      'Screenshot Link': shot, 'Nama Kosmetik': $('mNama').value.trim(), 'Violation Type': $('mType').value,
+      'Violation Reason': $('mReason').value.trim(), 'Extracted Text': $('mText').value.trim(),
+      'Jenis Aduan': $('mJenis').value, 'Remarks': $('mRemarks').value.trim(), 'Source': 'manual'
+    };
+    const r = await rpc('apiCreateManual', rec);
+    state.stats = r.stats; mergeRow(r.row); renderStats();
+    $('manualForm').reset(); showModal(false); toast('Added ' + r.row['ID']);
+  } catch (e) { $('mHint').textContent = e.message; toast(e.message, 4000); }
+  finally { btn.disabled = false; }
+}
+
+// ---------------------------------------------------------------------------
+// Wiring
+// ---------------------------------------------------------------------------
+$('btnRefresh').onclick = () => refresh(false);
+$('btnNew').onclick = () => showModal(true);
+$('btnSettings').onclick = () => showConnect(true);
+$('cGo').onclick = connect;
+$('cForget').onclick = forgetKey;
+$('cKey').addEventListener('keydown', e => { if (e.key === 'Enter') connect(); });
+$('btnClose').onclick = () => showDrawer(false);
+$('overlay').onclick = () => showDrawer(false);
+$('btnSave').onclick = saveDrawer;
+$('btnCopyDesc').onclick = () => copy($('eDeskripsi').value, 'Deskripsi');
+$('btnCopyUrl').onclick = () => copy(state.current && state.current['Post URL'], 'URL');
+document.querySelectorAll('.stBtn').forEach(b => b.onclick = () => setStatus(b.dataset.status));
+document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => showModal(false));
+$('manualForm').onsubmit = submitManual;
+$('fBrand').onchange = e => { state.filter.brand = e.target.value; renderTable(); };
+$('fPlatform').onchange = e => { state.filter.platform = e.target.value; renderTable(); };
+$('fSearch').oninput = e => { state.filter.q = e.target.value; renderTable(); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { showDrawer(false); showModal(false); if (cfg.key) showConnect(false); } });
+setInterval(() => { if (cfg.key && $('drawer').classList.contains('translate-x-full') && $('modal').classList.contains('hidden') && $('connect').classList.contains('hidden')) refresh(true); }, 180000);
+boot();
+</script>
+</body>
+</html>

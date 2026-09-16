@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+scraper/out/
+scraper/.env
+scraper/.venv/
+scraper/storage_state.json
+web/CNAME

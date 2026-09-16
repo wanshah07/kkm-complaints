@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+"""
+KKM Cosmetic Complaint System — Friday 23:30 MYT routine.
+
+  scrape (Playwright) → dedupe against the sheet → NPRA review (rules + LLM) →
+  screenshot → POST to the Apps Script webhook → run report in out/
+
+Usage
+  python main.py                       # full run
+  python main.py --dry-run             # scrape + review, print payloads, no POST
+  python main.py --brand "Eucerin" --platform Instagram
+  python main.py --no-llm              # rules-only verdicts
+  python main.py --review-only path.txt --brand X --platform Y --url Z   # review a pasted caption
+
+Exit code is 0 when the run completed (even with per-target errors), 1 when nothing could run
+(bad config, webhook unreachable, browser failure).
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import os
+import sys
+import time
+from datetime import datetime, timezone
+from typing import Dict, List, Optional
+from zoneinfo import ZoneInfo
+
+import yaml
+
+from evaluator import ReviewInput, review
+from scraper import Scraper, canonical_url, within_lookback
+from uploader import AppsScriptClient, DriveUploader, attach_screenshot
+
+MYT = ZoneInfo("Asia/Kuala_Lumpur")
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"),
+                    format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("kkm.main")
+
+
+def load_config(path: str) -> dict:
+    with open(path, "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f) or {}
+    if not cfg.get("brands"):
+        raise SystemExit("config.yaml has no brands")
+    if not cfg.get("platforms"):
+        raise SystemExit("config.yaml has no platforms")
+    return cfg
+
+
+def build_record(post, verdict: dict, run_cfg: dict, drive: Optional[DriveUploader]) -> dict:
+    now_my = datetime.now(MYT)
+    vt = verdict.get("violation_type") or "Other"
+    if verdict["verdict"] == "Risky":
+        vt = f"Risky: {vt}"
+    reason = verdict.get("violation_reason", "")
+    claims = verdict.get("claims") or []
+    failing = [c for c in claims if c.get("verdict") in ("Unacceptable", "Risky")]
+    if failing:
+        reason = (reason + "\n\n" if reason else "") + "Claims:\n" + "\n".join(
+            f'- [{c.get("verdict")}] "{c.get("claim")}" — {c.get("reason")} ({c.get("reference")})' for c in failing[:8])
+    remarks = f"reviewer={verdict.get('reviewer', '')}"
+    if verdict.get("notes"):
+        remarks += f"; {verdict['notes']}"
+    if post.errors:
+        remarks += "; scrape: " + "; ".join(post.errors)
+    rec = {
+        "date": (post.posted_at or now_my.strftime("%Y-%m-%d")),
+        "brand": post.brand,
+        "platform": post.platform,
+        "post_url": post.url,
+        "extracted_text": post.text,
+        "violation_type": vt,
+        "violation_reason": reason,
+        "product_name": verdict.get("product_name", ""),
+        "notification_number": "",
+        "jenis_aduan": "Iklan Kosmetik",
+        "complaint_description": verdict.get("complaint_description_bm", ""),
+        "confidence": round(float(verdict.get("confidence", 0)), 2),
+        "remarks": remarks,
+        "source": "scraper",
+    }
+    fname = f"{post.brand}_{post.platform}_{now_my.strftime('%Y%m%d')}_{abs(hash(post.url)) % 10_000_000}.jpg".replace(" ", "_")
+    attach_screenshot(rec, post.screenshot_path, run_cfg, drive, fname)
+    return rec
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    ap = argparse.ArgumentParser(description="KKM cosmetic complaint scraper")
+    ap.add_argument("--config", default=os.path.join(HERE, "config.yaml"))
+    ap.add_argument("--out", default=os.path.join(HERE, "out"))
+    ap.add_argument("--brand", help="only this brand")
+    ap.add_argument("--platform", help="only this platform")
+    ap.add_argument("--dry-run", action="store_true", help="do not POST to the webhook")
+    ap.add_argument("--no-llm", action="store_true", help="rules-only review")
+    ap.add_argument("--review-only", metavar="TEXTFILE", help="skip scraping; review this caption file")
+    ap.add_argument("--url", default="manual://review", help="URL for --review-only")
+    args = ap.parse_args(argv)
+
+    started = datetime.now(MYT)
+    cfg = load_config(args.config)
+    run_cfg = cfg.get("run", {})
+    run_dir = os.path.join(args.out, started.strftime("%Y%m%d_%H%M%S"))
+    os.makedirs(run_dir, exist_ok=True)
+    report: Dict = {"started_myt": started.isoformat(), "targets": [], "pushed": [], "skipped": [], "errors": []}
+
+    # --- review-only mode (no browser, no webhook) ---------------------------
+    if args.review_only:
+        with open(args.review_only, "r", encoding="utf-8") as f:
+            text = f.read()
+        v = review(ReviewInput(brand=args.brand or "?", platform=args.platform or "?", url=args.url, text=text),
+                   use_llm=not args.no_llm)
+        print(json.dumps(v, ensure_ascii=False, indent=2))
+        return 0
+
+    # --- backend -----------------------------------------------------------------
+    client: Optional[AppsScriptClient] = None
+    known: set = set()
+    if not args.dry_run:
+        try:
+            client = AppsScriptClient()
+            ping = client.ping()
+            log.info("webhook ok: %s", ping)
+            known = {canonical_url(u) for u in client.known_urls()}
+            log.info("%d known post URLs in the sheet", len(known))
+        except Exception as e:
+            log.error("webhook unreachable: %s", e)
+            report["errors"].append(f"webhook: {e}")
+            _write_report(run_dir, report)
+            return 1
+
+    drive: Optional[DriveUploader] = None
+    if os.getenv("SCREENSHOT_MODE", "apps_script").lower() == "drive_api":
+        try:
+            drive = DriveUploader()
+        except Exception as e:
+            log.warning("Drive uploader unavailable (%s); using payload upload", e)
+
+    # --- scrape ---------------------------------------------------------------------
+    try:
+        scraper = Scraper(cfg, os.path.join(run_dir, "screenshots"))
+        results = scraper.run(cfg["brands"], platform_filter=args.platform, brand_filter=args.brand)
+    except Exception as e:
+        log.exception("browser run failed")
+        report["errors"].append(f"browser: {e}")
+        _write_report(run_dir, report)
+        return 1
+
+    hints = {b["name"]: b.get("product_hints", []) for b in cfg["brands"]}
+    lookback = int(run_cfg.get("lookback_days", 14))
+    push_risky = bool(run_cfg.get("push_risky", False))
+    min_conf = float(run_cfg.get("min_confidence", 0.6))
+    records: List[dict] = []
+
+    for tr in results:
+        report["targets"].append({"brand": tr.brand, "platform": tr.platform, "profile": tr.profile_url,
+                                  "posts": len(tr.posts), "error": tr.error})
+        for post in tr.posts:
+            cu = canonical_url(post.url)
+            if cu in known:
+                report["skipped"].append({"url": post.url, "why": "already in sheet"})
+                continue
+            if not within_lookback(post.posted_at, lookback):
+                report["skipped"].append({"url": post.url, "why": f"older than {lookback} days ({post.posted_at})"})
+                continue
+            if not post.text and not post.screenshot_path:
+                report["skipped"].append({"url": post.url, "why": "nothing extracted"})
+                continue
+            v = review(ReviewInput(brand=post.brand, platform=post.platform, url=post.url, text=post.text,
+                                   screenshot_path=post.screenshot_path, product_hints=hints.get(post.brand)),
+                       use_llm=not args.no_llm)
+            entry = {"url": post.url, "verdict": v["verdict"], "confidence": v.get("confidence"),
+                     "type": v.get("violation_type"), "reviewer": v.get("reviewer")}
+            if v["verdict"] == "Unacceptable" and v.get("confidence", 0) >= min_conf:
+                records.append(build_record(post, v, run_cfg, drive))
+                report["pushed"].append(entry)
+            elif v["verdict"] == "Risky" and push_risky:
+                records.append(build_record(post, v, run_cfg, drive))
+                report["pushed"].append(entry)
+            else:
+                entry["why"] = "acceptable" if v["verdict"] == "Acceptable" else f"{v['verdict']} below threshold / not pushed"
+                report["skipped"].append(entry)
+            known.add(cu)
+
+    log.info("%d non-compliant post(s) to push, %d skipped", len(records), len(report["skipped"]))
+
+    # --- push -----------------------------------------------------------------------
+    if records:
+        if args.dry_run or client is None:
+            preview = [{k: (v if k != "screenshot_base64" else f"<{len(v)} b64 chars>") for k, v in r.items()} for r in records]
+            with open(os.path.join(run_dir, "payload_preview.json"), "w", encoding="utf-8") as f:
+                json.dump(preview, f, ensure_ascii=False, indent=2)
+            log.info("dry run: payload written to %s", os.path.join(run_dir, "payload_preview.json"))
+        else:
+            try:
+                totals = client.insert(records)
+                report["insert"] = {k: (v if k != "ids" else v) for k, v in totals.items()}
+                log.info("inserted=%d duplicates=%d errors=%d", totals["inserted"], len(totals["duplicates"]), len(totals["errors"]))
+            except Exception as e:
+                log.error("insert failed: %s", e)
+                report["errors"].append(f"insert: {e}")
+                # keep the payload on disk so it can be replayed by hand
+                with open(os.path.join(run_dir, "payload_failed.json"), "w", encoding="utf-8") as f:
+                    json.dump(records, f, ensure_ascii=False)
+
+    report["finished_myt"] = datetime.now(MYT).isoformat()
+    report["duration_s"] = round(time.time() - started.timestamp(), 1)
+    _write_report(run_dir, report)
+    _print_summary(report)
+    return 0
+
+
+def _write_report(run_dir: str, report: dict) -> None:
+    path = os.path.join(run_dir, "run_report.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
+    log.info("report: %s", path)
+
+
+def _print_summary(report: dict) -> None:
+    print("\n=== KKM scraper run summary ===")
+    for t in report["targets"]:
+        print(f"  {t['brand']:<16} {t['platform']:<10} posts={t['posts']:<3} {('ERR ' + t['error']) if t['error'] else 'ok'}")
+    print(f"  pushed: {len(report['pushed'])}   skipped: {len(report['skipped'])}   errors: {len(report['errors'])}")
+    for p in report["pushed"]:
+        print(f"    → {p['verdict']} ({p['confidence']}) {p['type']}  {p['url']}")
+    if report.get("insert"):
+        print(f"  sheet insert: {report['insert'].get('inserted')} new, {len(report['insert'].get('duplicates', []))} duplicate(s)")
+
+
+if __name__ == "__main__":
+    sys.exit(main())
