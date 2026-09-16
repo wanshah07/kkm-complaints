@@ -43,8 +43,14 @@ Deskripsi Aduan · Tarikh Melapor · Source · Confidence · Created At · Updat
   edited in the drawer, then copied straight into the form.
 - `Tarikh Melapor` is stamped automatically when a row is marked **Complete**.
 - A fourth status, **Dismissed**, exists for false positives so they stop appearing as New.
-- A `Lookups` tab holds the Brand / Platform / Violation Type lists. Add a row there and the
-  dashboard dropdowns and sheet validation pick it up.
+- A `Lookups` tab holds the Brand / Platform / Violation Type lists for the dashboard dropdowns
+  and sheet validation.
+- A **`Targets` tab is where you add a brand to monitor.** Columns: `Brand | Active | Instagram |
+  Facebook | Threads | Product hints | Notes`. One row per brand, the handle (without @) under each
+  platform, tick *Active*. The scraper reads this tab at the start of every run (`--targets auto`,
+  the default) and falls back to `config.yaml` only when the sheet is unreachable. Adding a platform
+  is a new column with the platform's name, plus a matching entry under `platforms:` in
+  `config.yaml` so the scraper knows the profile URL shape.
 
 ## Deployment
 
@@ -104,7 +110,7 @@ python main.py                                # full run, pushes to the sheet
 python main.py --review-only caption.txt --brand "QV" --platform Facebook   # review a pasted caption
 ```
 
-Add a brand or platform in `config.yaml`; nothing else changes. `run.push_risky: true`
+Brands come from the sheet's `Targets` tab (see above); `config.yaml` is the fallback and the place platforms are defined. `run.push_risky: true`
 also pushes *Risky* verdicts (typed `Risky: …`). `run.min_confidence` drops low-confidence
 Unacceptable calls.
 

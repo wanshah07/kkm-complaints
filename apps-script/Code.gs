@@ -74,6 +74,19 @@ var DEFAULT_VIOLATION_TYPES = [
   'Other'
 ];
 
+// Targets tab: the brands and handles the scraper visits. Edit this in the sheet, not in config.yaml.
+// Columns after "Active" and before "Product hints" are platforms; add a column to add a platform.
+var TARGET_SHEET_NAME = 'Targets';
+var TARGET_FIXED_HEAD = ['Brand', 'Active'];
+var TARGET_FIXED_TAIL = ['Product hints', 'Notes'];
+var DEFAULT_TARGET_PLATFORMS = ['Instagram', 'Facebook', 'Threads'];
+var DEFAULT_TARGETS = [
+  ['La Roche-Posay', true, 'larocheposaymy', 'LaRochePosayMalaysia', 'larocheposaymy', 'Effaclar, Cicaplast, Anthelios, Toleriane, Lipikar, Mela B3, Hyalu B5', ''],
+  ['Eucerin', true, 'eucerin_malaysia', 'EucerinMalaysia', 'eucerin_malaysia', 'Spotless Brightening, Ultrasensitive, Atopicontrol, Sun Gel-Creme, Dermopurifyer, Urea Repair, Hyaluron-Filler', ''],
+  ['QV', true, 'qvskincaremy', 'QVSkincareMalaysia', 'qvskincaremy', 'QV Gentle Wash, QV Cream, QV Face, QV Baby, QV Intensive', ''],
+  ['The Raw', true, 'therawmy', 'therawmy', 'therawmy', '', '']
+];
+
 var SCREENSHOT_FOLDER_NAME = 'KKM Complaint Screenshots';
 var MAX_ROWS_RETURNED = 2000;
 var PROPS = PropertiesService.getScriptProperties();
@@ -89,6 +102,7 @@ function setup() {
   var lookups = getOrCreateSheet_(ss, LOOKUP_SHEET_NAME);
   ensureLookups_(lookups);
   applyValidation_(sheet, lookups);
+  ensureTargets_(ss);
   ensureFolder_();
   if (!PROPS.getProperty('API_TOKEN')) PROPS.setProperty('API_TOKEN', randomToken_(40));
   if (!PROPS.getProperty('DASHBOARD_KEY')) PROPS.setProperty('DASHBOARD_KEY', randomToken_(24));
@@ -162,6 +176,54 @@ function ensureLookups_(sheet) {
     sheet.setColumnWidth(col, 260);
   });
   sheet.setFrozenRows(1);
+}
+
+function ensureTargets_(ss) {
+  var sheet = ss.getSheetByName(TARGET_SHEET_NAME);
+  var created = false;
+  if (!sheet) { sheet = ss.insertSheet(TARGET_SHEET_NAME); created = true; }
+  if (sheet.getLastRow() === 0) {
+    var headers = TARGET_FIXED_HEAD.concat(DEFAULT_TARGET_PLATFORMS, TARGET_FIXED_TAIL);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers])
+      .setFontWeight('bold').setBackground('#0f172a').setFontColor('#ffffff');
+    sheet.getRange(2, 1, DEFAULT_TARGETS.length, headers.length).setValues(DEFAULT_TARGETS);
+    sheet.setFrozenRows(1);
+    [170, 70, 180, 200, 180, 360, 240].forEach(function (w, i) { sheet.setColumnWidth(i + 1, w); });
+    created = true;
+  }
+  // Active column as checkboxes
+  var rows = Math.max(sheet.getMaxRows() - 1, 1);
+  sheet.getRange(2, 2, rows, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
+  return sheet;
+}
+
+function targets_() {
+  // Reads the Targets tab. Returns [{name, active, handles: {Platform: handle}, product_hints: [..], notes}].
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ensureTargets_(ss);
+  var last = sheet.getLastRow();
+  if (last < 2) return [];
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
+  var iBrand = headers.indexOf('Brand'), iActive = headers.indexOf('Active');
+  var iHints = headers.indexOf('Product hints'), iNotes = headers.indexOf('Notes');
+  var platformCols = [];
+  headers.forEach(function (h, i) {
+    if (h && TARGET_FIXED_HEAD.indexOf(h) < 0 && TARGET_FIXED_TAIL.indexOf(h) < 0) platformCols.push({ name: h, i: i });
+  });
+  var out = [];
+  sheet.getRange(2, 1, last - 1, headers.length).getValues().forEach(function (row) {
+    var name = String(row[iBrand] || '').trim();
+    if (!name) return;
+    var active = iActive >= 0 ? (row[iActive] === true || String(row[iActive]).toLowerCase() === 'true') : true;
+    var handles = {};
+    platformCols.forEach(function (pc) {
+      var v = String(row[pc.i] || '').trim().replace(/^@/, '');
+      if (v) handles[pc.name] = v;
+    });
+    var hints = iHints >= 0 ? String(row[iHints] || '').split(',').map(function (x) { return x.trim(); }).filter(String) : [];
+    out.push({ name: name, active: active, handles: handles, product_hints: hints, notes: iNotes >= 0 ? String(row[iNotes] || '') : '' });
+  });
+  return out;
 }
 
 function applyValidation_(sheet, lookups) {
@@ -241,6 +303,8 @@ function handleApi_(action, body, p) {
       // --- scraper (API_TOKEN) ---
       case 'insert':        if (!machine) return deny;
                             return apiInsertRecords_(body.records || (body.record ? [body.record] : []), 'scraper');
+      case 'targets':       if (!viewer) return deny;
+                            return { ok: true, targets: targets_() };
       case 'known_urls':    if (!viewer) return deny;
                             return { ok: true, urls: knownUrls_() };
       // --- dashboard (DASHBOARD_KEY) or scraper ---
@@ -548,8 +612,12 @@ function lookups_() {
     if (last < 2) return [];
     return sheet.getRange(2, c, last - 1, 1).getValues().map(function (r) { return String(r[0]).trim(); }).filter(String);
   }
+  var brands = colList(1).length ? colList(1) : DEFAULT_BRANDS.slice();
+  try {
+    targets_().forEach(function (t) { if (brands.indexOf(t.name) < 0) brands.push(t.name); });
+  } catch (err) { console.warn('targets unavailable for lookups: ' + err); }
   return {
-    brands: colList(1).length ? colList(1) : DEFAULT_BRANDS,
+    brands: brands,
     platforms: colList(2).length ? colList(2) : DEFAULT_PLATFORMS,
     violationTypes: colList(3).length ? colList(3) : DEFAULT_VIOLATION_TYPES,
     jenisAduan: JENIS_ADUAN

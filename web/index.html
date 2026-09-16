@@ -26,16 +26,16 @@
 
 <!-- Header -->
 <header class="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-slate-200">
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center gap-3">
     <div class="h-9 w-9 rounded-xl bg-slate-900 text-white grid place-items-center font-bold">K</div>
     <div class="min-w-0">
       <h1 class="text-base sm:text-lg font-semibold leading-tight">KKM Cosmetic Complaints</h1>
       <p class="text-xs text-slate-500 truncate">NPRA Annex I Part 8 / Part 10 monitoring · Pelaporan Aduan Kosmetik Bernotifikasi</p>
     </div>
     <div class="ml-auto flex items-center gap-2">
-      <a id="kkmFormLink" target="_blank" rel="noopener" class="hidden sm:inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">
-        Open KKM form ↗
-      </a>
+      <button id="kkmFormLink" title="Open the KKM complaint form (asks for the URL the first time)" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">
+        <span class="hidden sm:inline">Open KKM form ↗</span><span class="sm:hidden">KKM ↗</span>
+      </button>
       <button id="btnRefresh" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">⟳ Refresh</button>
       <button id="btnNew" class="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">+ Manual entry</button>
       <button id="btnSettings" title="Backend connection" class="inline-flex items-center rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm hover:bg-slate-50">⚙</button>
@@ -168,7 +168,7 @@
       <div class="flex flex-wrap gap-2">
         <button id="btnCopyDesc" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50">Copy Deskripsi</button>
         <button id="btnCopyUrl" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50">Copy Sumber iklan (URL)</button>
-        <a id="btnOpenForm" target="_blank" rel="noopener" class="rounded-lg bg-slate-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-slate-800">Open KKM form ↗</a>
+        <button id="btnOpenForm" class="rounded-lg bg-slate-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-slate-800">Open KKM form ↗</button>
       </div>
     </div>
 
@@ -409,9 +409,18 @@ function renderLookups() {
   $('brandList').innerHTML = L.brands.map(v => `<option value="${esc(v)}">`).join('');
   $('platformList').innerHTML = L.platforms.map(v => `<option value="${esc(v)}">`).join('');
   $('questLink').href = state.questUrl;
-  const f = $('kkmFormLink'); const o = $('btnOpenForm');
-  if (KKM_FORM_URL) { f.href = KKM_FORM_URL; o.href = KKM_FORM_URL; f.classList.remove('hidden'); }
-  else { o.addEventListener('click', ev => { ev.preventDefault(); const u = prompt('Paste the KKM Google Form URL (saved once):'); if (u) rpc('apiSetKkmFormUrl', u).then(() => { KKM_FORM_URL = u; renderLookups(); toast('Form URL saved'); }); }); }
+}
+
+// KKM form: opens the saved URL, or asks for it once and stores it in Script Properties (KKM_FORM_URL).
+// Hold Shift while clicking to replace a saved URL.
+function openKkmForm(ev) {
+  if (KKM_FORM_URL && !(ev && ev.shiftKey)) { window.open(KKM_FORM_URL, '_blank', 'noopener'); return; }
+  const u = (prompt('Paste the KKM complaint form URL (Google Form). It is saved once; Shift+click this button to change it later.', KKM_FORM_URL || '') || '').trim();
+  if (!u) return;
+  if (!/^https?:\/\/\S+$/.test(u)) { toast('That does not look like a URL'); return; }
+  rpc('apiSetKkmFormUrl', u)
+    .then(() => { KKM_FORM_URL = u; toast('KKM form URL saved'); window.open(u, '_blank', 'noopener'); })
+    .catch(e => toast('Could not save: ' + e.message, 4000));
 }
 
 function renderAll() { renderStats(); renderChips(); renderTable(); }
@@ -592,6 +601,8 @@ async function submitManual(ev) {
 // ---------------------------------------------------------------------------
 $('btnRefresh').onclick = () => refresh(false);
 $('btnNew').onclick = () => showModal(true);
+$('kkmFormLink').onclick = openKkmForm;
+$('btnOpenForm').onclick = openKkmForm;
 $('btnSettings').onclick = () => showConnect(true);
 $('cGo').onclick = connect;
 $('cForget').onclick = forgetKey;

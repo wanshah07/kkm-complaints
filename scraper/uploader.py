@@ -115,6 +115,11 @@ class AppsScriptClient:
         r = self.session.get(self.url, params={"action": "ping"}, timeout=self.timeout)
         return r.json()
 
+    def targets(self) -> List[Dict]:
+        """Brands + handles from the sheet's Targets tab (action=targets)."""
+        data = self._post({"action": "targets"})
+        return data.get("targets", [])
+
     def known_urls(self) -> List[str]:
         data = self._post({"action": "known_urls"})
         return data.get("urls", [])

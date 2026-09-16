@@ -96,6 +96,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--platform", help="only this platform")
     ap.add_argument("--dry-run", action="store_true", help="do not POST to the webhook")
     ap.add_argument("--no-llm", action="store_true", help="rules-only review")
+    ap.add_argument("--targets", choices=["auto", "sheet", "config"], default="auto",
+                    help="where brands/handles come from: the sheet's Targets tab (needs webhook env), config.yaml, or auto (sheet if reachable)")
     ap.add_argument("--review-only", metavar="TEXTFILE", help="skip scraping; review this caption file")
     ap.add_argument("--url", default="manual://review", help="URL for --review-only")
     args = ap.parse_args(argv)
@@ -139,17 +141,20 @@ def main(argv: Optional[List[str]] = None) -> int:
         except Exception as e:
             log.warning("Drive uploader unavailable (%s); using payload upload", e)
 
+    # --- targets: the sheet's Targets tab wins over config.yaml when reachable ---------
+    brands = resolve_targets(cfg, args.targets, client, report)
+
     # --- scrape ---------------------------------------------------------------------
     try:
         scraper = Scraper(cfg, os.path.join(run_dir, "screenshots"))
-        results = scraper.run(cfg["brands"], platform_filter=args.platform, brand_filter=args.brand)
+        results = scraper.run(brands, platform_filter=args.platform, brand_filter=args.brand)
     except Exception as e:
         log.exception("browser run failed")
         report["errors"].append(f"browser: {e}")
         _write_report(run_dir, report)
         return 1
 
-    hints = {b["name"]: b.get("product_hints", []) for b in cfg["brands"]}
+    hints = {b["name"]: b.get("product_hints", []) for b in brands}
     lookback = int(run_cfg.get("lookback_days", 14))
     push_risky = bool(run_cfg.get("push_risky", False))
     min_conf = float(run_cfg.get("min_confidence", 0.6))
@@ -211,6 +216,55 @@ def main(argv: Optional[List[str]] = None) -> int:
     _write_report(run_dir, report)
     _print_summary(report)
     return 0
+
+
+def resolve_targets(cfg: dict, mode: str, client: Optional[AppsScriptClient], report: dict) -> List[dict]:
+    """
+    'sheet'  : Targets tab of the Google Sheet (Brand | Active | <platform columns> | Product hints)
+    'config' : brands: in config.yaml
+    'auto'   : sheet when APPS_SCRIPT_WEBHOOK_URL + token are set and answer, else config.yaml
+    Only rows with Active = TRUE are scraped. Unknown platform columns are ignored with a warning.
+    """
+    if mode == "config":
+        report["targets_source"] = "config.yaml"
+        return cfg["brands"]
+    c = client
+    if c is None:
+        try:
+            c = AppsScriptClient()
+        except Exception as e:
+            if mode == "sheet":
+                raise SystemExit(f"--targets sheet needs the webhook env: {e}")
+            log.info("no webhook env; targets from config.yaml")
+            report["targets_source"] = "config.yaml"
+            return cfg["brands"]
+    try:
+        rows = c.targets()
+    except Exception as e:
+        if mode == "sheet":
+            raise SystemExit(f"could not read Targets tab: {e}")
+        log.warning("Targets tab unreachable (%s); using config.yaml", e)
+        report["targets_source"] = "config.yaml (sheet unreachable)"
+        return cfg["brands"]
+    known_platforms = set(cfg.get("platforms", {}).keys())
+    brands: List[dict] = []
+    for t in rows:
+        if not t.get("active", True):
+            continue
+        handles = {}
+        for plat, handle in (t.get("handles") or {}).items():
+            if plat in known_platforms:
+                handles[plat] = handle
+            else:
+                log.warning("Targets tab: platform column %r has no entry in config.yaml platforms; skipped", plat)
+        brands.append({"name": t["name"], "handles": handles, "product_hints": t.get("product_hints", [])})
+    if not brands:
+        log.warning("Targets tab has no active rows; using config.yaml")
+        report["targets_source"] = "config.yaml (sheet empty)"
+        return cfg["brands"]
+    log.info("targets from sheet: %s", ", ".join(b["name"] for b in brands))
+    report["targets_source"] = "sheet"
+    return brands
 
 
 def _write_report(run_dir: str, report: dict) -> None:
