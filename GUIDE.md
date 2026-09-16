@@ -237,6 +237,7 @@ Open the run: GitHub → **Actions** → click the run. The summary at the end o
 | `no post links found — platform soft-block` | Too much traffic from that address | Wait a few hours, or run from your PC |
 | `retrying via mbasic…` then still nothing | Facebook handle wrong, or the page has no public posts | Open `mbasic.facebook.com/<handle>` in your browser and see what it shows |
 | Instagram fails from GitHub but works in your browser | Instagram blocks datacenter addresses | Run from your own PC (section 7); GitHub cannot fix this |
+| A row's Post URL is on an account you didn't configure (e.g. a global/US handle you never set) | Instagram's profile page can surface "Suggested for you" or related-account content; the scraper now checks the actual poster of each post against the Targets handle and skips a mismatch, but a row filed before that check went in is real content from the wrong account | Dismiss the row — it is not the Malaysian brand's own post |
 | `posted <date>, outside on/after 2025-09-01` | Working as intended | Widen `min_post_date` if you want older posts |
 | `already in sheet` | Working as intended | Nothing |
 | `Failed to launch chromium because executable doesn't exist at # optional: …` | A `.env` line has a comment after the value, and the comment was read as the value | Put comments on their own line. Blank means "not set". |

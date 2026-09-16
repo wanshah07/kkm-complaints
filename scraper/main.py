@@ -191,6 +191,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                                   "posts": len(tr.posts), "error": tr.error})
         for post in tr.posts:
             cu = canonical_url(post.url)
+            if getattr(post, "not_owned", False):
+                report["skipped"].append({"url": post.url, "why": (post.errors[-1] if post.errors else "different account")})
+                continue
             if cu in known:
                 report["skipped"].append({"url": post.url, "why": "already in sheet"})
                 continue

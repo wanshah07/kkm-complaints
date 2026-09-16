@@ -56,6 +56,7 @@ class Post:
     posted_at: Optional[str] = None      # ISO date if found
     screenshot_path: Optional[str] = None
     errors: List[str] = field(default_factory=list)
+    not_owned: bool = False  # confirmed to be a different account's post; never sent for review
 
 
 @dataclass
@@ -129,6 +130,38 @@ def _pace(cfg_pair, what: str = "") -> float:
         log.info("pacing: waiting %.0fs before %s", secs, what)
     time.sleep(secs)
     return secs
+
+
+_OWNER_AT = re.compile(r"\(@([a-z0-9_.]+)\)", re.I)
+_OWNER_PREFIX = re.compile(
+    r"^\s*(?:[\d,.]+\s*(?:likes?|views?),?\s*(?:[\d,.]+\s*comments?)?\s*-\s*)?"
+    r"([^(:]{1,60}?)\s+on\s+(?:Instagram|Threads)\b", re.I)
+
+
+def _extract_owner(page: Page, platform: str) -> Optional[str]:
+    """
+    Instagram post URLs (/p/<id>/) carry no handle, so ownership cannot be checked from the URL
+    the way it is for Threads and Facebook — a profile page also surfaces "Suggested for you" and
+    related-account content, and without this check those get filed as the brand's own posts.
+    Instagram's og:title usually reads '1,234 Likes, 56 Comments - Brand (@handle) on Instagram:
+    "caption"'; read the @handle out of it, or the display name before "on Instagram" as a fallback.
+    """
+    if platform not in ("Instagram", "Threads"):
+        return None
+    for prop in ("og:title", "twitter:title", "og:description"):
+        v = _meta(page, prop) or ""
+        m = _OWNER_AT.search(v)
+        if m:
+            return m.group(1).lower()
+        m = _OWNER_PREFIX.search(v)
+        if m:
+            return re.sub(r"[^a-z0-9_.]", "", m.group(1).lower())
+    return None
+
+
+def _handles_match(a: Optional[str], b: Optional[str]) -> bool:
+    norm = lambda s: re.sub(r"[._]", "", (s or "").lower())
+    return bool(a and b) and norm(a) == norm(b)
 
 
 def _dismiss_dialogs(page: Page) -> None:
@@ -475,7 +508,7 @@ class Scraper:
             for i, link in enumerate(links):
                 if i:  # no wait before the first post of a profile
                     _pace(self.run_cfg.get("pause_between_posts"), "the next post")
-                res.posts.append(self._scrape_post(ctx, brand, platform, link))
+                res.posts.append(self._scrape_post(ctx, brand, platform, link, handle=handle))
         except PWTimeout as e:
             res.error = f"timeout: {e}"
             log.error("[%s/%s] %s", brand, platform, res.error)
@@ -490,7 +523,7 @@ class Scraper:
         log.info("[%s/%s] done in %.1fs", brand, platform, time.time() - t0)
         return res
 
-    def _scrape_post(self, ctx: BrowserContext, brand: str, platform: str, url: str) -> Post:
+    def _scrape_post(self, ctx: BrowserContext, brand: str, platform: str, url: str, handle: str = "") -> Post:
         post = Post(brand=brand, platform=platform, url=clean_post_url(url))
         page = ctx.new_page()
         try:
@@ -499,6 +532,14 @@ class Scraper:
             _dismiss_dialogs(page)
             if _is_login_wall(page):
                 post.errors.append("login wall on post page")
+            if platform == "Instagram" and handle:
+                owner = _extract_owner(page, platform)
+                if owner and not _handles_match(owner, handle):
+                    post.errors.append(f"different account: post is by @{owner}, not @{handle} — not reviewed")
+                    post.not_owned = True
+                    return post
+                if not owner:
+                    log.info("[%s/%s] could not read the post owner off the page; reviewing anyway", brand, platform)
             post.text = _extract_text(page, platform)
             post.posted_at = _extract_date(page)
             fname = re.sub(r"[^a-z0-9]+", "_", f"{brand}_{platform}_{urlsplit(url).path}".lower()).strip("_")[:90]
