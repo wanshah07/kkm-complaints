@@ -74,6 +74,18 @@ def canonical_url(u: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, path, "&".join(keep), "")).lower()
 
 
+_TRACKING_PARAMS = re.compile(r"^(__cft__.*|__tn__|mibextid|igsh|igshid|utm_\w+|fbclid|ref|refsrc|rdid|_rdr)$", re.I)
+
+
+def clean_post_url(u: str) -> str:
+    """The URL stored in the sheet and quoted in the complaint: tracking parameters removed,
+    identity parameters (story_fbid, id, v, fbid, set) kept, case preserved."""
+    u = (u or "").strip()
+    parts = urlsplit(u)
+    keep = [kv for kv in parts.query.split("&") if kv and not _TRACKING_PARAMS.match(kv.split("=", 1)[0])]
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, "&".join(keep), ""))
+
+
 def _dismiss_dialogs(page: Page) -> None:
     for sel in DISMISS_SELECTORS:
         try:
@@ -315,7 +327,7 @@ class Scraper:
         return res
 
     def _scrape_post(self, ctx: BrowserContext, brand: str, platform: str, url: str) -> Post:
-        post = Post(brand=brand, platform=platform, url=url)
+        post = Post(brand=brand, platform=platform, url=clean_post_url(url))
         page = ctx.new_page()
         try:
             page.goto(url, wait_until="domcontentloaded", timeout=45000)

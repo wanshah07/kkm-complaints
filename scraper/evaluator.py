@@ -22,7 +22,7 @@ VERDICT_SCHEMA = {
     "type": "object",
     "properties": {
         "verdict": {"type": "string", "enum": ["Acceptable", "Risky", "Unacceptable"]},
-        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "confidence": {"type": "number", "description": "0 to 1: probability an NPRA officer would agree with the verdict"},
         "violation_type": {"type": "string", "enum": [
             "Medicinal / disease claim",
             "Mechanism claim (collagen, melanin, DNA, cells)",
@@ -215,7 +215,10 @@ def _normalise(data: dict) -> dict:
     data.setdefault("notes", "")
     data.setdefault("product_name", "")
     data.setdefault("complaint_description_bm", "")
-    data["confidence"] = float(data.get("confidence") or 0)
+    try:
+        data["confidence"] = min(1.0, max(0.0, float(data.get("confidence") or 0)))
+    except (TypeError, ValueError):
+        data["confidence"] = 0.0
     if data.get("verdict") == "Acceptable":
         data["violation_type"] = ""
         data["violation_reason"] = data.get("violation_reason") or ""
