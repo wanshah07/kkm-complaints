@@ -311,9 +311,16 @@ class Scraper:
         self._storage_state_path = self._materialise_storage_state()
 
     def _materialise_storage_state(self) -> Optional[str]:
+        # 1. an explicit path, 2. storage_state.json sitting next to this file (the Windows
+        # case, so no .env line is needed), 3. base64 in the environment (the CI case).
         p = os.getenv("PW_STORAGE_STATE_PATH")
         if p and os.path.exists(p):
+            log.info("using browser session from %s", p)
             return p
+        here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "storage_state.json")
+        if os.path.exists(here):
+            log.info("using browser session from %s", here)
+            return here
         b64 = os.getenv("PW_STORAGE_STATE_B64")
         if b64:
             try:
@@ -322,9 +329,11 @@ class Scraper:
                 fd, path = tempfile.mkstemp(prefix="pw_state_", suffix=".json")
                 with os.fdopen(fd, "wb") as f:
                     f.write(raw)
+                log.info("using browser session from PW_STORAGE_STATE_B64")
                 return path
             except Exception as e:
                 log.warning("PW_STORAGE_STATE_B64 invalid, ignoring: %s", e)
+        log.info("no browser session found; logged-out browsing (expect login walls)")
         return None
 
     def _context(self, browser: Browser) -> BrowserContext:
