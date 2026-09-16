@@ -149,7 +149,7 @@ def _review_anthropic(inp: ReviewInput) -> dict:
     import anthropic
 
     client = anthropic.Anthropic()
-    model = os.getenv("ANTHROPIC_MODEL", "claude-opus-5")
+    model = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5")
     content = []
     if inp.screenshot_path and os.getenv("LLM_USE_SCREENSHOT", "1") == "1":
         blk = _image_block_anthropic(inp.screenshot_path)
