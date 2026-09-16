@@ -23,9 +23,9 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
 
@@ -39,7 +39,22 @@ from evaluator import ReviewInput, review
 from scraper import Scraper, canonical_url, date_allowed
 from uploader import AppsScriptClient, DriveUploader, attach_screenshot
 
-MYT = ZoneInfo("Asia/Kuala_Lumpur")
+def _myt():
+    """
+    Windows ships no IANA timezone database, so zoneinfo needs the `tzdata` package there.
+    It is in requirements.txt; this fallback means a stale environment degrades to a fixed
+    UTC+8 offset instead of killing the run. Malaysia has no daylight saving, so the offset
+    is exact rather than an approximation.
+    """
+    try:
+        return ZoneInfo("Asia/Kuala_Lumpur")
+    except (ZoneInfoNotFoundError, KeyError):
+        logging.getLogger("kkm.main").warning(
+            "timezone database not available (pip install tzdata); using a fixed UTC+8 offset")
+        return timezone(timedelta(hours=8), "MYT")
+
+
+MYT = _myt()
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"),

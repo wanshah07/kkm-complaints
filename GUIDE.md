@@ -220,6 +220,7 @@ Open the run: GitHub → **Actions** → click the run. The summary at the end o
 | Instagram fails from GitHub but works in your browser | Instagram blocks datacenter addresses | Run from your own PC (section 7); GitHub cannot fix this |
 | `posted <date>, outside on/after 2025-09-01` | Working as intended | Widen `min_post_date` if you want older posts |
 | `already in sheet` | Working as intended | Nothing |
+| `No time zone found with key Asia/Kuala_Lumpur` (Windows) | The `tzdata` package is missing from `.venv` | In the scraper folder: `.venv\Scripts\activate` then `pip install tzdata`, or re-run `setup_windows.bat` |
 | `LLM review failed … falling back to rules` | API key missing, out of credit, or a transient error | Check credit at console.anthropic.com; the run still completes on the regex rules alone |
 | Dashboard says `Unauthorised` | Wrong dashboard key, or Apps Script not redeployed after a code change | Re-enter the key; in Apps Script, Deploy → Manage deployments → New version |
 | Dashboard says non-JSON response | Apps Script deployment is old or not set to *Anyone* | Redeploy as Web app, Execute as Me, Access Anyone |
