@@ -24,7 +24,7 @@ import tempfile
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from dateutil import parser as dateparser
@@ -138,25 +138,42 @@ _OWNER_PREFIX = re.compile(
     r"([^(:]{1,60}?)\s+on\s+(?:Instagram|Threads)\b", re.I)
 
 
-def _extract_owner(page: Page, platform: str) -> Optional[str]:
+_IG_PATH_OWNER = re.compile(r"^/([a-z0-9_.]+)/(?:p|reel|tv)/", re.I)
+
+
+def _owner_from_url(url: str, platform: str) -> Optional[str]:
+    """Instagram serves a post under its own account's path — /<handle>/p/<id>/ — whenever the link
+    came off a grid, so a link to another account's post names that account."""
+    if platform != "Instagram":
+        return None
+    m = _IG_PATH_OWNER.match(urlsplit(url).path)
+    return m.group(1).lower() if m else None
+
+
+def _extract_owner(page: Page, platform: str) -> Tuple[Optional[str], bool]:
     """
-    Instagram post URLs (/p/<id>/) carry no handle, so ownership cannot be checked from the URL
-    the way it is for Threads and Facebook — a profile page also surfaces "Suggested for you" and
-    related-account content, and without this check those get filed as the brand's own posts.
-    Instagram's og:title usually reads '1,234 Likes, 56 Comments - Brand (@handle) on Instagram:
-    "caption"'; read the @handle out of it, or the display name before "on Instagram" as a fallback.
+    Read the post's author off the page. Returns (owner, is_handle).
+
+    A bare /p/<id>/ Instagram URL carries no handle, and a profile grid also surfaces "Suggested
+    for you" content, so the author has to come from the page: og:title usually reads
+    '1,234 Likes, 56 Comments - Brand (@handle) on Instagram: "caption"'.
+
+    The @handle is the account's real name and can be compared with the Targets cell. Some posts
+    carry only the DISPLAY name — 'Eucerin Malaysia on Instagram: …' — which is not a handle at all
+    (@eucerin_my displays as "Eucerin Malaysia"), so it comes back with is_handle False and must
+    never be used to reject a post.
     """
     if platform not in ("Instagram", "Threads"):
-        return None
+        return None, False
     for prop in ("og:title", "twitter:title", "og:description"):
         v = _meta(page, prop) or ""
         m = _OWNER_AT.search(v)
         if m:
-            return m.group(1).lower()
+            return m.group(1).lower(), True
         m = _OWNER_PREFIX.search(v)
         if m:
-            return re.sub(r"[^a-z0-9_.]", "", m.group(1).lower())
-    return None
+            return re.sub(r"[^a-z0-9_.]", "", m.group(1).lower()), False
+    return None, False
 
 
 def _handles_match(a: Optional[str], b: Optional[str]) -> bool:
@@ -533,12 +550,21 @@ class Scraper:
             if _is_login_wall(page):
                 post.errors.append("login wall on post page")
             if platform == "Instagram" and handle:
-                owner = _extract_owner(page, platform)
+                # Only a real handle rejects a post: from the URL path, or an @handle in the page's
+                # own metadata. A display name ("Eucerin Malaysia" for @eucerin_my) is not a handle
+                # and rejecting on it throws away the brand's own posts.
+                owner = _owner_from_url(url, platform)
+                is_handle = owner is not None
+                if owner is None:
+                    owner, is_handle = _extract_owner(page, platform)
                 if owner and not _handles_match(owner, handle):
-                    post.errors.append(f"different account: post is by @{owner}, not @{handle} — not reviewed")
-                    post.not_owned = True
-                    return post
-                if not owner:
+                    if is_handle:
+                        post.errors.append(f"different account: post is by @{owner}, not @{handle} — not reviewed")
+                        post.not_owned = True
+                        return post
+                    log.info("[%s/%s] page shows the display name %r, not a handle; reviewing anyway",
+                             brand, platform, owner)
+                elif not owner:
                     log.info("[%s/%s] could not read the post owner off the page; reviewing anyway", brand, platform)
             post.text = _extract_text(page, platform)
             post.posted_at = _extract_date(page)
