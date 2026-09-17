@@ -117,6 +117,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--platform", help="only this platform")
     ap.add_argument("--dry-run", action="store_true", help="do not POST to the webhook")
     ap.add_argument("--no-llm", action="store_true", help="rules-only review")
+    ap.add_argument("--compare", action="store_true",
+                    help="put every post to both reviewers and print where they disagree; never pushes")
     ap.add_argument("--targets", choices=["auto", "sheet", "config"], default="auto",
                     help="where brands/handles come from: the sheet's Targets tab (needs webhook env), config.yaml, or auto (sheet if reachable)")
     ap.add_argument("--review-only", metavar="TEXTFILE", help="skip scraping; review this caption file")
@@ -128,7 +130,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     run_cfg = cfg.get("run", {})
     run_dir = os.path.join(args.out, started.strftime("%Y%m%d_%H%M%S"))
     os.makedirs(run_dir, exist_ok=True)
-    report: Dict = {"started_myt": started.isoformat(), "targets": [], "pushed": [], "skipped": [], "errors": []}
+    report: Dict = {"started_myt": started.isoformat(), "targets": [], "pushed": [], "skipped": [],
+                    "errors": [], "comparison": []}
 
     # --- review-only mode (no browser, no webhook) ---------------------------
     if args.review_only:
@@ -138,6 +141,13 @@ def main(argv: Optional[List[str]] = None) -> int:
                    use_llm=not args.no_llm)
         print(json.dumps(v, ensure_ascii=False, indent=2))
         return 0
+
+    if args.compare and not args.dry_run:
+        # A comparison run is a measurement, not a sweep. Two reviewers disagreeing is the
+        # expected outcome, and neither verdict has been adjudicated yet, so nothing it
+        # produces may reach the sheet.
+        log.info("--compare implies --dry-run; nothing will be pushed")
+        args.dry_run = True
 
     # --- backend -----------------------------------------------------------------
     client: Optional[AppsScriptClient] = None
@@ -212,19 +222,44 @@ def main(argv: Optional[List[str]] = None) -> int:
             if not post.text and not post.screenshot_path:
                 report["skipped"].append({"url": post.url, "why": "nothing extracted"})
                 continue
-            v = review(ReviewInput(brand=post.brand, platform=post.platform, url=post.url, text=post.text,
-                                   screenshot_path=post.screenshot_path, product_hints=hints.get(post.brand),
-                                   target_type=types.get(post.brand, "")),
-                       use_llm=not args.no_llm)
-            # Count every call as soon as it returns: later branches can skip the post, and a
-            # call that was paid for must still appear in the spend total.
-            u = v.get("usage")
-            if u:
+            ri = ReviewInput(brand=post.brand, platform=post.platform, url=post.url, text=post.text,
+                             screenshot_path=post.screenshot_path, product_hints=hints.get(post.brand),
+                             target_type=types.get(post.brand, ""))
+
+            def _spend(verdict: dict) -> None:
+                # Count every call as soon as it returns: later branches can skip the post, and a
+                # call that was paid for must still appear in the spend total.
+                u = verdict.get("usage")
+                if not u:
+                    return
                 spend["calls"] += 1
                 for k in ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"):
                     spend[k] += u.get(k, 0) or 0
                 spend["usd"] += u.get("usd", 0.0) or 0.0
                 spend["models"][u.get("model", "?")] = spend["models"].get(u.get("model", "?"), 0) + 1
+
+            if args.compare:
+                # The same post, the same screenshot, two reviewers. Agreement on a handful of
+                # compliant posts proves very little; the disagreements are the whole point, and
+                # they are Wan's to adjudicate. Nothing is pushed from a comparison run.
+                a = review(ri, use_llm=not args.no_llm, provider="anthropic")
+                b = review(ri, use_llm=not args.no_llm, provider="openai")
+                _spend(a)
+                _spend(b)
+                report["comparison"].append({
+                    "url": post.url, "brand": post.brand, "platform": post.platform,
+                    "a": {"reviewer": a.get("reviewer"), "verdict": a["verdict"],
+                          "confidence": a.get("confidence"), "type": a.get("violation_type"),
+                          "reason": (a.get("violation_reason") or "")[:400]},
+                    "b": {"reviewer": b.get("reviewer"), "verdict": b["verdict"],
+                          "confidence": b.get("confidence"), "type": b.get("violation_type"),
+                          "reason": (b.get("violation_reason") or "")[:400]},
+                    "agree": a["verdict"] == b["verdict"],
+                })
+                continue
+
+            v = review(ri, use_llm=not args.no_llm)
+            _spend(v)
 
             # The platform often hides the timestamp from anonymous visitors; when the reviewer can read
             # it off the screenshot, use it for the Date column and the lookback filter.
@@ -356,6 +391,28 @@ def _print_summary(report: dict) -> None:
                 print(f"        {p.get('product') or ''} :: {p['reason'].replace(chr(10), ' ')[:400]}")
         else:
             print(f"    · skip {p.get('why')}  {p['url']}")
+    if report.get("comparison"):
+        rows = report["comparison"]
+        agreed = [r for r in rows if r["agree"]]
+        split = [r for r in rows if not r["agree"]]
+        a_name = rows[0]["a"]["reviewer"] or "A"
+        b_name = rows[0]["b"]["reviewer"] or "B"
+        print(f"\n  --- reviewer comparison ---   {a_name}  vs  {b_name}")
+        print(f"  {len(rows)} post(s) reviewed by both; agreed on {len(agreed)}, split on {len(split)}")
+        if rows:
+            print(f"  raw agreement {100.0 * len(agreed) / len(rows):.0f}%  "
+                  f"(agreement on compliant posts is cheap; the splits below are what matters)")
+        for r in split:
+            print(f"    ! SPLIT  {r['brand']} / {r['platform']}  {r['url']}")
+            for side in ("a", "b"):
+                d = r[side]
+                print(f"        {d['reviewer']}: {d['verdict']} ({d['confidence']}) {d['type'] or '-'}")
+                if d.get("reason"):
+                    print(f"            {d['reason'].replace(chr(10), ' ')[:300]}")
+        for r in agreed:
+            d = r["a"]
+            print(f"    = agree  {d['verdict']} ({d['confidence']} / {r['b']['confidence']})  {r['url']}")
+        print("  Adjudicate the splits yourself — the reviewers do not settle each other.")
     if report.get("insert"):
         print(f"  sheet insert: {report['insert'].get('inserted')} new, {len(report['insert'].get('duplicates', []))} duplicate(s)")
     sp = report.get("spend") or {}

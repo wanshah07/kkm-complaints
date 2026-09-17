@@ -255,6 +255,25 @@ Gateways differ in what they accept. Strict `json_schema` falls back to `json_ob
 
 There is no failover between providers. A dead key or a refusing gateway drops the post to the **regex rules only** (`reviewer=rules-only` in Remarks), which catches blatant prohibited wording and misses every judgement call.
 
+### Checking a reviewer before you trust it
+
+A model that agrees with Haiku on five compliant posts has proved nothing — compliant posts are easy and everything agrees on them. What tells you whether a reviewer is safe to run is where it *disagrees*, and whether you side with it.
+
+Run it: **Actions → Run workflow**, tick **compare**. Every post is put to both reviewers — the same caption, the same screenshot, in the same run — and the summary prints the splits:
+
+```
+  --- reviewer comparison ---   anthropic:claude-haiku-4-5  vs  openai:kimi-k2.7
+  10 post(s) reviewed by both; agreed on 9, split on 1
+  raw agreement 90%  (agreement on compliant posts is cheap; the splits below are what matters)
+    ! SPLIT  The Raw / Threads  https://www.threads.net/@theraw.skin/post/...
+        anthropic:claude-haiku-4-5: Acceptable (0.95) -
+        openai:kimi-k2.7: Risky (0.8) Superlative and comparative claims without substantiation
+```
+
+A comparison run never pushes — `--compare` forces `--dry-run`, because neither verdict has been adjudicated yet. It costs two reviews per post, so run it on one or two brands, not the whole list.
+
+**Read the splits yourself and decide who was right.** That is the only measure of accuracy that means anything here, and the call is yours as the safety assessor — the two reviewers do not settle each other. A model that catches what the other missed is worth keeping; one that flags sale announcements as claims will bury you in false positives; one that clears a real Part 8 breach is disqualified regardless of how cheap it is.
+
 ### Knowing what it actually cost
 
 Every run ends with a **reviewer spend** block in the log and a `spend` object in `run_report.json`:

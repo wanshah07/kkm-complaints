@@ -365,14 +365,16 @@ def _normalise(data: dict) -> dict:
     return data
 
 
-def review(inp: ReviewInput, use_llm: bool = True) -> dict:
+def review(inp: ReviewInput, use_llm: bool = True, provider: Optional[str] = None) -> dict:
     """
     Returns a dict with verdict / confidence / violation_type / violation_reason / product_name /
     claims / complaint_description_bm / reviewer.
     Rule engine short-circuit: when the regex bank finds nothing at all and there is no
     screenshot, the post is Acceptable without an LLM call (saves the bulk of the spend).
+    `provider` overrides LLM_PROVIDER for this one call, so the same post can be put to two
+    reviewers and their verdicts compared.
     """
-    provider = env_str("LLM_PROVIDER", "anthropic").lower()
+    provider = (provider or env_str("LLM_PROVIDER", "anthropic")).lower()
     has_key = bool(os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN")) if provider == "anthropic" else bool(os.getenv("OPENAI_API_KEY"))
     if not use_llm or not has_key:
         if use_llm and not has_key:
