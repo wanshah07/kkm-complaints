@@ -33,12 +33,13 @@
       <p class="text-xs text-slate-500 truncate">NPRA Annex I Part 8 / Part 10 monitoring · Pelaporan Aduan Kosmetik Bernotifikasi</p>
     </div>
     <div class="ml-auto flex items-center gap-2">
+      <a id="faqLink" href="#" target="_blank" title="Operating guide (admin Google account only)" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">FAQ</a>
       <button id="kkmFormLink" title="Open the KKM complaint form (asks for the URL the first time)" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">
         <span class="hidden sm:inline">Open KKM form ↗</span><span class="sm:hidden">KKM ↗</span>
       </button>
       <button id="btnRefresh" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">⟳ Refresh</button>
       <button id="btnNew" class="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">+ Manual entry</button>
-      <button id="btnSettings" title="Backend connection" class="inline-flex items-center rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm hover:bg-slate-50">⚙</button>
+      <button id="btnSettings" title="Backend connection" class="hidden inline-flex items-center rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm hover:bg-slate-50">⚙</button>
     </div>
   </div>
 </header>
@@ -363,6 +364,7 @@ async function connect() {
   try {
     try { localStorage.setItem('kkm.backend', cfg.backend); localStorage.setItem('kkm.key', cfg.key); } catch (e) {}
     await boot(true);
+    updateFaqLink();
     showConnect(false); toast('Connected');
   } catch (e) { showConnect(true, e.message); }
   finally { $('cGo').disabled = false; }
@@ -391,11 +393,14 @@ async function boot(rethrow) {
 }
 
 async function refresh(silent) {
+  const btn = $('btnRefresh'); const was = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px"></span>';
   try {
     const r = await rpc('apiList', {});
     state.rows = r.rows; state.stats = r.stats; renderAll();
     if (!silent) toast('Refreshed');
   } catch (e) { toast('Refresh failed: ' + e.message); }
+  finally { btn.disabled = false; btn.innerHTML = was; }
 }
 
 // ---------------------------------------------------------------------------
@@ -552,14 +557,18 @@ async function saveDrawer() {
   finally { $('btnSave').disabled = false; }
 }
 
+let statusBusy = false;
 async function setStatus(status) {
-  if (!state.current) return;
+  if (!state.current || statusBusy) return;
   if (status === 'Complete' && !confirm('Mark as Complete? This records today as Tarikh Melapor.')) return;
+  statusBusy = true;
+  const btns = document.querySelectorAll('.stBtn'); btns.forEach(b => b.disabled = true);
   try {
     const r = await rpc('apiSetStatus', state.current['ID'], status, $('eRemarks').value);
     if (!r.ok) throw new Error(r.error);
     mergeRow(r.row); fillDrawer(r.row); state.stats = r.stats; renderStats(); toast('Status → ' + status);
   } catch (e) { toast('Status change failed: ' + e.message); }
+  finally { statusBusy = false; btns.forEach(b => b.disabled = false); }
 }
 
 function copy(text, label) {
@@ -610,6 +619,17 @@ $('btnNew').onclick = () => showModal(true);
 $('kkmFormLink').onclick = openKkmForm;
 $('btnOpenForm').onclick = openKkmForm;
 $('btnSettings').onclick = () => showConnect(true);
+
+// The gear is hidden by default (section 9 of the guide explains why). The only
+// documented way in is the link on the admin-only Guide page, which lands here on
+// #settings — reveal the button and open the connect screen for this visit.
+function checkSettingsHash() {
+  if (location.hash === '#settings') { $('btnSettings').classList.remove('hidden'); showConnect(true); }
+}
+checkSettingsHash();
+window.addEventListener('hashchange', checkSettingsHash);
+function updateFaqLink() { $('faqLink').href = (cfg.backend || DEFAULT_BACKEND) + '?view=guide'; }
+updateFaqLink();
 $('cGo').onclick = connect;
 $('cForget').onclick = forgetKey;
 $('cKey').addEventListener('keydown', e => { if (e.key === 'Enter') connect(); });
