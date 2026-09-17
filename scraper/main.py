@@ -222,7 +222,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                 post.posted_at = v["post_date"]
                 if not date_allowed(post.posted_at, lookback, min_date):
                     report["skipped"].append({"url": post.url, "why": f"posted {post.posted_at} per screenshot, outside {date_rule}",
-                                              "verdict": v["verdict"], "confidence": v.get("confidence"), "type": v.get("violation_type")})
+                                              "verdict": v["verdict"], "confidence": v.get("confidence"),
+                                              "type": v.get("violation_type"), "reviewer": v.get("reviewer")})
                     known.add(cu)
                     continue
             entry = {"url": post.url, "verdict": v["verdict"], "confidence": v.get("confidence"),
@@ -338,7 +339,8 @@ def _print_summary(report: dict) -> None:
         print(f"    → PUSH {p['verdict']} ({p['confidence']}) {p['type']}  {p['url']}")
     for p in report["skipped"]:
         if p.get("verdict"):
-            print(f"    · skip {p['verdict']} ({p.get('confidence')}) {p.get('type') or '-'} [{p.get('reviewer')}]  {p['url']}")
+            why = f" — {p['why']}" if p.get("why") else ""
+            print(f"    · skip {p['verdict']} ({p.get('confidence')}) {p.get('type') or '-'} [{p.get('reviewer')}]{why}  {p['url']}")
             if p.get("reason"):
                 print(f"        {p.get('product') or ''} :: {p['reason'].replace(chr(10), ' ')[:400]}")
         else:
