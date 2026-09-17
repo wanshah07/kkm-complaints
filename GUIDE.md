@@ -345,6 +345,11 @@ Open the run: GitHub → **Actions** → click the run. The summary at the end o
 | `LLM review failed … falling back to rules` | API key missing, out of credit, or a transient error | Check credit at console.anthropic.com; the run still completes on the regex rules alone |
 | Dashboard says `Unauthorised` | Wrong dashboard key, or Apps Script not redeployed after a code change | Re-enter the key; in Apps Script, Deploy → Manage deployments → New version |
 | Dashboard says non-JSON response | Apps Script deployment is old or not set to *Anyone* | Redeploy as Web app, Execute as Me, Access Anyone |
+| `webhook did not return JSON (200): the deployment is asking for a Google sign-in…` | The run now reads the page Apps Script served and names the cause; the message carries the fix | Follow what the message says — it is one of the five causes below |
+| `APPS_SCRIPT_WEBHOOK_URL does not look like a deployed Web app URL` | The secret holds an editor, `/dev` or shortened URL | Deploy → Manage deployments → copy the **Web app** URL; it ends in `/exec` |
+| `browser session has expired (N cookies, none still valid)` | The recorded login is dead; every profile will hit a wall and report 0 posts | Re-record it, section 4 |
+| `browser session for facebook.com expires in 2.3 day(s)` | Working as intended — early warning | Re-record before it lapses |
+| `browser session carries no dated cookie for facebook.com` | That platform was not logged in when the session was recorded | Re-record with all three platforms signed in |
 
 ### A verdict is only worth what the screenshot showed
 
@@ -371,6 +376,20 @@ The screenshot is now taken of the post's own container (`article` on Instagram,
 ```
 
 If you see `viewport` on a platform run after run, the selector for that platform needs updating — until then its verdicts carry the old instability.
+
+### When the webhook returns a web page instead of JSON
+
+Apps Script answers a misconfigured deployment with HTML, and the run used to die on it thirteen seconds in with `Expecting value: line 1 column 1 (char 0)` — true, and useless. The run now reads that page and names which of these it is:
+
+| What the page says | What it means | The fix |
+|---|---|---|
+| Sign-in page, or redirected to `accounts.google.com` | Access is not *Anyone* | Deploy → Manage deployments → edit → **Who has access: Anyone** |
+| "Sorry, unable to open the file" / "Page not found" | The `/exec` URL no longer resolves to a deployment | Deploy → Manage deployments → copy the current **Web app URL** into `APPS_SCRIPT_WEBHOOK_URL` |
+| "Script function not found" | Not deployed as a Web app | Deploy → **New deployment** → type **Web app** |
+| "Authorization is required" | Scopes changed and the script was never re-authorised | Open the script, run any function once, accept the permissions |
+| Any other HTML | The deployment is stale | Deploy → Manage deployments → **New version** |
+
+The URL itself is also checked at startup: it should look like `https://script.google.com/macros/s/<id>/exec`. A `/dev` URL, an editor URL or a shortened link warns before the run spends fifteen minutes scraping.
 
 **Nothing found is a normal result.** Most weeks compliant brands produce nothing. An empty run with all profiles reporting `ok` means the system worked.
 

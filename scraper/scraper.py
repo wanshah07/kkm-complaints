@@ -228,11 +228,21 @@ _WALL_MAX_TEXT = 1500
 # so a viewport shot feeds the reviewer a different picture each run and the verdict moves with
 # it. Run 35235876472 read a neighbouring perfume promotion off a Threads page and called the
 # post Risky; an hour later the same URL came back Acceptable.
+# Ordered narrowest first. The last entry on each platform is a wide container rather than the
+# post itself: still far better than the viewport, because it excludes the site header, the
+# sidebar and the "suggested for you" rail, and the run log names which one matched so a
+# selector that has gone stale is visible rather than silent.
 _POST_ELEMENT_SELECTORS = {
-    "Instagram": ("article", "main article"),
-    "Facebook": ("[role='article']", "div[data-ad-preview='message']"),
-    "Threads": ("div[data-pressable-container='true']", "[role='article']", "article"),
+    "Instagram": ("article", "main article", "[role='dialog'] article",
+                  "main[role='main']", "main"),
+    "Facebook": ("[role='article']", "div[data-ad-preview='message']", "[role='main']"),
+    "Threads": ("div[data-pressable-container='true']", "[role='article']", "article",
+                "[role='main']"),
 }
+# Instagram laid its post out after the old 800ms probe had already given up, so every post
+# fell back to the viewport. The probe now waits about as long as a slow render takes; the
+# cost is bounded by the pacing wait that follows each post anyway.
+_ELEMENT_PROBE_MS = 2500
 # Element shots are uncapped by the viewport, and a long thread makes an image the reviewer is
 # charged for by the pixel. Past this height the shot is clipped from the top of the post.
 _MAX_SHOT_PX = 2400
@@ -240,10 +250,13 @@ _MAX_SHOT_PX = 2400
 
 def _post_element(page: Page, platform: str):
     """The locator and box of the post's own container, or (None, None) to fall back."""
-    for sel in _POST_ELEMENT_SELECTORS.get(platform, ()):
+    selectors = _POST_ELEMENT_SELECTORS.get(platform, ())
+    for i, sel in enumerate(selectors):
         try:
             loc = page.locator(sel).first
-            if not loc.is_visible(timeout=800):
+            # Only the first selector is worth waiting on; by the time it has had its 2.5s the
+            # page has rendered, and the rest are a question about the DOM, not about timing.
+            if not loc.is_visible(timeout=_ELEMENT_PROBE_MS if i == 0 else 500):
                 continue
             box = loc.bounding_box()
             # Guard against a wrapper that collapsed to nothing, or a stray inline element.
@@ -500,16 +513,58 @@ class Scraper:
         os.makedirs(out_dir, exist_ok=True)
         self._storage_state_path = self._materialise_storage_state()
 
+    @staticmethod
+    def _report_session_age(raw: bytes) -> None:
+        """
+        A recorded session dies quietly: the run still works, every profile just hits a wall and
+        reports 0 posts, which reads like the brands went quiet. Say it plainly up front instead.
+        """
+        try:
+            state = json.loads(raw)
+        except Exception:
+            return
+        now = time.time()
+        live, expired, per_site = 0, 0, {}
+        for c in state.get("cookies", []) or []:
+            exp = c.get("expires")
+            domain = str(c.get("domain", "")).lstrip(".").replace("www.", "")
+            site = next((s for s in ("facebook.com", "instagram.com", "threads.net") if s in domain), None)
+            # -1 is a session cookie: it has no expiry to check, so it is not evidence either way.
+            if exp is None or exp <= 0:
+                continue
+            if exp > now:
+                live += 1
+                if site:
+                    per_site[site] = max(per_site.get(site, 0.0), float(exp))
+            else:
+                expired += 1
+        if not live and expired:
+            log.warning("browser session has expired (%d cookies, none still valid) - "
+                        "expect login walls on every platform; re-record it (GUIDE section 4)", expired)
+            return
+        for site, exp in sorted(per_site.items()):
+            days = (exp - now) / 86400.0
+            if days < 7:
+                log.warning("browser session for %s expires in %.1f day(s) - re-record it soon", site, days)
+            else:
+                log.info("browser session for %s valid for %.0f more day(s)", site, days)
+        missing = [s for s in ("facebook.com", "instagram.com", "threads.net") if s not in per_site]
+        if missing:
+            log.warning("browser session carries no dated cookie for %s - that platform was "
+                        "probably not logged in when the session was recorded", ", ".join(missing))
+
     def _materialise_storage_state(self) -> Optional[str]:
         # 1. an explicit path, 2. storage_state.json sitting next to this file (the Windows
         # case, so no .env line is needed), 3. base64 in the environment (the CI case).
         p = env_str("PW_STORAGE_STATE_PATH")
         if p and os.path.exists(p):
             log.info("using browser session from %s", p)
+            self._report_session_age(open(p, "rb").read())
             return p
         here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "storage_state.json")
         if os.path.exists(here):
             log.info("using browser session from %s", here)
+            self._report_session_age(open(here, "rb").read())
             return here
         b64 = env_str("PW_STORAGE_STATE_B64")
         if b64:
@@ -520,6 +575,7 @@ class Scraper:
                 if raw[:2] == b"\x1f\x8b":
                     raw = gzip.decompress(raw)
                 json.loads(raw)  # validate
+                self._report_session_age(raw)
                 fd, path = tempfile.mkstemp(prefix="pw_state_", suffix=".json")
                 with os.fdopen(fd, "wb") as f:
                     f.write(raw)

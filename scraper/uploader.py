@@ -79,6 +79,42 @@ class DriveUploader:
 # ---------------------------------------------------------------------------
 # Apps Script webhook client
 # ---------------------------------------------------------------------------
+def _diagnose(r) -> str:
+    """
+    Apps Script answers a misconfigured deployment with a web page, not JSON, so the failure
+    used to surface as `Expecting value: line 1 column 1 (char 0)` - true, and useless. The
+    page it serves says which of the handful of causes it is, so read it and say so.
+    """
+    body = (r.text or "")[:4000]
+    low = body.lower()
+    final = (r.url or "").lower()
+    if "accounts.google.com" in final or "signin/v2" in low or "sign in to continue" in low:
+        return ("the deployment is asking for a Google sign-in, so its access is not set to "
+                "Anyone. Deploy > Manage deployments > edit > Who has access: Anyone")
+    if "unable to open the file" in low or "page not found" in low or "no item with the given id" in low:
+        return ("the /exec URL no longer resolves to a deployment. Deploy > Manage deployments "
+                "and copy the current Web app URL into APPS_SCRIPT_WEBHOOK_URL")
+    if "script function not found" in low:
+        return ("the deployment has no doGet/doPost, so it was not deployed as a Web app. "
+                "Deploy > New deployment > type Web app")
+    if "authorization is required" in low or "authorisation is required" in low:
+        return ("the script has not been authorised since its scopes changed. Open the script "
+                "and run any function once to re-accept the permissions")
+    if "exceeded maximum execution time" in low:
+        return "the script hit the Apps Script execution time limit"
+    if "<html" in low or "<!doctype" in low:
+        return ("Apps Script served a web page instead of JSON, which almost always means the "
+                "deployment is stale: Deploy > Manage deployments > New version")
+    return "the response was not JSON"
+
+
+def _check_url_shape(url: str) -> None:
+    """A wrong URL shape is the single most common cause and costs a whole run to discover."""
+    if "/macros/s/" not in url or not url.rstrip("/").endswith("/exec"):
+        log.warning("APPS_SCRIPT_WEBHOOK_URL does not look like a deployed Web app URL "
+                    "(expected https://script.google.com/macros/s/<id>/exec): %s", url)
+
+
 class AppsScriptClient:
     def __init__(self, url: Optional[str] = None, token: Optional[str] = None, timeout: int = 120):
         self.url = url or env_str("APPS_SCRIPT_WEBHOOK_URL")
@@ -86,6 +122,7 @@ class AppsScriptClient:
         self.timeout = timeout
         if not self.url or not self.token:
             raise RuntimeError("APPS_SCRIPT_WEBHOOK_URL and APPS_SCRIPT_API_TOKEN are required")
+        _check_url_shape(self.url)
         self.session = requests.Session()
 
     def _post(self, payload: dict, retries: int = 4) -> dict:
@@ -101,7 +138,9 @@ class AppsScriptClient:
                 try:
                     data = r.json()
                 except ValueError:
-                    raise requests.HTTPError(f"non-JSON response ({r.status_code}): {r.text[:200]}")
+                    raise requests.HTTPError(
+                        f"non-JSON response ({r.status_code}): {_diagnose(r)}. "
+                        f"First bytes: {(r.text or '')[:160]!r}")
                 if not data.get("ok"):
                     raise RuntimeError(data.get("error", "unknown error"))
                 return data
@@ -115,7 +154,13 @@ class AppsScriptClient:
 
     def ping(self) -> dict:
         r = self.session.get(self.url, params={"action": "ping"}, timeout=self.timeout)
-        return r.json()
+        try:
+            return r.json()
+        except ValueError:
+            # This is the first call a live run makes, so its message is the one Wan reads when
+            # the whole run dies thirteen seconds in. Make it name the fix.
+            raise RuntimeError(f"webhook did not return JSON ({r.status_code}): {_diagnose(r)}. "
+                               f"First bytes: {(r.text or '')[:160]!r}")
 
     def targets(self) -> List[Dict]:
         """Brands + handles from the sheet's Targets tab (action=targets)."""
