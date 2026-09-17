@@ -369,12 +369,90 @@ function handleApi_(action, body, p) {
                             return { ok: true, link: saveScreenshot_(body.base64, body.mime, body.filename) };
       case 'set_form_url':  if (!viewer) return deny;
                             PROPS.setProperty('KKM_FORM_URL', String(body.url || '')); return { ok: true };
+      case 'draft_review':  if (!viewer) return deny;
+                            return draftReview_(body);
       default:              return { ok: false, error: 'Unknown action: ' + action };
     }
   } catch (err) {
     console.error(err);
     return { ok: false, error: String(err && err.message || err) };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Reviewer for manual entries: the same rulebook the scraper uses, called from
+// the dashboard so a post pasted by hand comes back in the NPRA report format.
+// Needs ANTHROPIC_API_KEY in Script Properties; ANTHROPIC_MODEL is optional.
+// ---------------------------------------------------------------------------
+function draftReview_(body) {
+  var key = PROPS.getProperty('ANTHROPIC_API_KEY');
+  if (!key) {
+    return { ok: false, error: 'ANTHROPIC_API_KEY is not set. Apps Script → Project Settings → Script properties.' };
+  }
+  var text = String(body.text || '').trim();
+  var b64 = String(body.imageBase64 || '');
+  if (!text && !b64) return { ok: false, error: 'Paste the post text, attach the screenshot, or both.' };
+
+  var parts = [];
+  if (body.brand) parts.push('Brand: ' + body.brand);
+  if (body.platform) parts.push('Platform: ' + body.platform);
+  if (body.url) parts.push('Post URL: ' + body.url);
+  if (body.productHints) parts.push('Known product lines: ' + body.productHints);
+  parts.push('');
+  parts.push(text ? 'POST TEXT:\n' + text : 'POST TEXT: (none supplied — read the screenshot)');
+
+  var content = [];
+  if (b64) {
+    content.push({
+      type: 'image',
+      source: { type: 'base64', media_type: String(body.imageMime || 'image/png'), data: b64.replace(/^data:[^,]+,/, '') }
+    });
+  }
+  content.push({ type: 'text', text: parts.join('\n') });
+
+  var res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+    method: 'post',
+    contentType: 'application/json',
+    muteHttpExceptions: true,
+    headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+    payload: JSON.stringify({
+      model: PROPS.getProperty('ANTHROPIC_MODEL') || 'claude-haiku-4-5',
+      max_tokens: 2000,
+      system: NPRA_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: content }]
+    })
+  });
+  if (res.getResponseCode() !== 200) {
+    throw new Error('Reviewer API ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 300));
+  }
+  var body_ = JSON.parse(res.getContentText());
+  var out = (body_.content || []).filter(function (c) { return c.type === 'text'; })
+    .map(function (c) { return c.text; }).join('').trim();
+  var data = parseReviewerJson_(out);
+  if (!data) throw new Error('Reviewer did not return JSON: ' + out.slice(0, 200));
+  return {
+    ok: true,
+    draft: {
+      verdict: data.verdict || '',
+      confidence: typeof data.confidence === 'number' ? data.confidence : '',
+      violationType: data.violation_type || '',
+      violationReason: data.violation_reason || '',
+      extractedText: data.extracted_text || text,
+      productName: data.product_name || '',
+      deskripsi: data.complaint_description_bm || '',
+      notes: data.notes || ''
+    }
+  };
+}
+
+// The model is asked for bare JSON; a code fence or a stray sentence around it
+// still parses rather than failing the whole draft.
+function parseReviewerJson_(out) {
+  var t = String(out || '').replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+  try { return JSON.parse(t); } catch (err) { /* fall through to the brace scan */ }
+  var start = t.indexOf('{'), end = t.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  try { return JSON.parse(t.slice(start, end + 1)); } catch (err) { return null; }
 }
 
 function openRecord_(id) {

@@ -220,6 +220,16 @@
         <span class="text-xs font-medium text-slate-600">…or upload a screenshot (≤ 8 MB)</span>
         <input id="mFile" type="file" accept="image/*" class="mt-1 w-full text-sm">
       </label>
+      <div class="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <label class="block">
+          <span class="text-xs font-medium text-slate-600">Report — paste the post here</span>
+          <textarea id="mReport" rows="4" placeholder="Paste the caption, on-image text, hashtags. Attach the screenshot above and it is read too." class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3"></textarea>
+        </label>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <button type="button" id="mDraft" class="rounded-lg bg-slate-900 text-white px-3 py-2 text-sm font-semibold hover:bg-slate-800">Draft for NPRA</button>
+          <span id="mDraftHint" class="text-xs text-slate-500">Fills violation type, violation reason, extracted text, product and Deskripsi Aduan below. Check every line before saving.</span>
+        </div>
+      </div>
       <label class="block">
         <span class="text-xs font-medium text-slate-600">Nama kosmetik (product)</span>
         <input id="mNama" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3">
@@ -235,6 +245,10 @@
       <label class="block sm:col-span-2">
         <span class="text-xs font-medium text-slate-600">Extracted text (caption / on-image text)</span>
         <textarea id="mText" rows="4" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3"></textarea>
+      </label>
+      <label class="block sm:col-span-2">
+        <span class="text-xs font-medium text-slate-600">Deskripsi Aduan (BM, for the KKM form)</span>
+        <textarea id="mDeskripsi" rows="5" placeholder="Left blank, it is written from the fields above when you save." class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3"></textarea>
       </label>
       <label class="block">
         <span class="text-xs font-medium text-slate-600">Jenis Aduan</span>
@@ -339,6 +353,7 @@ function rpc(fn, ...a) {
     case 'apiCreateManual':     return api('insert_manual', { record: a[0] });
     case 'apiUploadScreenshot': return api('upload_screenshot', { base64: a[0], mime: a[1], filename: a[2] });
     case 'apiSetKkmFormUrl':    return api('set_form_url', { url: a[0] });
+    case 'apiDraftReview':      return api('draft_review', a[0] || {}).then(d => d.draft);
     default: return Promise.reject(new Error('Unknown call ' + fn));
   }
 }
@@ -584,6 +599,43 @@ function fileToBase64(file) {
   return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result)); fr.onerror = rej; fr.readAsDataURL(file); });
 }
 
+// Report box → the same NPRA rulebook the scraper uses, run over the pasted post
+// and the attached screenshot, filling the columns below in the report format.
+async function draftManual() {
+  const text = $('mReport').value.trim();
+  const file = $('mFile').files[0];
+  if (!text && !file) { $('mDraftHint').textContent = 'Paste the post text or attach the screenshot first.'; return; }
+  const btn = $('mDraft'); btn.disabled = true;
+  $('mDraftHint').textContent = 'Reading the post…';
+  try {
+    const payload = {
+      text, brand: $('mBrand').value.trim(), platform: $('mPlatform').value.trim(), url: $('mUrl').value.trim()
+    };
+    if (file) {
+      if (file.size > 4 * 1024 * 1024) throw new Error('Screenshot over 4 MB — shrink it before drafting.');
+      const b64 = await fileToBase64(file);
+      payload.imageBase64 = b64; payload.imageMime = file.type || 'image/png';
+    }
+    const d = await rpc('apiDraftReview', payload);
+    if (d.violationType) {
+      const sel = $('mType'); sel.value = d.violationType;
+      if (sel.value !== d.violationType) {           // not in the Lookups list — keep it anyway
+        const o = document.createElement('option'); o.value = o.textContent = d.violationType;
+        sel.appendChild(o); sel.value = d.violationType;
+      }
+    }
+    if (d.violationReason) $('mReason').value = d.violationReason;
+    if (d.extractedText) $('mText').value = d.extractedText;
+    if (d.productName && !$('mNama').value.trim()) $('mNama').value = d.productName;
+    if (d.deskripsi) $('mDeskripsi').value = d.deskripsi;
+    const conf = d.confidence === '' ? '' : ` (${Math.round(Number(d.confidence) * 100)}%)`;
+    $('mDraftHint').textContent = `${d.verdict}${conf} — check every line, the verdict is yours.`;
+  } catch (e) {
+    $('mDraftHint').textContent = e.message;
+    toast('Draft failed: ' + e.message, 4000);
+  } finally { btn.disabled = false; }
+}
+
 async function submitManual(ev) {
   ev.preventDefault();
   const btn = $('mSubmit'); btn.disabled = true; $('mHint').textContent = '';
@@ -602,6 +654,7 @@ async function submitManual(ev) {
       'Brand': $('mBrand').value.trim(), 'Platform': $('mPlatform').value.trim(), 'Post URL': $('mUrl').value.trim(),
       'Screenshot Link': shot, 'Nama Kosmetik': $('mNama').value.trim(), 'Violation Type': $('mType').value,
       'Violation Reason': $('mReason').value.trim(), 'Extracted Text': $('mText').value.trim(),
+      'Deskripsi Aduan': $('mDeskripsi').value.trim(),
       'Jenis Aduan': $('mJenis').value, 'Remarks': $('mRemarks').value.trim(), 'Source': 'manual'
     };
     const r = await rpc('apiCreateManual', rec);
@@ -641,6 +694,7 @@ $('btnCopyUrl').onclick = () => copy(state.current && state.current['Post URL'],
 document.querySelectorAll('.stBtn').forEach(b => b.onclick = () => setStatus(b.dataset.status));
 document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => showModal(false));
 $('manualForm').onsubmit = submitManual;
+$('mDraft').onclick = draftManual;
 $('fBrand').onchange = e => { state.filter.brand = e.target.value; renderTable(); };
 $('fPlatform').onchange = e => { state.filter.platform = e.target.value; renderTable(); };
 $('fSearch').oninput = e => { state.filter.q = e.target.value; renderTable(); };
