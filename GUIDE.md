@@ -357,6 +357,21 @@ Two things changed:
 
 The screenshot is still saved to the artifact so you can see for yourself what the runner was served.
 
+### Why a verdict used to move between runs
+
+Found 17 Sep 2026. The same Threads post came back **Risky (0.80)** at 14:48 and **Acceptable (0.95)** at 15:42, same model, same settings. The model was not the problem — the picture was.
+
+A post page renders the thread around the post: reposts, replies, suggested content. That changes between loads. The screenshot captured the viewport, so each run handed the reviewer a slightly different image, and one run read a neighbouring perfume promotion and judged The Raw on it.
+
+The screenshot is now taken of the post's own container (`article` on Instagram, `[role='article']` on Facebook, the pressable container on Threads), falling back to the viewport only when none of them is found. A very long thread is clipped to 2,400px from the top of the post rather than captured whole. The run log says which it used:
+
+```
+[The Raw/Threads] screenshot: post element div[data-pressable-container='true'] (700x900)
+[The Raw/Facebook] screenshot: viewport (no post element matched)
+```
+
+If you see `viewport` on a platform run after run, the selector for that platform needs updating — until then its verdicts carry the old instability.
+
 **Nothing found is a normal result.** Most weeks compliant brands produce nothing. An empty run with all profiles reporting `ok` means the system worked.
 
 ---

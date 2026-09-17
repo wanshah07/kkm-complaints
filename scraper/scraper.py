@@ -223,14 +223,65 @@ _WALL_MARKERS = (
 _WALL_MAX_TEXT = 1500
 
 
+# The post itself, rather than whatever the viewport happens to hold. A post page also renders
+# the thread around it — reposts, replies, suggested content — and that changes between loads,
+# so a viewport shot feeds the reviewer a different picture each run and the verdict moves with
+# it. Run 35235876472 read a neighbouring perfume promotion off a Threads page and called the
+# post Risky; an hour later the same URL came back Acceptable.
+_POST_ELEMENT_SELECTORS = {
+    "Instagram": ("article", "main article"),
+    "Facebook": ("[role='article']", "div[data-ad-preview='message']"),
+    "Threads": ("div[data-pressable-container='true']", "[role='article']", "article"),
+}
+# Element shots are uncapped by the viewport, and a long thread makes an image the reviewer is
+# charged for by the pixel. Past this height the shot is clipped from the top of the post.
+_MAX_SHOT_PX = 2400
+
+
+def _post_element(page: Page, platform: str):
+    """The locator and box of the post's own container, or (None, None) to fall back."""
+    for sel in _POST_ELEMENT_SELECTORS.get(platform, ()):
+        try:
+            loc = page.locator(sel).first
+            if not loc.is_visible(timeout=800):
+                continue
+            box = loc.bounding_box()
+            # Guard against a wrapper that collapsed to nothing, or a stray inline element.
+            if not box or box["width"] < 200 or box["height"] < 120:
+                continue
+            return loc, box, sel
+        except Exception:
+            continue
+    return None, None, ""
+
+
 def _save_screenshot(page: Page, post: "Post", brand: str, platform: str, url: str, out_dir: str) -> None:
     fname = re.sub(r"[^a-z0-9]+", "_", f"{brand}_{platform}_{urlsplit(url).path}".lower()).strip("_")[:90]
     path = os.path.join(out_dir, f"{fname}.png")
+    loc, box, sel = _post_element(page, platform)
     try:
-        page.screenshot(path=path, full_page=False, type="png")
+        if loc is not None and box["height"] <= _MAX_SHOT_PX:
+            loc.screenshot(path=path, type="png")
+            log.info("[%s/%s] screenshot: post element %s (%.0fx%.0f)",
+                     brand, platform, sel, box["width"], box["height"])
+        elif loc is not None:
+            page.screenshot(path=path, type="png",
+                            clip={"x": box["x"], "y": box["y"],
+                                  "width": box["width"], "height": float(_MAX_SHOT_PX)})
+            log.info("[%s/%s] screenshot: post element %s clipped to %dpx of %.0f",
+                     brand, platform, sel, _MAX_SHOT_PX, box["height"])
+        else:
+            page.screenshot(path=path, full_page=False, type="png")
+            log.info("[%s/%s] screenshot: viewport (no post element matched)", brand, platform)
         post.screenshot_path = path
     except Exception as e:
-        post.errors.append(f"screenshot failed: {e}")
+        # An element shot can still fail on a detached node; the viewport is better than nothing.
+        try:
+            page.screenshot(path=path, full_page=False, type="png")
+            post.screenshot_path = path
+            log.info("[%s/%s] screenshot: viewport after element shot failed (%s)", brand, platform, e)
+        except Exception as e2:
+            post.errors.append(f"screenshot failed: {e2}")
 
 
 def _has_post_content(page: Page) -> bool:
