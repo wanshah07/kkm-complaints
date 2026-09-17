@@ -177,6 +177,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
 
     hints = {b["name"]: b.get("product_hints", []) for b in brands}
+    types = {b["name"]: b.get("type", "") for b in brands}
     spend = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0,
              "cache_creation_input_tokens": 0, "usd": 0.0, "models": {}}
     lookback = int(run_cfg.get("lookback_days", 0) or 0)
@@ -204,7 +205,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                 report["skipped"].append({"url": post.url, "why": "nothing extracted"})
                 continue
             v = review(ReviewInput(brand=post.brand, platform=post.platform, url=post.url, text=post.text,
-                                   screenshot_path=post.screenshot_path, product_hints=hints.get(post.brand)),
+                                   screenshot_path=post.screenshot_path, product_hints=hints.get(post.brand),
+                                   target_type=types.get(post.brand, "")),
                        use_llm=not args.no_llm)
             # Count every call as soon as it returns: later branches can skip the post, and a
             # call that was paid for must still appear in the spend total.
@@ -313,7 +315,8 @@ def resolve_targets(cfg: dict, mode: str, client: Optional[AppsScriptClient], re
                 handles[plat] = handle
             else:
                 log.warning("Targets tab: platform column %r has no entry in config.yaml platforms; skipped", plat)
-        brands.append({"name": t["name"], "handles": handles, "product_hints": t.get("product_hints", [])})
+        brands.append({"name": t["name"], "handles": handles, "product_hints": t.get("product_hints", []),
+                       "type": t.get("type", "")})
     if not brands:
         log.warning("Targets tab has no active rows; using config.yaml")
         report["targets_source"] = "config.yaml (sheet empty)"

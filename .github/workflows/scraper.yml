@@ -43,7 +43,7 @@ permissions:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 90   # paced runs are deliberately slow; see run.pause_* in config.yaml
+    timeout-minutes: 180  # paced runs are deliberately slow; ~3 min per target, see run.pause_* in config.yaml
     env:
       TZ: Asia/Kuala_Lumpur
       PYTHONUNBUFFERED: '1'

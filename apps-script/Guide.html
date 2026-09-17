@@ -98,7 +98,21 @@
 <li><strong>Pause a brand</strong>: untick <strong>Active</strong>. The row stays, the scraper skips it.</li>
 <li><strong>Remove a platform for one brand</strong>: clear that cell. Blank is skipped cleanly.</li>
 <li><strong>Product hints</strong>: comma-separated product lines. Only helps the reviewer name the product in the row. Optional.</li>
+<li><strong>Type</strong> (optional column): blank or <code>Brand</code> for a company's own page. <code>Doctor</code> or <code>KOL</code> for a person who promotes products &mdash; see below.</li>
 </ul>
+<p><strong>Adding a column is not free-form.</strong> Every column that is not <code>Brand</code>, <code>Active</code>, <code>Type</code>, <code>Product hints</code> or <code>Notes</code> is read as a <em>platform</em>, and a platform with no entry in <code>scraper/config.yaml</code> is skipped with a warning. Put notes in <code>Notes</code>; ask me before adding any other column.</p>
+
+<h3>Watching a doctor or KOL account</h3>
+<p>A cosmetic advertisement carried by a doctor is a Part 10 s.4.1 problem in itself, so these accounts are worth watching &mdash; but the row has to say what it is.</p>
+<ul>
+<li><strong>Brand</strong> column: the person's name (<code>Dr Aina</code>, <code>Mek Yun</code>). It labels the sheet row and the complaint.</li>
+<li><strong>Type</strong> column: <code>Doctor</code> or <code>KOL</code>.</li>
+<li>Handles: their own account, same as any other row.</li>
+</ul>
+<p>With <code>Type</code> set, the reviewer is told the account is not the brand: the claims tables apply as usual, plus s.4.1 (doctor / dentist / pharmacist / dermatologist endorsement, or the impression of one &mdash; title, white coat, clinic setting, credentials in the bio &mdash; is unacceptable for a cosmetic, paid or not) and s.6 (a testimonial must be genuine). Leave <code>Type</code> blank for a brand and nothing changes.</p>
+
+<h3>How many targets fit in one run</h3>
+<p>Roughly <strong>3 minutes per brand &times; platform</strong>, most of it the deliberate pacing (section 5). Ten targets is about 30 minutes. The workflow stops at 180 minutes, so keep it under about 50 targets, or cut <code>max_posts_per_profile</code> / the <code>pause_*</code> ranges to fit more. Reviewer cost runs about USD 0.007 per post examined.</p>
 <p>The scraper reads this tab at the start of every run. <code>scraper/config.yaml</code> is only a fallback used when the sheet cannot be reached.</p>
 
 <h3>Getting a handle right</h3>

@@ -61,6 +61,23 @@ Risky rows only appear because `push_risky` is on. Turn it off in `scraper/confi
 - **Pause a brand**: untick **Active**. The row stays, the scraper skips it.
 - **Remove a platform for one brand**: clear that cell. Blank is skipped cleanly.
 - **Product hints**: comma-separated product lines. Only helps the reviewer name the product in the row. Optional.
+- **Type** (optional column): blank or `Brand` for a company's own page. `Doctor` or `KOL` for a person who promotes products — see below.
+
+**Adding a column is not free-form.** Every column that is not `Brand`, `Active`, `Type`, `Product hints` or `Notes` is read as a *platform*, and a platform with no entry in `scraper/config.yaml` is skipped with a warning. Add notes to the `Notes` column; ask me before adding any other column.
+
+### Watching a doctor or KOL account
+
+A cosmetic advertisement carried by a doctor is a Part 10 s.4.1 problem in itself, so these accounts are worth watching — but the row has to say what it is.
+
+- **Brand** column: the person's name (`Dr Aina`, `Mek Yun`). It labels the sheet row and the complaint.
+- **Type** column: `Doctor` or `KOL`.
+- Handles: their own account, same as any other row.
+
+With `Type` set, the reviewer is told the account is not the brand: the claims tables apply as usual, plus s.4.1 (doctor / dentist / pharmacist / dermatologist endorsement, or the impression of one — title, white coat, clinic setting, credentials in the bio — is unacceptable for a cosmetic, paid or not) and s.6 (a testimonial must be genuine). Leave `Type` blank for a brand and nothing changes.
+
+### How many targets fit in one run
+
+Roughly **3 minutes per brand × platform**, most of it the deliberate pacing (section 5). Ten targets is about 30 minutes. The workflow stops at 180 minutes, so keep it under about 50 targets, or cut `max_posts_per_profile` / the `pause_*` ranges to fit more. Reviewer cost runs about USD 0.007 per post examined.
 
 The scraper reads this tab at the start of every run. `scraper/config.yaml` is only a fallback used when the sheet cannot be reached.
 

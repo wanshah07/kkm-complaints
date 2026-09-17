@@ -424,7 +424,7 @@ class Scraper:
         log.info("no browser session found; logged-out browsing (expect login walls)")
         return None
 
-    def _context(self, browser: Browser) -> BrowserContext:
+    def _context(self, browser: Browser, use_storage: bool = True) -> BrowserContext:
         kwargs = dict(
             viewport={"width": 1280, "height": 1600},
             device_scale_factor=1,
@@ -432,7 +432,7 @@ class Scraper:
             timezone_id=self.run_cfg.get("timezone", "Asia/Kuala_Lumpur"),
             user_agent=self.run_cfg.get("user_agent"),
         )
-        if self._storage_state_path:
+        if use_storage and self._storage_state_path:
             kwargs["storage_state"] = self._storage_state_path
         ctx = browser.new_context(**kwargs)
         ctx.set_default_timeout(20000)
@@ -517,6 +517,37 @@ class Scraper:
                     log.info("[%s/%s] fallback timed out", brand, platform)
                 except Exception as e:
                     log.info("[%s/%s] fallback failed: %s", brand, platform, e)
+
+            # A stale or challenged session is worse than no session at all: Facebook serves some
+            # public pages to anonymous visitors while blocking a login it distrusts. Before giving
+            # up, try the profile once more with no cookies.
+            if not links and self._storage_state_path:
+                log.info("[%s/%s] retrying signed out, with no stored session", brand, platform)
+                clean = self._context(browser, use_storage=False)
+                clean_page = None
+                try:
+                    clean_page = clean.new_page()
+                    clean_page.goto(profile_url, wait_until="domcontentloaded", timeout=45000)
+                    clean_page.wait_for_timeout(2500)
+                    _dismiss_dialogs(clean_page)
+                    links = _collect_links(clean_page, pcfg["post_link_patterns"], profile_url, limit,
+                                           platform=platform, handle=handle,
+                                           scroll_pause=self.run_cfg.get("pause_after_scroll"))
+                    log.info("[%s/%s] %d post links signed out", brand, platform, len(links))
+                except Exception as e:
+                    log.info("[%s/%s] signed-out retry failed: %s", brand, platform, e)
+                if links:
+                    # Keep browsing in the context that actually worked, posts included.
+                    try:
+                        ctx.close()
+                    except Exception:
+                        pass
+                    ctx, page = clean, clean_page
+                else:
+                    try:
+                        clean.close()
+                    except Exception:
+                        pass
 
             if not links:
                 hint = _diagnose_empty(page, self.out_dir, f"{brand}_{platform}")

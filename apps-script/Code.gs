@@ -80,6 +80,9 @@ var DEFAULT_VIOLATION_TYPES = [
 var TARGET_SHEET_NAME = 'Targets';
 var TARGET_FIXED_HEAD = ['Brand', 'Active'];
 var TARGET_FIXED_TAIL = ['Product hints', 'Notes'];
+// Every other column is read as a platform, so any column that is not one has to be named here.
+// 'Type' marks what the account is: a brand's own page, or a doctor / KOL who promotes products.
+var TARGET_META_COLUMNS = ['Type'];
 var DEFAULT_TARGET_PLATFORMS = ['Instagram', 'Facebook', 'Threads'];
 var DEFAULT_TARGETS = [
   ['La Roche-Posay', true, 'larocheposaymy', 'LaRochePosayMalaysia', 'larocheposaymy', 'Effaclar, Cicaplast, Anthelios, Toleriane, Lipikar, Mela B3, Hyalu B5', ''],
@@ -241,9 +244,11 @@ function targets_() {
   var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
   var iBrand = headers.indexOf('Brand'), iActive = headers.indexOf('Active');
   var iHints = headers.indexOf('Product hints'), iNotes = headers.indexOf('Notes');
+  var iType = headers.indexOf('Type');
   var platformCols = [];
   headers.forEach(function (h, i) {
-    if (h && TARGET_FIXED_HEAD.indexOf(h) < 0 && TARGET_FIXED_TAIL.indexOf(h) < 0) platformCols.push({ name: h, i: i });
+    if (h && TARGET_FIXED_HEAD.indexOf(h) < 0 && TARGET_FIXED_TAIL.indexOf(h) < 0 &&
+        TARGET_META_COLUMNS.indexOf(h) < 0) platformCols.push({ name: h, i: i });
   });
   var out = [];
   sheet.getRange(2, 1, last - 1, headers.length).getValues().forEach(function (row) {
@@ -256,7 +261,9 @@ function targets_() {
       if (v) handles[pc.name] = v;
     });
     var hints = iHints >= 0 ? String(row[iHints] || '').split(',').map(function (x) { return x.trim(); }).filter(String) : [];
-    out.push({ name: name, active: active, handles: handles, product_hints: hints, notes: iNotes >= 0 ? String(row[iNotes] || '') : '' });
+    var type = iType >= 0 ? String(row[iType] || '').trim() : '';
+    out.push({ name: name, active: active, handles: handles, product_hints: hints, type: type,
+               notes: iNotes >= 0 ? String(row[iNotes] || '') : '' });
   });
   return out;
 }

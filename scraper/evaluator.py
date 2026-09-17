@@ -158,6 +158,7 @@ class ReviewInput:
     text: str
     screenshot_path: Optional[str] = None
     product_hints: Optional[list] = None
+    target_type: str = ""   # "" / "Brand" for a brand's own page; "Doctor" or "KOL" for a promoter
 
 
 def _user_prompt(inp: ReviewInput) -> str:
@@ -166,7 +167,18 @@ def _user_prompt(inp: ReviewInput) -> str:
     hint_block = "\n".join(f'- [{h.severity}] "{h.matched}" → {h.category}: {h.reason} ({h.citation})' for h in hits[:20]) or "- none"
     ok_block = "\n".join(f'- "{s}"' for s in ok[:10]) or "- none"
     products = ", ".join(inp.product_hints or []) or "unknown"
-    return f"""BRAND: {inp.brand}
+    kind = (inp.target_type or "").strip().lower()
+    if kind and kind not in ("brand", "own", "company"):
+        account = (f"\nACCOUNT TYPE: {inp.target_type} — this account is not the brand. It is a person "
+                   "promoting cosmetic products. Judge the post as an advertisement carried by that "
+                   "person: Part 10 s.4.1 makes a doctor / dentist / pharmacist / dermatologist "
+                   "endorsement, or the impression of one (title, white coat, clinic setting, "
+                   "credentials in the bio or caption), unacceptable for a cosmetic — whether or not "
+                   "the post is paid. s.6 requires a testimonial to be genuine. The claims tables "
+                   "apply exactly as they do to a brand's own post.")
+    else:
+        account = ""
+    return f"""BRAND: {inp.brand}{account}
 PLATFORM: {inp.platform}
 POST URL: {inp.url}
 KNOWN PRODUCT LINES (for product_name only, do not assume the post is about them): {products}
