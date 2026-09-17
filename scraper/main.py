@@ -248,18 +248,26 @@ def main(argv: Optional[List[str]] = None) -> int:
                 _spend(b)
                 report["comparison"].append({
                     "url": post.url, "brand": post.brand, "platform": post.platform,
-                    "a": {"reviewer": a.get("reviewer"), "verdict": a["verdict"],
+                    "a": {"reviewer": a.get("reviewer"), "verdict": a.get("verdict") or "no verdict",
                           "confidence": a.get("confidence"), "type": a.get("violation_type"),
                           "reason": (a.get("violation_reason") or "")[:400]},
-                    "b": {"reviewer": b.get("reviewer"), "verdict": b["verdict"],
+                    "b": {"reviewer": b.get("reviewer"), "verdict": b.get("verdict") or "no verdict",
                           "confidence": b.get("confidence"), "type": b.get("violation_type"),
                           "reason": (b.get("violation_reason") or "")[:400]},
-                    "agree": a["verdict"] == b["verdict"],
+                    # A reviewer that produced nothing has not agreed with anyone.
+                    "agree": bool(a.get("verdict")) and a.get("verdict") == b.get("verdict"),
                 })
                 continue
 
             v = review(ri, use_llm=not args.no_llm)
             _spend(v)
+            if not v.get("verdict"):
+                # The rules fallback always produces one, so reaching here means even that failed.
+                # An unreviewed post is an error to surface, never a quiet skip.
+                why = f"reviewer returned no verdict: {v.get('notes') or 'unknown'}"
+                report["skipped"].append({"url": post.url, "why": why})
+                report["errors"].append(f"{post.brand}/{post.platform}: {why}  {post.url}")
+                continue
 
             # The platform often hides the timestamp from anonymous visitors; when the reviewer can read
             # it off the screenshot, use it for the Date column and the lookback filter.

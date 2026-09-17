@@ -345,7 +345,14 @@ def _review_openai(inp: ReviewInput) -> dict:
     return data
 
 
+VERDICTS = ("Acceptable", "Risky", "Unacceptable")
+
+
 def _normalise(data: dict) -> dict:
+    # Every other field has a harmless default. The verdict does not: an unrecognised one is
+    # left empty so a caller cannot read a pass out of a reply that never gave one.
+    v = str(data.get("verdict") or "").strip().title()
+    data["verdict"] = v if v in VERDICTS else ""
     data.setdefault("claims", [])
     data.setdefault("notes", "")
     data.setdefault("usage", None)
@@ -388,6 +395,11 @@ def review(inp: ReviewInput, use_llm: bool = True, provider: Optional[str] = Non
 
     try:
         data = _review_anthropic(inp) if provider == "anthropic" else _review_openai(inp)
+        if str(data.get("verdict") or "").strip().title() not in VERDICTS:
+            # Valid JSON of the wrong shape. Reviewers on a gateway do this occasionally, and
+            # every field but the verdict has a default, so it used to surface far downstream as
+            # KeyError('verdict'). Treat it as the provider failing, which it is.
+            raise ValueError(f"reviewer returned no usable verdict (keys: {sorted(data)[:8]})")
         return _normalise(data)
     except Exception as e:  # any provider failure → rules fallback, never a crashed run
         log.error("LLM review failed for %s: %s — falling back to rules", inp.url, e)
