@@ -277,7 +277,9 @@ Open the run: GitHub → **Actions** → click the run. The summary at the end o
 
 The dashboard key is not a password to an account. It gates the page; the sheet itself is protected by your Google login.
 
-**This guide, on the dashboard itself**: click **Guide** in the header, or open the dashboard URL with `?view=guide` instead of `?key=...`. That route ignores `DASHBOARD_KEY` entirely — it only opens when you're signed into the Google account in `OWNER_EMAIL` in that browser. Anyone else sees a locked page.
+**This guide, on the dashboard itself**: click **FAQ** in the dashboard header, or open the Apps Script `/exec` URL with `?view=guide`. It asks for a passcode: `GUIDE_PASSCODE` in Script properties, falling back to `DASHBOARD_KEY` when that is not set. Typed once per browser, then remembered.
+
+A Google-account check is not possible on that route. A web app deployed *Execute as Me / Access Anyone* is never told who is viewing — `Session.getActiveUser().getEmail()` comes back empty for everyone, including you — so a passcode is the gate that actually works.
 
 ---
 

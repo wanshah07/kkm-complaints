@@ -293,7 +293,7 @@ function ensureFolder_() {
 function doGet(e) {
   e = e || {}; var p = e.parameter || {};
   if (p.view === 'guide') {
-    return serveGuide_();
+    return serveGuide_(p);
   }
   if (p.action) {
     return jsonResponse_(handleApi_(p.action, p, p));
@@ -801,29 +801,61 @@ function isAdminEmail_() {
   }
 }
 
-// The guide ignores DASHBOARD_KEY entirely: it only opens for the signed-in admin
-// Google account (OWNER_EMAIL). Anyone else, including a key holder, sees a locked page.
-function serveGuide_() {
-  var owner = PROPS.getProperty('OWNER_EMAIL') || '(not set — run setup())';
-  if (!isAdminEmail_()) {
-    var email = '';
-    try { email = Session.getActiveUser().getEmail(); } catch (err) { /* anonymous */ }
-    return HtmlService.createHtmlOutput(
-      '<!doctype html><html><body style="font-family:system-ui;padding:40px;color:#0f172a;max-width:560px">' +
-      '<h2>KKM Operating Guide — locked</h2>' +
-      '<p>This page only opens for the admin Google account.</p>' +
-      '<p>Signed in as: <code>' + (email || '(not signed in)') + '</code><br>' +
-      'Required: <code>' + owner + '</code></p>' +
-      '<p>Sign in to that Google account in this browser, then reload this page.</p></body></html>')
-      .setTitle('KKM Guide — locked');
-  }
+// The guide is behind a passcode: GUIDE_PASSCODE when set, otherwise DASHBOARD_KEY.
+// A web app deployed "Execute as Me / Access Anyone" is never told who is viewing
+// (Session.getActiveUser() is empty), so a Google-account check cannot gate it.
+// Signed in as the owner still bypasses the prompt where the identity IS available.
+function guidePasscode_() {
+  return PROPS.getProperty('GUIDE_PASSCODE') || PROPS.getProperty('DASHBOARD_KEY') || '';
+}
+
+function serveGuide_(p) {
+  p = p || {};
+  var expected = guidePasscode_();
+  var supplied = String(p.pass || '');
+  var ok = isAdminEmail_() || (!!expected && !!supplied && constantTimeEquals_(supplied, expected));
+  if (!ok) return guideLockPage_(!!supplied, !expected);
+
   var t = HtmlService.createTemplateFromFile('Guide');
-  t.adminEmail = owner;
   t.dashboardUrl = ScriptApp.getService().getUrl();
+  t.passcodeJson = JSON.stringify(supplied);   // the page remembers it for this browser
   return t.evaluate()
     .setTitle('KKM Operating Guide')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+// The prompt. A passcode already stored in this browser is filled in and submitted
+// automatically, so it is typed once; a wrong one comes back here with a message.
+function guideLockPage_(wrong, unset) {
+  var url = ScriptApp.getService().getUrl();
+  var msg = unset
+    ? '<p style="color:#b91c1c">No passcode is set. Add <code>GUIDE_PASSCODE</code> in Apps Script → Project Settings → Script properties.</p>'
+    : (wrong ? '<p style="color:#b91c1c">Wrong passcode.</p>' : '');
+  return HtmlService.createHtmlOutput(
+    '<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">' +
+    '<style>body{font-family:Inter,system-ui,sans-serif;background:#f8fafc;color:#0f172a;margin:0;' +
+    'display:grid;place-items:center;min-height:100vh}' +
+    '.card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:28px;max-width:380px;width:90%;' +
+    'box-shadow:0 10px 30px rgba(15,23,42,.06)}h2{margin:0 0 6px;font-size:18px}' +
+    'p{font-size:14px;color:#475569;margin:6px 0 14px}' +
+    'input{width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;font-size:14px}' +
+    'button{margin-top:10px;width:100%;padding:10px 12px;border:0;border-radius:10px;background:#0f172a;color:#fff;' +
+    'font-size:14px;font-weight:600;cursor:pointer}</style></head><body><div class="card">' +
+    '<h2>KKM Operating Guide</h2><p>Enter the passcode to open the guide.</p>' + msg +
+    '<form id="f" method="get" action="' + url + '" target="_top">' +
+    '<input type="hidden" name="view" value="guide">' +
+    '<input id="pass" type="password" name="pass" placeholder="Passcode" autofocus autocomplete="current-password">' +
+    '<button type="submit">Open guide</button></form>' +
+    '<script>(function(){try{' +
+    'var saved=localStorage.getItem("kkm.guidepass");' +
+    'var tried=' + (wrong ? 'true' : 'false') + ';' +
+    'if(saved&&!tried){document.getElementById("pass").value=saved;document.getElementById("f").submit();}' +
+    'if(tried){localStorage.removeItem("kkm.guidepass");}' +
+    '}catch(e){}})();<\/script>' +
+    '</div></body></html>')
+    .setTitle('KKM Guide — locked')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
 function requireViewer_(key) {

@@ -22,7 +22,7 @@
     <div class="h-9 w-9 rounded-xl bg-slate-900 text-white grid place-items-center font-bold">K</div>
     <div class="min-w-0">
       <h1 class="text-base sm:text-lg font-semibold leading-tight">KKM Operating Guide</h1>
-      <p class="text-xs text-slate-500 truncate">Admin only &middot; signed in as <?= adminEmail ?></p>
+      <p class="text-xs text-slate-500 truncate">Admin only &middot; passcode-protected</p>
     </div>
     <div class="ml-auto">
       <a href="<?= dashboardUrl ?>" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">&larr; Dashboard</a>
@@ -277,7 +277,8 @@
 <tr><td><code>PW_STORAGE_STATE_B64</code></td><td>GitHub secret</td><td>The recorded browser session</td></tr>
 </tbody>
 </table>
-<p>The dashboard key is not a password to an account. It gates the page; the sheet itself is protected by your Google login. <strong>This guide page is different: it ignores the dashboard key entirely and only opens for the admin Google account in <code>OWNER_EMAIL</code>.</strong></p>
+<p>The dashboard key is not a password to an account. It gates the page; the sheet itself is protected by your Google login.</p>
+<p><strong>This guide page has its own passcode:</strong> <code>GUIDE_PASSCODE</code> in Script properties, falling back to <code>DASHBOARD_KEY</code> when that is not set. It is typed once per browser and remembered. A Google-account check cannot be used here: a web app deployed <em>Execute as Me / Access Anyone</em> is never told who is viewing, so the script only ever sees an anonymous visitor.</p>
 <p>The dashboard's own backend-connection settings (⚙, changing the backend URL or key) are hidden from the header for the same reason &mdash; not everyone loading the page should see them. Reach it only from here: <a href="https://aduan.kkmhalalconsultant.com/#settings">aduan.kkmhalalconsultant.com/#settings</a>.</p>
 
 <hr>
@@ -295,5 +296,12 @@
 </article>
 </main>
 
+<script>
+  // Typed once per browser: the lock page fills it in and submits on the next visit.
+  (function () {
+    var p = <?!= passcodeJson ?>;
+    if (p) { try { localStorage.setItem('kkm.guidepass', p); } catch (e) {} }
+  })();
+</script>
 </body>
 </html>
