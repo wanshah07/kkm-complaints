@@ -310,6 +310,7 @@ Open the run: GitHub → **Actions** → click the run. The summary at the end o
 | Log says | Cause | Fix |
 |---|---|---|
 | `login wall` | Session expired or that platform was not logged in during recording | Section 4 |
+| `login wall on post page - not reviewed` | The platform served its gate instead of the post. The post is **not** reviewed and the run counts it as an error, so it will never be recorded as compliant | Refresh the session (section 4). Until then that post is unseen, not clean |
 | `no post links found — profile not available` | Handle wrong, or the platform is blocking the runner | Check the handle in your browser (section 2); if it loads for you, run from your PC instead (section 7) |
 | `no post links found — platform soft-block` | Too much traffic from that address | Wait a few hours, or run from your PC |
 | `retrying via mbasic…` then still nothing | Facebook handle wrong, or the page has no public posts | Open `mbasic.facebook.com/<handle>` in your browser and see what it shows |
@@ -325,6 +326,17 @@ Open the run: GitHub → **Actions** → click the run. The summary at the end o
 | `LLM review failed … falling back to rules` | API key missing, out of credit, or a transient error | Check credit at console.anthropic.com; the run still completes on the regex rules alone |
 | Dashboard says `Unauthorised` | Wrong dashboard key, or Apps Script not redeployed after a code change | Re-enter the key; in Apps Script, Deploy → Manage deployments → New version |
 | Dashboard says non-JSON response | Apps Script deployment is old or not set to *Anyone* | Redeploy as Web app, Execute as Me, Access Anyone |
+
+### A verdict is only worth what the screenshot showed
+
+Found 17 Sep 2026, on The Raw's Facebook posts. Facebook served a *"Continue as <name>"* interstitial — no password box, the post URL unchanged — so the old wall check, which looked for a password field or a `/login` address, saw nothing wrong. The gate was screenshotted and sent for review. The reviewer answered honestly: there is no cosmetic claim on a login page, so **Acceptable**. Four Facebook posts passed without anyone, human or model, ever seeing them.
+
+Two things changed:
+
+- The wall check no longer relies on a password box. It reads the page text for a platform's gate wording, but only when the post itself is absent from the page, so a dismissible login prompt floating over a readable post still counts as readable.
+- A post behind a wall is now marked `blocked`: it never reaches the reviewer, and it is counted in the run's **errors**, not quietly among the skips. A platform we cannot see is a gap in the sweep, not a pass.
+
+The screenshot is still saved to the artifact so you can see for yourself what the runner was served.
 
 **Nothing found is a normal result.** Most weeks compliant brands produce nothing. An empty run with all profiles reporting `ok` means the system worked.
 

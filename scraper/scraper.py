@@ -58,6 +58,7 @@ class Post:
     screenshot_path: Optional[str] = None
     errors: List[str] = field(default_factory=list)
     not_owned: bool = False  # confirmed to be a different account's post; never sent for review
+    blocked: bool = False    # the platform served a login wall, not the post; never sent for review
 
 
 @dataclass
@@ -197,21 +198,70 @@ def _dismiss_dialogs(page: Page) -> None:
         pass
 
 
-def _is_login_wall(page: Page) -> bool:
-    url = page.url.lower()
-    if "/login" in url or "login.php" in url or "/accounts/login" in url or "/r.php" in url:
-        return True
+_WALL_URL_PARTS = ("/login", "login.php", "/accounts/login", "/r.php", "/checkpoint")
+
+# What a platform puts on the page instead of the post when it wants a session. Facebook's
+# newer gate carries no password box at all — it offers "Continue as <name>" over a
+# "Create new account" link — so a password field alone does not recognise a wall, and a
+# wall that goes unrecognised is screenshotted and reviewed as if it were the post.
+_WALL_MARKERS = (
+    "log in to facebook",
+    "log into facebook",
+    "explore the things you love",
+    "use another profile",
+    "create new account",
+    "log in to see photos",
+    "sign up to see photos",
+    "log in or sign up to view",
+    "see more on facebook",
+    "log in to continue",
+)
+
+# A gate page carries almost nothing. A profile or post page carries captions, comments and
+# chrome, and can mention "Create new account" in its own footer without being a wall, so the
+# wording above only decides a page that has little else on it.
+_WALL_MAX_TEXT = 1500
+
+
+def _save_screenshot(page: Page, post: "Post", brand: str, platform: str, url: str, out_dir: str) -> None:
+    fname = re.sub(r"[^a-z0-9]+", "_", f"{brand}_{platform}_{urlsplit(url).path}".lower()).strip("_")[:90]
+    path = os.path.join(out_dir, f"{fname}.png")
     try:
-        if not page.locator("input[name='password'], input[type='password']").first.is_visible(timeout=800):
-            return False
+        page.screenshot(path=path, full_page=False, type="png")
+        post.screenshot_path = path
+    except Exception as e:
+        post.errors.append(f"screenshot failed: {e}")
+
+
+def _has_post_content(page: Page) -> bool:
+    try:
+        return page.locator("article, [role='article'], div[data-pressable-container]").count() > 0
     except Exception:
         return False
-    # A password box can also belong to a dismissible prompt on an otherwise readable page.
-    # Treat it as a wall only when no post content is present behind it.
-    try:
-        return page.locator("article, [role='article'], div[data-pressable-container]").count() == 0
-    except Exception:
+
+
+def _is_login_wall(page: Page) -> bool:
+    url = page.url.lower()
+    if any(part in url for part in _WALL_URL_PARTS):
         return True
+    # Everything below is a wall only when the post is not on the page behind it: a password
+    # box, and a "create new account" link, can equally belong to a dismissible prompt
+    # floating over a post that reads perfectly well.
+    if _has_post_content(page):
+        return False
+    try:
+        if page.locator("input[name='password'], input[type='password']").first.is_visible(timeout=800):
+            return True
+    except Exception:
+        pass
+    try:
+        body = (page.locator("body").inner_text(timeout=1500) or "").strip()
+    except Exception:
+        return False
+    if len(body) > _WALL_MAX_TEXT:
+        return False
+    low = body.lower()
+    return any(marker in low for marker in _WALL_MARKERS)
 
 
 def _meta(page: Page, prop: str) -> str:
@@ -584,7 +634,14 @@ class Scraper:
             page.wait_for_timeout(2500)
             _dismiss_dialogs(page)
             if _is_login_wall(page):
-                post.errors.append("login wall on post page")
+                # The screenshot here is the gate, not the post. Reviewing it asks the model to
+                # judge a page with no cosmetic claim on it, and the honest answer to that is
+                # "Acceptable" — a clean verdict on a post nobody ever saw. Keep the image for
+                # diagnosis, mark the post, and let main.py skip it.
+                post.errors.append("login wall on post page - not reviewed")
+                post.blocked = True
+                _save_screenshot(page, post, brand, platform, url, self.out_dir)
+                return post
             if platform == "Instagram" and handle:
                 # Only a real handle rejects a post: from the URL path, or an @handle in the page's
                 # own metadata. A display name ("Eucerin Malaysia" for @eucerin_my) is not a handle
@@ -604,13 +661,7 @@ class Scraper:
                     log.info("[%s/%s] could not read the post owner off the page; reviewing anyway", brand, platform)
             post.text = _extract_text(page, platform)
             post.posted_at = _extract_date(page)
-            fname = re.sub(r"[^a-z0-9]+", "_", f"{brand}_{platform}_{urlsplit(url).path}".lower()).strip("_")[:90]
-            path = os.path.join(self.out_dir, f"{fname}.png")
-            try:
-                page.screenshot(path=path, full_page=False, type="png")
-                post.screenshot_path = path
-            except Exception as e:
-                post.errors.append(f"screenshot failed: {e}")
+            _save_screenshot(page, post, brand, platform, url, self.out_dir)
             if not post.text:
                 post.errors.append("no text extracted")
         except PWTimeout:

@@ -195,6 +195,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             if getattr(post, "not_owned", False):
                 report["skipped"].append({"url": post.url, "why": (post.errors[-1] if post.errors else "different account")})
                 continue
+            if getattr(post, "blocked", False):
+                # A login wall is not a clean post. Sending the gate for review buys a confident
+                # "Acceptable" on something that was never read, so the post stays unreviewed and
+                # is counted as an error: a platform we cannot see is a gap in the sweep, not a pass.
+                why = post.errors[-1] if post.errors else "login wall - not reviewed"
+                report["skipped"].append({"url": post.url, "why": why})
+                report["errors"].append(f"{post.brand}/{post.platform}: {why}  {post.url}")
+                continue
             if cu in known:
                 report["skipped"].append({"url": post.url, "why": "already in sheet"})
                 continue
