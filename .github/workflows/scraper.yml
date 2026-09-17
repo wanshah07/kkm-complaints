@@ -54,6 +54,7 @@ jobs:
       ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL || 'claude-haiku-4-5' }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4.1' }}
+      OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
       LLM_USE_SCREENSHOT: ${{ vars.LLM_USE_SCREENSHOT || '1' }}
       SCREENSHOT_MODE: ${{ vars.SCREENSHOT_MODE || 'apps_script' }}
       GDRIVE_SA_JSON: ${{ secrets.GDRIVE_SA_JSON }}

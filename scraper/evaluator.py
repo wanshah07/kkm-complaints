@@ -11,6 +11,7 @@ import base64
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -267,26 +268,73 @@ def _review_anthropic(inp: ReviewInput) -> dict:
 
 
 def _review_openai(inp: ReviewInput) -> dict:
+    """
+    The OpenAI-compatible path. OPENAI_BASE_URL aims it at any gateway that speaks
+    /v1/chat/completions — rootsys, OpenRouter, a local server — so GLM, Kimi, DeepSeek and
+    MiniMax are reachable through this same code.
+
+    Gateways differ in what they accept, so two things degrade instead of failing the run:
+    strict json_schema falls back to json_object and then to a plain request, and a model
+    that will not take an image is retried on text alone (loudly — most violations here are
+    on the artwork, not in the caption).
+    """
     from openai import OpenAI
 
-    client = OpenAI()
+    base_url = env_str("OPENAI_BASE_URL")
+    client = OpenAI(base_url=base_url) if base_url else OpenAI()
     model = env_str("OPENAI_MODEL", "gpt-4.1")
-    content = [{"type": "text", "text": _user_prompt(inp)}]
+    where = f" via {base_url}" if base_url else ""
+
+    text_part = {"type": "text", "text": _user_prompt(inp)}
+    image_part = None
     if inp.screenshot_path and env_str("LLM_USE_SCREENSHOT", "1") == "1":
         try:
             with open(inp.screenshot_path, "rb") as f:
                 b64 = base64.standard_b64encode(f.read()).decode("utf-8")
             mime = "image/png" if inp.screenshot_path.lower().endswith(".png") else "image/jpeg"
-            content.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}})
+            image_part = {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}
         except OSError as e:
             log.warning("screenshot unreadable for LLM: %s", e)
-    resp = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": content}],
-        response_format={"type": "json_schema", "json_schema": {"name": "npra_verdict", "strict": True, "schema": VERDICT_SCHEMA}},
-        temperature=0,
-    )
-    data = json.loads(resp.choices[0].message.content or "{}")
+
+    json_modes = [
+        {"type": "json_schema", "json_schema": {"name": "npra_verdict", "strict": True, "schema": VERDICT_SCHEMA}},
+        {"type": "json_object"},
+        None,
+    ]
+    resp = None
+    last_err = None
+    for with_image in ([True, False] if image_part else [False]):
+        content = [text_part] + ([image_part] if with_image else [])
+        for mode in json_modes:
+            kwargs = {"model": model, "temperature": 0,
+                      "messages": [{"role": "system", "content": SYSTEM_PROMPT},
+                                   {"role": "user", "content": content}]}
+            if mode:
+                kwargs["response_format"] = mode
+            try:
+                resp = client.chat.completions.create(**kwargs)
+                break
+            except Exception as e:
+                last_err = e
+                log.info("reviewer%s: %s rejected %s (%s)", where, model,
+                         (mode or {}).get("type", "plain request"), str(e)[:160])
+        if resp is not None:
+            if not with_image and image_part:
+                log.warning("reviewer%s: %s would not take the screenshot; judged on the caption alone, "
+                            "so claims made on the artwork were not seen", where, model)
+            break
+    if resp is None:
+        raise RuntimeError(f"reviewer{where}: {model} rejected every request shape: {last_err}")
+
+    raw = resp.choices[0].message.content or "{}"
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:   # no JSON mode: the object arrives wrapped in a fence or prose
+        stripped = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```")
+        m = re.search(r"\{.*\}", stripped, re.S)
+        if not m:
+            raise
+        data = json.loads(m.group(0))
     data["reviewer"] = f"openai:{model}"
     u = getattr(resp, "usage", None)
     if u is not None:

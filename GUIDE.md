@@ -235,6 +235,26 @@ Set the repository **variable** `ANTHROPIC_MODEL` under Settings → Secrets and
 No code change, takes effect on the next run. Delete the variable to fall back to the default.
 Figures assume no cache hit; a warm cache roughly halves the input side.
 
+### Using another provider, or a gateway
+
+Set the **variable** `LLM_PROVIDER` to `openai` and the scraper uses the OpenAI-compatible path instead. That path also speaks to any gateway with a `/v1/chat/completions` endpoint — rootsys, OpenRouter, a local server — which is how GLM, Kimi, DeepSeek and MiniMax are reached:
+
+| Variable | Example |
+|---|---|
+| `LLM_PROVIDER` | `openai` |
+| `OPENAI_BASE_URL` | `https://rootsys.cloud/v1` (leave unset for OpenAI itself) |
+| `OPENAI_MODEL` | `kimi-k3`, `glm-5.3`, `deepseek-v4-pro`, `gpt-4.1` |
+
+plus the secret `OPENAI_API_KEY` holding that gateway's key.
+
+**Pick a model that can see images.** Most violations here are on the artwork, not in the caption. A text-only model still returns verdicts, so nothing looks broken — the run just stops catching before/after shots, white coats, "Dr" captions and on-image percentages. The log says so when it happens: `would not take the screenshot; judged on the caption alone`. Search the run log for that line before trusting a quiet week.
+
+Gateways differ in what they accept. Strict `json_schema` falls back to `json_object`, then to a plain request, and a fenced ```` ```json ```` reply is still parsed, so a limited gateway degrades rather than failing the run.
+
+**Cost reporting only covers Anthropic.** `MODEL_PRICES` has no entry for other providers, so the spend block reports tokens honestly and `USD 0.0000` — which is correct for a prepaid gateway plan, and wrong for metered billing. Watch the provider's own dashboard for those.
+
+There is no failover between providers. A dead key or a refusing gateway drops the post to the **regex rules only** (`reviewer=rules-only` in Remarks), which catches blatant prohibited wording and misses every judgement call.
+
 ### Knowing what it actually cost
 
 Every run ends with a **reviewer spend** block in the log and a `spend` object in `run_report.json`:
