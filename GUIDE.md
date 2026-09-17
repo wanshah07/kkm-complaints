@@ -152,6 +152,35 @@ GitHub → repo → **Settings → Secrets and variables → Actions** → `PW_S
 Remove-Item storage_state.json
 ```
 
+### "Value is too large"
+
+A GitHub secret stops at 48 KB and a session with Facebook in it can exceed that. The bulk is `origins` — the localStorage cache Instagram and Facebook dump into the file. Auth lives in the cookies, so drop the rest:
+
+```
+$s = Get-Content storage_state.json -Raw | ConvertFrom-Json
+$s.origins = @()
+$s | ConvertTo-Json -Depth 20 -Compress | Set-Content storage_state.min.json -NoNewline
+$b64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes("storage_state.min.json"))
+$b64.Length
+```
+
+Under 48000 → `$b64 | Set-Clipboard` and paste. Still over, drop cookies for sites that are not watched, then repeat the four lines:
+
+```
+$s.cookies = $s.cookies | Where-Object { $_.domain -match 'instagram|facebook|threads' }
+```
+
+Or gzip it, which the scraper also accepts (roughly ten times smaller):
+
+```
+$in = [IO.File]::OpenRead("storage_state.json"); $out = [IO.File]::Create("storage_state.gz")
+$gz = New-Object IO.Compression.GzipStream($out, [IO.Compression.CompressionMode]::Compress)
+$in.CopyTo($gz); $gz.Close(); $out.Close(); $in.Close()
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("storage_state.gz")) | Set-Clipboard
+```
+
+Delete every copy afterwards: `Remove-Item storage_state.json, storage_state.min.json, storage_state.gz -ErrorAction SilentlyContinue`
+
 That file is a live login. Do not leave it on the desktop and do not email it.
 
 **Use a throwaway account, never your own.** Automated browsing can get an account rate-limited or locked.

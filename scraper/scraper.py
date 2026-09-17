@@ -15,6 +15,7 @@ Facebook may show fewer posts or only meta text; Threads is usually readable ano
 from __future__ import annotations
 
 import base64
+import gzip
 import json
 import random
 import logging
@@ -413,6 +414,10 @@ class Scraper:
         if b64:
             try:
                 raw = base64.b64decode(b64)
+                # A GitHub secret stops at 48 KB and a recorded session can exceed that once
+                # Facebook is in it, so a gzipped state is accepted too (about 10x smaller).
+                if raw[:2] == b"\x1f\x8b":
+                    raw = gzip.decompress(raw)
                 json.loads(raw)  # validate
                 fd, path = tempfile.mkstemp(prefix="pw_state_", suffix=".json")
                 with os.fdopen(fd, "wb") as f:
