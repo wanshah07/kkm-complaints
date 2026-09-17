@@ -232,13 +232,28 @@ _WALL_MAX_TEXT = 1500
 # post itself: still far better than the viewport, because it excludes the site header, the
 # sidebar and the "suggested for you" rail, and the run log names which one matched so a
 # selector that has gone stale is visible rather than silent.
+# Narrow: a container that holds exactly one post.
 _POST_ELEMENT_SELECTORS = {
-    "Instagram": ("article", "main article", "[role='dialog'] article",
-                  "main[role='main']", "main"),
-    "Facebook": ("[role='article']", "div[data-ad-preview='message']", "[role='main']"),
-    "Threads": ("div[data-pressable-container='true']", "[role='article']", "article",
-                "[role='main']"),
+    "Instagram": ("article", "main article", "[role='dialog'] article"),
+    "Facebook": ("[role='article']", "div[data-ad-preview='message']"),
+    "Threads": ("div[data-pressable-container='true']", "[role='article']", "article"),
 }
+# Wide: the page's main column. Not the post, but it excludes the site header, the sidebar and
+# the suggested rail, so it beats the viewport when nothing narrower can be identified.
+_CONTAINER_FALLBACKS = {
+    "Instagram": ("main[role='main']", "main"),
+    "Facebook": ("[role='main']",),
+    "Threads": ("[role='main']",),
+}
+# The post's own id, read off the URL we asked for. A Threads page renders the whole thread as
+# pressable containers and .first is whichever rendered first, not necessarily the post we came
+# for - which is how one URL came back describing three different captions across three runs.
+_POST_ID_PATTERNS = (
+    re.compile(r"/post/([A-Za-z0-9_-]{5,})"),              # Threads
+    re.compile(r"/(?:p|reel|reels|tv)/([A-Za-z0-9_-]{5,})"),  # Instagram
+    re.compile(r"/posts/(pfbid[A-Za-z0-9]+)"),             # Facebook
+    re.compile(r"[?&]story_fbid=(\d+)"),                   # Facebook, older permalinks
+)
 # Instagram laid its post out after the old 800ms probe had already given up, so every post
 # fell back to the viewport. The probe now waits about as long as a slow render takes; the
 # cost is bounded by the pacing wait that follows each post anyway.
@@ -248,21 +263,74 @@ _ELEMENT_PROBE_MS = 2500
 _MAX_SHOT_PX = 2400
 
 
-def _post_element(page: Page, platform: str):
-    """The locator and box of the post's own container, or (None, None) to fall back."""
-    selectors = _POST_ELEMENT_SELECTORS.get(platform, ())
-    for i, sel in enumerate(selectors):
+def _post_id(url: str) -> str:
+    parts = urlsplit(url)
+    hay = parts.path + ("?" + parts.query if parts.query else "")
+    for pat in _POST_ID_PATTERNS:
+        m = pat.search(hay)
+        if m:
+            return m.group(1)
+    return ""
+
+
+def _usable_box(loc) -> Optional[dict]:
+    """The element's box, or None when it is invisible or collapsed to nothing."""
+    box = loc.bounding_box()
+    if not box or box["width"] < 200 or box["height"] < 120:
+        return None
+    return box
+
+
+def _post_element(page: Page, platform: str, url: str = ""):
+    """
+    The locator, box and a label for the post's own container, or (None, None, "") to fall back
+    to the viewport. Tried in order of how sure we are that it is the right post.
+    """
+    post_id = _post_id(url)
+    narrow = _POST_ELEMENT_SELECTORS.get(platform, ())
+    wide = _CONTAINER_FALLBACKS.get(platform, ())
+
+    # 1. A narrow container that actually holds a link to this post. This is the only pass that
+    #    proves we framed the post we asked for rather than a neighbour in the same thread.
+    if post_id:
+        link = page.locator(f'a[href*="{post_id}"]')
+        for i, sel in enumerate(narrow):
+            try:
+                loc = page.locator(sel).filter(has=link).first
+                if not loc.is_visible(timeout=_ELEMENT_PROBE_MS if i == 0 else 500):
+                    continue
+                box = _usable_box(loc)
+                if box:
+                    return loc, box, f"{sel} anchored to {post_id}"
+            except Exception:
+                continue
+
+    # 2. Without an id there is nothing to anchor to, so the first narrow container is the best
+    #    available guess. With an id, an unanchored guess is worse than useless: it can frame a
+    #    different account's post and file the verdict under this URL. In that case skip to the
+    #    wide container, which at least contains the right post.
+    if not post_id:
+        for i, sel in enumerate(narrow):
+            try:
+                loc = page.locator(sel).first
+                if not loc.is_visible(timeout=_ELEMENT_PROBE_MS if i == 0 else 500):
+                    continue
+                box = _usable_box(loc)
+                if box:
+                    return loc, box, sel
+            except Exception:
+                continue
+
+    # 3. The main column.
+    for sel in wide:
         try:
             loc = page.locator(sel).first
-            # Only the first selector is worth waiting on; by the time it has had its 2.5s the
-            # page has rendered, and the rest are a question about the DOM, not about timing.
-            if not loc.is_visible(timeout=_ELEMENT_PROBE_MS if i == 0 else 500):
+            if not loc.is_visible(timeout=500):
                 continue
-            box = loc.bounding_box()
-            # Guard against a wrapper that collapsed to nothing, or a stray inline element.
-            if not box or box["width"] < 200 or box["height"] < 120:
-                continue
-            return loc, box, sel
+            box = _usable_box(loc)
+            if box:
+                label = sel if not post_id else f"{sel} (could not anchor to {post_id})"
+                return loc, box, label
         except Exception:
             continue
     return None, None, ""
@@ -271,7 +339,7 @@ def _post_element(page: Page, platform: str):
 def _save_screenshot(page: Page, post: "Post", brand: str, platform: str, url: str, out_dir: str) -> None:
     fname = re.sub(r"[^a-z0-9]+", "_", f"{brand}_{platform}_{urlsplit(url).path}".lower()).strip("_")[:90]
     path = os.path.join(out_dir, f"{fname}.png")
-    loc, box, sel = _post_element(page, platform)
+    loc, box, sel = _post_element(page, platform, url)
     try:
         if loc is not None and box["height"] <= _MAX_SHOT_PX:
             loc.screenshot(path=path, type="png")

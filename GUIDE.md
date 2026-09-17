@@ -375,7 +375,21 @@ The screenshot is now taken of the post's own container (`article` on Instagram,
 [The Raw/Facebook] screenshot: viewport (no post element matched)
 ```
 
-If you see `viewport` on a platform run after run, the selector for that platform needs updating — until then its verdicts carry the old instability.
+The container is matched by the post's own id, read off the URL we asked for — `DdYbeTBlLb7` on Threads, the `/p/` code on Instagram, the `pfbid` on Facebook. A Threads page renders the whole thread as pressable containers, and taking the first one meant one URL came back describing three different captions across three runs: it was framing whichever post rendered first, not the one we came for.
+
+So the log now says how sure it is:
+
+```
+[The Raw/Threads] screenshot: post element div[data-pressable-container='true'] anchored to DdYbeTBlLb7 (638x551)
+[The Raw/Instagram] screenshot: post element main[role='main'] (could not anchor to Bw4wNC4Bj_l) (1280x1686)
+[The Raw/Facebook] screenshot: viewport (no post element matched)
+```
+
+- **anchored to `<id>`** — the frame provably holds the post being reviewed. Trust the verdict.
+- **could not anchor** — the frame is the page's main column: it contains the right post, plus its neighbours. The verdict is about the right post but may be coloured by what sits beside it.
+- **viewport** — the old behaviour, and the selector for that platform needs updating.
+
+When a post id is known, an unanchored narrow container is never used: framing a different account's post and filing the verdict under this URL is worse than including a neighbour.
 
 ### When the webhook returns a web page instead of JSON
 
