@@ -65,6 +65,22 @@ Risky rows only appear because `push_risky` is on. Turn it off in `scraper/confi
 
 **Adding a column is not free-form.** Every column that is not `Brand`, `Active`, `Type`, `Product hints` or `Notes` is read as a *platform*, and a platform with no entry in `scraper/config.yaml` is skipped with a warning. Add notes to the `Notes` column; ask me before adding any other column.
 
+### The same post is never reviewed twice
+
+The Complaints tab only holds posts that turned out non-compliant. Everything judged clean left no trace, so every week the same compliant posts were scraped, screenshotted and paid for again — and a complaint you had already dealt with could come back around.
+
+A **Reviewed** tab now holds one row per post the scraper has judged, whatever the verdict: URL, brand, platform, verdict, confidence, reviewer, first seen. At the start of a run its URLs are merged into the skip list alongside the complaint URLs; at the end, everything judged this run is appended.
+
+It is a checklist, not a findings record. Nothing in it is a complaint, and dismissing a complaint does not remove it — a dismissed post stays skipped, which is the point.
+
+Three things worth knowing:
+
+- **The ledger is written after the insert, never before.** A post is only marked reviewed once any complaint it produced has actually reached the sheet. A failed insert would otherwise bury the finding permanently.
+- **A dry run writes nothing.** Rehearsals do not consume posts.
+- **To re-review a post deliberately**, delete its row from the Reviewed tab. It will be picked up on the next run.
+
+This needs the Apps Script update (section 9) — the `seen_urls` and `mark_seen` actions. Until it is deployed the run logs `no reviewed-post ledger on this deployment` and carries on exactly as before, re-reviewing clean posts. Nothing breaks; it just keeps costing.
+
 ### Watching a doctor or KOL account
 
 A cosmetic advertisement carried by a doctor is a Part 10 s.4.1 problem in itself, so these accounts are worth watching — but the row has to say what it is.
@@ -74,6 +90,16 @@ A cosmetic advertisement carried by a doctor is a Part 10 s.4.1 problem in itsel
 - Handles: their own account, same as any other row.
 
 With `Type` set, the reviewer is told the account is not the brand: the claims tables apply as usual, plus s.4.1 (doctor / dentist / pharmacist / dermatologist endorsement, or the impression of one — title, white coat, clinic setting, credentials in the bio — is unacceptable for a cosmetic, paid or not) and s.6 (a testimonial must be genuine). Leave `Type` blank for a brand and nothing changes.
+
+#### What a doctor or KOL post is checked for
+
+Any row whose **Type** is not blank, `Brand`, `own` or `Company` is judged as an advertisement carried by a person rather than a brand's own post. Three checkpoints run before any claims assessment, and the reviewer has to say which it found:
+
+1. **Endorsement** — professional standing lent to a cosmetic: their own title or credentials in the post, a clinic setting, scrubs or a white coat, `Dr` in the handle or display name, or wording inviting trust because of who is saying it. Part 10 s.4.1, and it is a breach with or without a claim attached.
+2. **Partnership** — a commercial arrangement: `#ad`, `#sponsored`, paid partnership, collab, affiliate or discount code, order link, "gifted", a brand tagged as partner. Recorded whether disclosed or not — an undisclosed one is the more serious finding, and a disclosed one still carries s.4.1 for a health professional.
+3. **Product shown** — an identifiable cosmetic: packaging on camera, product held or applied, a legible name on the artwork, a product tag.
+
+An endorsement or undisclosed partnership around an identifiable cosmetic is Unacceptable under s.4.1 **even when every individual claim would pass the Part 8 tables**. A post by such a person showing no identifiable product and making no claim is Acceptable — the prompt says so explicitly, so the reviewer is not pushed into reaching for a finding.
 
 ### How many targets fit in one run
 

@@ -171,6 +171,37 @@ class AppsScriptClient:
         data = self._post({"action": "known_urls"})
         return data.get("urls", [])
 
+    def seen_urls(self) -> List[str]:
+        """
+        Every post already judged, whatever the verdict. known_urls only covers posts that became
+        complaints, so a compliant post was re-scraped, re-screenshotted and re-billed every week,
+        and a complaint Wan had already actioned could come back around. Older deployments have no
+        such action; treat that as an empty ledger rather than a failed run.
+        """
+        try:
+            data = self._post({"action": "seen_urls"}, retries=1)
+        except Exception as e:
+            log.warning("no reviewed-post ledger on this deployment (%s); "
+                        "compliant posts will be reviewed again next run", e)
+            return []
+        return data.get("urls", [])
+
+    def mark_seen(self, entries: List[Dict], batch_size: int = 200) -> int:
+        """Record what this run judged, so the next run does not judge it again."""
+        if not entries:
+            return 0
+        total = 0
+        for i in range(0, len(entries), batch_size):
+            try:
+                data = self._post({"action": "mark_seen", "entries": entries[i:i + batch_size]},
+                                  retries=2)
+                total += data.get("added", 0)
+            except Exception as e:
+                # The run's real work is already done and pushed; a ledger failure must not fail it.
+                log.warning("could not record reviewed posts (%s); they will be reviewed again", e)
+                break
+        return total
+
     def insert(self, records: List[Dict], batch_size: int = 10) -> dict:
         """Insert in small batches so one oversized payload cannot sink the whole run."""
         totals = {"inserted": 0, "duplicates": [], "errors": [], "ids": []}

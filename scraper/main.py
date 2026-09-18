@@ -159,6 +159,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             log.info("webhook ok: %s", ping)
             known = {canonical_url(u) for u in client.known_urls()}
             log.info("%d known post URLs in the sheet", len(known))
+            # Posts already judged and found compliant are not in the sheet, so without this
+            # ledger every clean post is re-scraped and re-billed on every run, and a complaint
+            # already actioned can come back around.
+            seen = {canonical_url(u) for u in client.seen_urls()}
+            new_to_us = len(seen - known)
+            known |= seen
+            log.info("%d previously reviewed post URLs in the ledger (%d of them not complaints)",
+                     len(seen), new_to_us)
         except Exception as e:
             log.error("webhook unreachable: %s", e)
             report["errors"].append(f"webhook: {e}")
@@ -196,6 +204,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     push_risky = bool(run_cfg.get("push_risky", False))
     min_conf = float(run_cfg.get("min_confidence", 0.6))
     records: List[dict] = []
+    reviewed: List[dict] = []   # everything judged this run, for the ledger
 
     for tr in results:
         report["targets"].append({"brand": tr.brand, "platform": tr.platform, "profile": tr.profile_url,
@@ -282,6 +291,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             entry = {"url": post.url, "verdict": v["verdict"], "confidence": v.get("confidence"),
                      "type": v.get("violation_type"), "reviewer": v.get("reviewer"),
                      "product": v.get("product_name", ""), "reason": (v.get("violation_reason") or "")[:600]}
+            reviewed.append({"url": post.url, "brand": post.brand, "platform": post.platform,
+                             "verdict": v["verdict"], "confidence": v.get("confidence"),
+                             "reviewer": v.get("reviewer", "")})
             would_push = ((v["verdict"] == "Unacceptable" and v.get("confidence", 0) >= min_conf)
                           or (v["verdict"] == "Risky" and push_risky))
             if would_push and v.get("needs_visual_verification"):
@@ -327,6 +339,15 @@ def main(argv: Optional[List[str]] = None) -> int:
                 # keep the payload on disk so it can be replayed by hand
                 with open(os.path.join(run_dir, "payload_failed.json"), "w", encoding="utf-8") as f:
                     json.dump(records, f, ensure_ascii=False)
+
+    # Last, and deliberately after the insert: a post must never be marked reviewed before the
+    # complaint it produced has actually reached the sheet, or a failed insert would bury it.
+    if reviewed and not args.dry_run and client is not None:
+        added = client.mark_seen(reviewed)
+        report["marked_seen"] = added
+        log.info("ledger: %d of %d reviewed post(s) recorded as seen", added, len(reviewed))
+    elif reviewed and args.dry_run:
+        log.info("dry run: %d reviewed post(s) not recorded in the ledger", len(reviewed))
 
     report["finished_myt"] = datetime.now(MYT).isoformat()
     report["duration_s"] = round(time.time() - started.timestamp(), 1)
