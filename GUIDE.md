@@ -137,6 +137,18 @@ The order within a target is still insert first, ledger second: a post is not ma
 
 **This does not raise the ceiling.** A list too long for 180 minutes still gets cut off; you just keep what was done and can run the remainder separately. Watch the run summary for which targets appear — anything missing from the list was never reached.
 
+### The standard sweep method
+
+**This is how every sweep runs, and how any new routine should be built.** Settled 18 Sep 2026 after four failed attempts taught each piece.
+
+1. **Batch by target type.** `only_type=brand` first — the brands are the commercial priority and sit at the end of the Targets tab, so an unbatched run reaches them last and the time budget cuts them first. Then `only_type=person` for the doctors and KOLs, as many runs as it takes.
+2. **Let each run stop itself.** `max_run_minutes: 160` ends it between targets, clear of GitHub's 180-minute kill. A killed run loses the target in flight and prints nothing.
+3. **File per target, never at the end.** Each target is scraped, reviewed and pushed before the next begins, so a run that stops early keeps everything it finished.
+4. **Let the ledger carry the state.** The Reviewed tab records every post judged, so the next run resumes rather than repeating. No manual bookkeeping about who was covered.
+5. **Read the not-reached list, then run again.** Repeat until it comes back empty. That is the definition of a completed sweep.
+
+A hundred-odd targets takes three or four runs. Each one is unattended: fire it, read the summary, fire the next.
+
 ### Sweeping a long watchlist in batches
 
 A hundred-odd targets at roughly 2.5 minutes each is five to six hours — more than one run can hold. **Run workflow → only_type** splits the list the same way the reviewer does:
@@ -372,6 +384,8 @@ pushed: 0   skipped: 12   flagged: 1   errors: 1
       [VERIFY before filing: quoted wording not found in the scraped caption ("sunburn and burn
       healing") - confirm against the screenshot before this reaches the sheet] The post claims...
 ```
+
+**A finding may rest on who posted it.** Wan's ruling, 18 Sep 2026: where the content of a post by a `Dr` account endorses a product, that is an endorsement under Part 10 s.4.1 — the title sits in the byline, not the caption. So the check counts the account handle and the Targets row name as quotable evidence alongside the caption. Two sound Dr Helmi Heals findings were held before this, because the reviewer quoted `@drhelmiheals` and the guard could only see caption text.
 
 **What this catches:** a fabricated quote — wording attributed to the post's text that the scrape never captured. **What it cannot catch:** a fabricated claim read off the *image* rather than the caption, since there is no caption text to check it against. A flagged row still needs your eyes before it becomes a sheet entry; an unflagged Risky or Unacceptable is not thereby proven true — it only means nothing in its own citation contradicted itself. Open the run's artifact and look at the screenshot before treating any high-confidence verdict as settled, flagged or not.
 

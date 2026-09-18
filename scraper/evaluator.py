@@ -465,6 +465,26 @@ def _normalise_for_match(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
 
 
+# The account's own name as a reader sees it: the handle in the URL and the Targets row's name.
+# Wan's ruling, 18 Sep 2026: where such an account's content endorses a product, that IS an
+# endorsement under Part 10 s.4.1 - the "Dr" sits in the byline, not the caption, and the byline
+# is evidence. Run 35339593893 held two sound Dr Helmi Heals findings because the reviewer quoted
+# "@drhelmiheals" / "Dr Helmi Heals" and the guard could only see caption text.
+_HANDLE_IN_URL = re.compile(r"(?:instagram\.com|threads\.net|facebook\.com)/@?([A-Za-z0-9_.]+)", re.I)
+
+
+def _identity_text(inp: ReviewInput) -> str:
+    parts = [inp.brand or ""]
+    m = _HANDLE_IN_URL.search(inp.url or "")
+    if m:
+        handle = m.group(1)
+        parts.append(handle)
+        # "drhelmiheals" should also ground a quote of "Dr Helmi Heals"; the reviewer reads the
+        # display name off the artwork, where the words are spaced.
+        parts.append(re.sub(r"(?<=[a-z])(?=[A-Z])|[._]", " ", handle))
+    return " ".join(p for p in parts if p)
+
+
 def _check_grounding(verdict: dict, inp: ReviewInput) -> dict:
     if verdict.get("verdict") not in ("Risky", "Unacceptable"):
         return verdict
@@ -472,10 +492,12 @@ def _check_grounding(verdict: dict, inp: ReviewInput) -> dict:
     quotes = _QUOTE_RE.findall(reason)
     if not quotes:
         return verdict  # nothing to check a reasoning against; a screenshot-only claim can't cite text
-    caption = _normalise_for_match(inp.text)
-    if not caption:
+    # The caption, plus who the post is by. A verdict resting on the account's own identity is
+    # grounded in something real even when the caption never repeats it.
+    haystack = _normalise_for_match(inp.text + " " + _identity_text(inp))
+    if not _normalise_for_match(inp.text):
         return verdict  # no caption at all; the claim can only be from the image, nothing to compare
-    unmatched = [q for q in quotes if _normalise_for_match(q) not in caption]
+    unmatched = [q for q in quotes if _normalise_for_match(q) not in haystack]
     if unmatched and len(unmatched) == len(quotes):
         # every quoted phrase is absent from the caption text that was actually scraped
         sample = "; ".join(f'"{q}"' for q in unmatched[:2])
