@@ -430,6 +430,29 @@ Open the run: GitHub → **Actions** → click the run. The summary at the end o
 | `browser session for facebook.com expires in 2.3 day(s)` | Working as intended — early warning | Re-record before it lapses |
 | `browser session carries no dated cookie for facebook.com` | That platform was not logged in when the session was recorded | Re-record with all three platforms signed in |
 
+### When the reviewer never sees the screenshot at all
+
+Found 18 Sep 2026 on the first big doctor sweep. Every Instagram post came back:
+
+```
+kimi-k2.7 rejected json_schema (Error code: 413 - {'error': 'Request body exceeds the 1 MiB limit for kimi-k2.7.'})
+kimi-k2.7 rejected json_object (Error code: 413 - ...)
+kimi-k2.7 rejected plain request (Error code: 413 - ...)
+kimi-k2.7 would not take the screenshot; judged on the caption alone, so claims made on the artwork were not seen
+```
+
+Instagram's fallback frame is 1280×1687. As a PNG that is several megabytes once base64-encoded, and the gateway caps a request body at 1 MiB. Every attempt was refused, the no-image retry succeeded, and a whole sweep of doctor and KOL posts was judged on captions with the artwork unseen — which is exactly where the claims usually are.
+
+The screenshot is now shrunk to fit before it is sent: if the encoded image is over the budget it is converted to JPEG and halved in width until it fits, down to a floor of 640px. Below that the text on the artwork stops being readable, so the image is dropped and the caption-only warning stands rather than sending something illegible. The log says what happened:
+
+```
+screenshot shrunk for the reviewer: 1280x1687 PNG 8449KB -> 640x844 JPEG 268KB
+```
+
+`LLM_MAX_IMAGE_BYTES` sets the budget (default 600000, comfortably inside a 1 MiB body with the prompt alongside). Lower it if a gateway is stricter.
+
+**If you see `would not take the screenshot` in a run, that run's verdicts are caption-only.** Treat them as a partial review, not a clean bill of health.
+
 ### A verdict is only worth what the screenshot showed
 
 Found 17 Sep 2026, on The Raw's Facebook posts. Facebook served a *"Continue as <name>"* interstitial — no password box, the post URL unchanged — so the old wall check, which looked for a password field or a `/login` address, saw nothing wrong. The gate was screenshotted and sent for review. The reviewer answered honestly: there is no cosmetic claim on a login page, so **Acceptable**. Four Facebook posts passed without anyone, human or model, ever seeing them.

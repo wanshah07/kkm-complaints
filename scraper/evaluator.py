@@ -13,7 +13,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple
 
 from npra_rules import RULEBOOK, acceptable_hints, offline_verdict, prescreen
 
@@ -220,15 +220,75 @@ PHRASES THAT LOOK LIKE ACCEPTABLE COLUMN WORDING (do not flag these unless the s
 If a screenshot is attached, read every piece of text on it and assess visual claims too."""
 
 
-def _image_block_anthropic(path: str) -> Optional[dict]:
+# Gateways cap the whole request body, and a full-width screenshot blows straight through it.
+# Run 35305867822 sent Instagram's 1280x1687 fallback frame as PNG and every single call came
+# back 413 "Request body exceeds the 1 MiB limit for kimi-k2.7", through json_schema, json_object
+# and plain alike; the no-image retry then succeeded, so every doctor's post that run was judged
+# on its caption with the artwork unseen - which is where most of the claims are.
+_MAX_IMAGE_BYTES = int(env_str("LLM_MAX_IMAGE_BYTES", "600000") or 600000)
+_MIN_IMAGE_WIDTH = 640   # below this the artwork text stops being legible; send nothing instead
+
+
+def _encoded_screenshot(path: str) -> Optional[Tuple[str, str]]:
+    """
+    (base64, mime) for the screenshot, shrunk until the encoded payload fits the budget.
+    Returns None when it cannot be made to fit while staying readable: a caption-only review is
+    at least honest about what it saw, and the reviewer already warns when that happens.
+    """
     try:
         with open(path, "rb") as f:
-            data = base64.standard_b64encode(f.read()).decode("utf-8")
-        mime = "image/png" if path.lower().endswith(".png") else "image/jpeg"
-        return {"type": "image", "source": {"type": "base64", "media_type": mime, "data": data}}
+            raw = f.read()
     except OSError as e:
         log.warning("screenshot unreadable for LLM: %s", e)
         return None
+
+    mime = "image/png" if path.lower().endswith(".png") else "image/jpeg"
+    if len(base64.standard_b64encode(raw)) <= _MAX_IMAGE_BYTES:
+        return base64.standard_b64encode(raw).decode("utf-8"), mime
+
+    try:
+        from PIL import Image
+    except ImportError:
+        log.warning("screenshot is %d KB and Pillow is unavailable to shrink it; sending as is",
+                    len(raw) // 1024)
+        return base64.standard_b64encode(raw).decode("utf-8"), mime
+
+    import io
+    try:
+        img = Image.open(io.BytesIO(raw))
+        img = img.convert("RGB")   # JPEG has no alpha, and a screenshot does not need one
+        width = img.width
+        # Halve the width until it fits. JPEG at 85 is visually clean on screenshot text and
+        # roughly an order of magnitude smaller than the PNG.
+        for _ in range(6):
+            buf = io.BytesIO()
+            scaled = img if width >= img.width else img.resize(
+                (width, max(1, round(img.height * width / img.width))), Image.LANCZOS)
+            scaled.save(buf, format="JPEG", quality=85, optimize=True)
+            encoded = base64.standard_b64encode(buf.getvalue())
+            if len(encoded) <= _MAX_IMAGE_BYTES:
+                log.info("screenshot shrunk for the reviewer: %dx%d PNG %dKB -> %dx%d JPEG %dKB",
+                         img.width, img.height, len(raw) // 1024,
+                         scaled.width, scaled.height, len(buf.getvalue()) // 1024)
+                return encoded.decode("utf-8"), "image/jpeg"
+            width = width // 2
+            if width < _MIN_IMAGE_WIDTH:
+                break
+    except Exception as e:
+        log.warning("could not shrink the screenshot (%s); judging on the caption alone", e)
+        return None
+
+    log.warning("screenshot will not fit %d KB even at %dpx wide; judging on the caption alone",
+                _MAX_IMAGE_BYTES // 1024, _MIN_IMAGE_WIDTH)
+    return None
+
+
+def _image_block_anthropic(path: str) -> Optional[dict]:
+    enc = _encoded_screenshot(path)
+    if not enc:
+        return None
+    data, mime = enc
+    return {"type": "image", "source": {"type": "base64", "media_type": mime, "data": data}}
 
 
 def _review_anthropic(inp: ReviewInput) -> dict:
@@ -310,13 +370,10 @@ def _review_openai(inp: ReviewInput) -> dict:
     text_part = {"type": "text", "text": _user_prompt(inp)}
     image_part = None
     if inp.screenshot_path and env_str("LLM_USE_SCREENSHOT", "1") == "1":
-        try:
-            with open(inp.screenshot_path, "rb") as f:
-                b64 = base64.standard_b64encode(f.read()).decode("utf-8")
-            mime = "image/png" if inp.screenshot_path.lower().endswith(".png") else "image/jpeg"
+        enc = _encoded_screenshot(inp.screenshot_path)
+        if enc:
+            b64, mime = enc
             image_part = {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}
-        except OSError as e:
-            log.warning("screenshot unreadable for LLM: %s", e)
 
     json_modes = [
         {"type": "json_schema", "json_schema": {"name": "npra_verdict", "strict": True, "schema": VERDICT_SCHEMA}},
