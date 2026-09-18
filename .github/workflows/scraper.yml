@@ -32,6 +32,11 @@ on:
         description: 'Only this platform (Instagram | Facebook | Threads)'
         type: string
         default: ''
+      only_type:
+        description: 'Sweep one kind of target only, so a long watchlist fits inside one run'
+        type: choice
+        options: ['', 'brand', 'person']
+        default: ''
       compare:
         description: 'Review every post with BOTH reviewers and print where they disagree (never pushes)'
         type: boolean
@@ -125,6 +130,7 @@ jobs:
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
           if [ -n "${{ github.event.inputs.brand }}" ]; then ARGS="$ARGS --brand \"${{ github.event.inputs.brand }}\""; fi
           if [ -n "${{ github.event.inputs.platform }}" ]; then ARGS="$ARGS --platform ${{ github.event.inputs.platform }}"; fi
+          if [ -n "${{ github.event.inputs.only_type }}" ]; then ARGS="$ARGS --only-type ${{ github.event.inputs.only_type }}"; fi
           if [ "${{ github.event.inputs.compare }}" = "true" ]; then ARGS="$ARGS --compare"; fi
           eval python main.py $ARGS
 

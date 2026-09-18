@@ -137,6 +137,20 @@ The order within a target is still insert first, ledger second: a post is not ma
 
 **This does not raise the ceiling.** A list too long for 180 minutes still gets cut off; you just keep what was done and can run the remainder separately. Watch the run summary for which targets appear — anything missing from the list was never reached.
 
+### Sweeping a long watchlist in batches
+
+A hundred-odd targets at roughly 2.5 minutes each is five to six hours — more than one run can hold. **Run workflow → only_type** splits the list the same way the reviewer does:
+
+| `only_type` | Rows it takes |
+|---|---|
+| `brand` | Type blank, `Brand`, `own` or `company` — the brands' own pages |
+| `person` | everything else — doctors, KOLs, pharmacists, anyone carrying the advertisement |
+| *(empty)* | the whole list |
+
+The split is exactly the one that decides whether the endorsement / partnership / product-shown checkpoints apply, so a `person` sweep is precisely the set that gets them.
+
+Run the brands first if they are the commercial priority: they are a short batch and would otherwise sit behind seventy-odd doctor accounts. With the Reviewed ledger deployed, each run skips what earlier runs already judged, so repeated runs drain the list rather than repeating it.
+
 ### The two limits, and which one you want to hit
 
 | Limit | Where | What happens |

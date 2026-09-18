@@ -117,6 +117,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--platform", help="only this platform")
     ap.add_argument("--dry-run", action="store_true", help="do not POST to the webhook")
     ap.add_argument("--no-llm", action="store_true", help="rules-only review")
+    ap.add_argument("--only-type", choices=["brand", "person"],
+                    help="brand = the Targets rows whose Type is blank/Brand/own/Company; "
+                         "person = doctors, KOLs, pharmacists and anyone else carrying the ads. "
+                         "Lets a long watchlist be swept in batches that fit one run.")
     ap.add_argument("--compare", action="store_true",
                     help="put every post to both reviewers and print where they disagree; never pushes")
     ap.add_argument("--targets", choices=["auto", "sheet", "config"], default="auto",
@@ -183,6 +187,17 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # --- targets: the sheet's Targets tab wins over config.yaml when reachable ---------
     brands = resolve_targets(cfg, args.targets, client, report)
+    if args.only_type:
+        # The same split the reviewer makes: a brand's own page, or a person carrying the ad.
+        def _is_brand(t: str) -> bool:
+            return (t or "").strip().lower() in ("", "brand", "own", "company")
+        want_brand = args.only_type == "brand"
+        before = len(brands)
+        brands = [b for b in brands if _is_brand(b.get("type", "")) == want_brand]
+        log.info("--only-type %s: %d of %d target row(s) kept", args.only_type, len(brands), before)
+        report["only_type"] = args.only_type
+        if not brands:
+            log.warning("no target rows match --only-type %s; nothing to do", args.only_type)
 
     # --- scrape -----------------------------------------------------------------------
     # Streamed, one target at a time, and each is reviewed and filed before the next is
