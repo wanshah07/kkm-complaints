@@ -79,7 +79,21 @@ Three things worth knowing:
 - **A dry run writes nothing.** Rehearsals do not consume posts.
 - **To re-review a post deliberately**, delete its row from the Reviewed tab. It will be picked up on the next run.
 
-This needs the Apps Script update (section 9) — the `seen_urls` and `mark_seen` actions. Until it is deployed the run logs `no reviewed-post ledger on this deployment` and carries on exactly as before, re-reviewing clean posts. Nothing breaks; it just keeps costing.
+**To deploy it**, in the Apps Script editor:
+
+1. **+** next to Files → **Script** → name it `ReviewedLedger`. Paste the contents of `apps-script/ReviewedLedger.gs` from the repo.
+2. In `Code.gs`, find `case 'known_urls':` in the action switch and add these two cases directly under it:
+
+   ```js
+   case 'seen_urls':     if (!viewer) return deny;
+                         return { ok: true, urls: seenUrls_() };
+   case 'mark_seen':     if (!machine) return deny;
+                         return markSeen_(body.entries || []);
+   ```
+
+3. **Deploy → Manage deployments → New version.** Saving alone changes nothing.
+
+The `Reviewed` tab builds itself on first use; `setup()` does not need re-running. Until it is deployed the run logs `no reviewed-post ledger on this deployment` and carries on exactly as before, re-reviewing clean posts. Nothing breaks; it just keeps costing.
 
 ### Watching a doctor or KOL account
 
