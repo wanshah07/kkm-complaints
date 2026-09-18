@@ -25,7 +25,7 @@ import tempfile
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from dateutil import parser as dateparser
@@ -670,8 +670,21 @@ class Scraper:
         ctx.route(re.compile(r".*\.(mp4|webm|m3u8|woff2?)(\?.*)?$"), lambda route: route.abort())
         return ctx
 
-    def run(self, brands: List[dict], platform_filter: Optional[str] = None, brand_filter: Optional[str] = None) -> List[TargetResult]:
-        results: List[TargetResult] = []
+    def run(self, brands: List[dict], platform_filter: Optional[str] = None,
+            brand_filter: Optional[str] = None) -> List[TargetResult]:
+        """Every target, scraped before the first one is looked at. See iter_run."""
+        return list(self.iter_run(brands, platform_filter=platform_filter, brand_filter=brand_filter))
+
+    def iter_run(self, brands: List[dict], platform_filter: Optional[str] = None,
+                 brand_filter: Optional[str] = None) -> Iterator[TargetResult]:
+        """
+        Yield each target the moment it is scraped, so the caller can review and file it before
+        the next one starts. Run 35293333610 scraped 55 targets for three hours, was cut off by
+        the job timeout with one target to go, and wrote nothing at all: the whole list was
+        scraped before anything was reviewed, so the cancellation took the lot. Streaming means
+        a run that is cut short keeps everything it had already finished.
+        """
+        done = 0
         with sync_playwright() as pw:
             launch_kwargs = dict(headless=bool(self.run_cfg.get("headless", True)),
                                  args=["--disable-blink-features=AutomationControlled"])
@@ -693,12 +706,12 @@ class Scraper:
                             continue
                         if platform not in self.platforms or not handle:
                             continue
-                        if results:  # no wait before the very first profile
+                        if done:  # no wait before the very first profile
                             _pace(self.run_cfg.get("pause_between_profiles"), f"{brand['name']} on {platform}")
-                        results.append(self._scrape_target(browser, brand["name"], platform, str(handle)))
+                        done += 1
+                        yield self._scrape_target(browser, brand["name"], platform, str(handle))
             finally:
                 browser.close()
-        return results
 
     def _scrape_target(self, browser: Browser, brand: str, platform: str, handle: str) -> TargetResult:
         pcfg = self.platforms[platform]

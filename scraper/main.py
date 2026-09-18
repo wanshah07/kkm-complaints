@@ -184,15 +184,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     # --- targets: the sheet's Targets tab wins over config.yaml when reachable ---------
     brands = resolve_targets(cfg, args.targets, client, report)
 
-    # --- scrape ---------------------------------------------------------------------
-    try:
-        scraper = Scraper(cfg, os.path.join(run_dir, "screenshots"))
-        results = scraper.run(brands, platform_filter=args.platform, brand_filter=args.brand)
-    except Exception as e:
-        log.exception("browser run failed")
-        report["errors"].append(f"browser: {e}")
-        _write_report(run_dir, report)
-        return 1
+    # --- scrape -----------------------------------------------------------------------
+    # Streamed, one target at a time, and each is reviewed and filed before the next is
+    # scraped. The alternative cost a three-hour run: everything was scraped first, the job
+    # timeout cut in with one target left, and not a single post had been reviewed or filed.
+    scraper = Scraper(cfg, os.path.join(run_dir, "screenshots"))
+    results = scraper.iter_run(brands, platform_filter=args.platform, brand_filter=args.brand)
 
     hints = {b["name"]: b.get("product_hints", []) for b in brands}
     types = {b["name"]: b.get("type", "") for b in brands}
@@ -203,115 +200,168 @@ def main(argv: Optional[List[str]] = None) -> int:
     date_rule = f"on/after {min_date}" if min_date else (f"within {lookback} days" if lookback else "any date")
     push_risky = bool(run_cfg.get("push_risky", False))
     min_conf = float(run_cfg.get("min_confidence", 0.6))
-    records: List[dict] = []
-    reviewed: List[dict] = []   # everything judged this run, for the ledger
+    records: List[dict] = []      # this target's findings, filed before the next target starts
+    reviewed: List[dict] = []     # this target's judged posts, for the ledger
+    all_records: List[dict] = []  # the whole run, for the dry-run preview and the final count
 
-    for tr in results:
-        report["targets"].append({"brand": tr.brand, "platform": tr.platform, "profile": tr.profile_url,
-                                  "posts": len(tr.posts), "error": tr.error})
-        for post in tr.posts:
-            cu = canonical_url(post.url)
-            if getattr(post, "not_owned", False):
-                report["skipped"].append({"url": post.url, "why": (post.errors[-1] if post.errors else "different account")})
-                continue
-            if getattr(post, "blocked", False):
-                # A login wall is not a clean post. Sending the gate for review buys a confident
-                # "Acceptable" on something that was never read, so the post stays unreviewed and
-                # is counted as an error: a platform we cannot see is a gap in the sweep, not a pass.
-                why = post.errors[-1] if post.errors else "login wall - not reviewed"
-                report["skipped"].append({"url": post.url, "why": why})
-                report["errors"].append(f"{post.brand}/{post.platform}: {why}  {post.url}")
-                continue
-            if cu in known:
-                report["skipped"].append({"url": post.url, "why": "already in sheet"})
-                continue
-            if not date_allowed(post.posted_at, lookback, min_date):
-                report["skipped"].append({"url": post.url, "why": f"posted {post.posted_at}, outside {date_rule}"})
-                continue
-            if not post.text and not post.screenshot_path:
-                report["skipped"].append({"url": post.url, "why": "nothing extracted"})
-                continue
-            ri = ReviewInput(brand=post.brand, platform=post.platform, url=post.url, text=post.text,
-                             screenshot_path=post.screenshot_path, product_hints=hints.get(post.brand),
-                             target_type=types.get(post.brand, ""))
+    def _file_target() -> None:
+        """
+        Push what this target produced, then record what it judged. In that order: a post must
+        not be marked reviewed until any complaint it produced has reached the sheet, or a
+        failed insert would bury the finding and the ledger would skip it forever after.
+        """
+        if args.dry_run or client is None:
+            records.clear()
+            reviewed.clear()
+            return
+        insert_ok = True
+        if records:
+            try:
+                totals = client.insert(records)
+                agg = report.setdefault("insert", {"inserted": 0, "duplicates": [], "errors": [], "ids": []})
+                agg["inserted"] += totals.get("inserted", 0)
+                for k in ("duplicates", "errors", "ids"):
+                    agg[k] += totals.get(k, [])
+                log.info("filed: inserted=%d duplicates=%d errors=%d",
+                         totals.get("inserted", 0), len(totals.get("duplicates", [])),
+                         len(totals.get("errors", [])))
+            except Exception as e:
+                insert_ok = False
+                log.error("insert failed: %s", e)
+                report["errors"].append(f"insert: {e}")
+                # keep the payload on disk so it can be replayed by hand
+                failed = os.path.join(run_dir, "payload_failed.json")
+                existing = []
+                if os.path.exists(failed):
+                    try:
+                        with open(failed, encoding="utf-8") as f:
+                            existing = json.load(f)
+                    except Exception:
+                        existing = []
+                with open(failed, "w", encoding="utf-8") as f:
+                    json.dump(existing + records, f, ensure_ascii=False)
+        if reviewed and insert_ok:
+            report["marked_seen"] = report.get("marked_seen", 0) + client.mark_seen(reviewed)
+        records.clear()
+        reviewed.clear()
 
-            def _spend(verdict: dict) -> None:
-                # Count every call as soon as it returns: later branches can skip the post, and a
-                # call that was paid for must still appear in the spend total.
-                u = verdict.get("usage")
-                if not u:
-                    return
-                spend["calls"] += 1
-                for k in ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"):
-                    spend[k] += u.get(k, 0) or 0
-                spend["usd"] += u.get("usd", 0.0) or 0.0
-                spend["models"][u.get("model", "?")] = spend["models"].get(u.get("model", "?"), 0) + 1
-
-            if args.compare:
-                # The same post, the same screenshot, two reviewers. Agreement on a handful of
-                # compliant posts proves very little; the disagreements are the whole point, and
-                # they are Wan's to adjudicate. Nothing is pushed from a comparison run.
-                a = review(ri, use_llm=not args.no_llm, provider="anthropic")
-                b = review(ri, use_llm=not args.no_llm, provider="openai")
-                _spend(a)
-                _spend(b)
-                report["comparison"].append({
-                    "url": post.url, "brand": post.brand, "platform": post.platform,
-                    "a": {"reviewer": a.get("reviewer"), "verdict": a.get("verdict") or "no verdict",
-                          "confidence": a.get("confidence"), "type": a.get("violation_type"),
-                          "reason": (a.get("violation_reason") or "")[:400]},
-                    "b": {"reviewer": b.get("reviewer"), "verdict": b.get("verdict") or "no verdict",
-                          "confidence": b.get("confidence"), "type": b.get("violation_type"),
-                          "reason": (b.get("violation_reason") or "")[:400]},
-                    # A reviewer that produced nothing has not agreed with anyone.
-                    "agree": bool(a.get("verdict")) and a.get("verdict") == b.get("verdict"),
-                })
-                continue
-
-            v = review(ri, use_llm=not args.no_llm)
-            _spend(v)
-            if not v.get("verdict"):
-                # The rules fallback always produces one, so reaching here means even that failed.
-                # An unreviewed post is an error to surface, never a quiet skip.
-                why = f"reviewer returned no verdict: {v.get('notes') or 'unknown'}"
-                report["skipped"].append({"url": post.url, "why": why})
-                report["errors"].append(f"{post.brand}/{post.platform}: {why}  {post.url}")
-                continue
-
-            # The platform often hides the timestamp from anonymous visitors; when the reviewer can read
-            # it off the screenshot, use it for the Date column and the lookback filter.
-            if not post.posted_at and v.get("post_date"):
-                post.posted_at = v["post_date"]
-                if not date_allowed(post.posted_at, lookback, min_date):
-                    report["skipped"].append({"url": post.url, "why": f"posted {post.posted_at} per screenshot, outside {date_rule}",
-                                              "verdict": v["verdict"], "confidence": v.get("confidence"),
-                                              "type": v.get("violation_type"), "reviewer": v.get("reviewer")})
-                    known.add(cu)
+    try:
+        for tr in results:
+            report["targets"].append({"brand": tr.brand, "platform": tr.platform, "profile": tr.profile_url,
+                                      "posts": len(tr.posts), "error": tr.error})
+            for post in tr.posts:
+                cu = canonical_url(post.url)
+                if getattr(post, "not_owned", False):
+                    report["skipped"].append({"url": post.url, "why": (post.errors[-1] if post.errors else "different account")})
                     continue
-            entry = {"url": post.url, "verdict": v["verdict"], "confidence": v.get("confidence"),
-                     "type": v.get("violation_type"), "reviewer": v.get("reviewer"),
-                     "product": v.get("product_name", ""), "reason": (v.get("violation_reason") or "")[:600]}
-            reviewed.append({"url": post.url, "brand": post.brand, "platform": post.platform,
-                             "verdict": v["verdict"], "confidence": v.get("confidence"),
-                             "reviewer": v.get("reviewer", "")})
-            would_push = ((v["verdict"] == "Unacceptable" and v.get("confidence", 0) >= min_conf)
-                          or (v["verdict"] == "Risky" and push_risky))
-            if would_push and v.get("needs_visual_verification"):
-                # The reviewer's own reasoning cited wording that is not in the caption it was
-                # given. That is the shape of the sunburn/burn hallucination on run 35249509012:
-                # a confident, specific, unsupported verdict. It does not reach the sheet on the
-                # strength of that reasoning alone - it waits for eyes on the screenshot.
-                entry["why"] = "needs visual verification before filing - see GUIDE.md"
-                report["flagged"].append(entry)
-                log.warning("%s: %s (%s) held back pending visual check, not pushed",
-                           post.url, v["verdict"], v.get("confidence"))
-            elif would_push:
-                records.append(build_record(post, v, run_cfg, drive))
-                report["pushed"].append(entry)
-            else:
-                entry["why"] = "acceptable" if v["verdict"] == "Acceptable" else f"{v['verdict']} below threshold / not pushed"
-                report["skipped"].append(entry)
-            known.add(cu)
+                if getattr(post, "blocked", False):
+                    # A login wall is not a clean post. Sending the gate for review buys a confident
+                    # "Acceptable" on something that was never read, so the post stays unreviewed and
+                    # is counted as an error: a platform we cannot see is a gap in the sweep, not a pass.
+                    why = post.errors[-1] if post.errors else "login wall - not reviewed"
+                    report["skipped"].append({"url": post.url, "why": why})
+                    report["errors"].append(f"{post.brand}/{post.platform}: {why}  {post.url}")
+                    continue
+                if cu in known:
+                    report["skipped"].append({"url": post.url, "why": "already in sheet"})
+                    continue
+                if not date_allowed(post.posted_at, lookback, min_date):
+                    report["skipped"].append({"url": post.url, "why": f"posted {post.posted_at}, outside {date_rule}"})
+                    continue
+                if not post.text and not post.screenshot_path:
+                    report["skipped"].append({"url": post.url, "why": "nothing extracted"})
+                    continue
+                ri = ReviewInput(brand=post.brand, platform=post.platform, url=post.url, text=post.text,
+                                 screenshot_path=post.screenshot_path, product_hints=hints.get(post.brand),
+                                 target_type=types.get(post.brand, ""))
+
+                def _spend(verdict: dict) -> None:
+                    # Count every call as soon as it returns: later branches can skip the post, and a
+                    # call that was paid for must still appear in the spend total.
+                    u = verdict.get("usage")
+                    if not u:
+                        return
+                    spend["calls"] += 1
+                    for k in ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"):
+                        spend[k] += u.get(k, 0) or 0
+                    spend["usd"] += u.get("usd", 0.0) or 0.0
+                    spend["models"][u.get("model", "?")] = spend["models"].get(u.get("model", "?"), 0) + 1
+
+                if args.compare:
+                    # The same post, the same screenshot, two reviewers. Agreement on a handful of
+                    # compliant posts proves very little; the disagreements are the whole point, and
+                    # they are Wan's to adjudicate. Nothing is pushed from a comparison run.
+                    a = review(ri, use_llm=not args.no_llm, provider="anthropic")
+                    b = review(ri, use_llm=not args.no_llm, provider="openai")
+                    _spend(a)
+                    _spend(b)
+                    report["comparison"].append({
+                        "url": post.url, "brand": post.brand, "platform": post.platform,
+                        "a": {"reviewer": a.get("reviewer"), "verdict": a.get("verdict") or "no verdict",
+                              "confidence": a.get("confidence"), "type": a.get("violation_type"),
+                              "reason": (a.get("violation_reason") or "")[:400]},
+                        "b": {"reviewer": b.get("reviewer"), "verdict": b.get("verdict") or "no verdict",
+                              "confidence": b.get("confidence"), "type": b.get("violation_type"),
+                              "reason": (b.get("violation_reason") or "")[:400]},
+                        # A reviewer that produced nothing has not agreed with anyone.
+                        "agree": bool(a.get("verdict")) and a.get("verdict") == b.get("verdict"),
+                    })
+                    continue
+
+                v = review(ri, use_llm=not args.no_llm)
+                _spend(v)
+                if not v.get("verdict"):
+                    # The rules fallback always produces one, so reaching here means even that failed.
+                    # An unreviewed post is an error to surface, never a quiet skip.
+                    why = f"reviewer returned no verdict: {v.get('notes') or 'unknown'}"
+                    report["skipped"].append({"url": post.url, "why": why})
+                    report["errors"].append(f"{post.brand}/{post.platform}: {why}  {post.url}")
+                    continue
+
+                # The platform often hides the timestamp from anonymous visitors; when the reviewer can read
+                # it off the screenshot, use it for the Date column and the lookback filter.
+                if not post.posted_at and v.get("post_date"):
+                    post.posted_at = v["post_date"]
+                    if not date_allowed(post.posted_at, lookback, min_date):
+                        report["skipped"].append({"url": post.url, "why": f"posted {post.posted_at} per screenshot, outside {date_rule}",
+                                                  "verdict": v["verdict"], "confidence": v.get("confidence"),
+                                                  "type": v.get("violation_type"), "reviewer": v.get("reviewer")})
+                        known.add(cu)
+                        continue
+                entry = {"url": post.url, "verdict": v["verdict"], "confidence": v.get("confidence"),
+                         "type": v.get("violation_type"), "reviewer": v.get("reviewer"),
+                         "product": v.get("product_name", ""), "reason": (v.get("violation_reason") or "")[:600]}
+                reviewed.append({"url": post.url, "brand": post.brand, "platform": post.platform,
+                                 "verdict": v["verdict"], "confidence": v.get("confidence"),
+                                 "reviewer": v.get("reviewer", "")})
+                would_push = ((v["verdict"] == "Unacceptable" and v.get("confidence", 0) >= min_conf)
+                              or (v["verdict"] == "Risky" and push_risky))
+                if would_push and v.get("needs_visual_verification"):
+                    # The reviewer's own reasoning cited wording that is not in the caption it was
+                    # given. That is the shape of the sunburn/burn hallucination on run 35249509012:
+                    # a confident, specific, unsupported verdict. It does not reach the sheet on the
+                    # strength of that reasoning alone - it waits for eyes on the screenshot.
+                    entry["why"] = "needs visual verification before filing - see GUIDE.md"
+                    report["flagged"].append(entry)
+                    log.warning("%s: %s (%s) held back pending visual check, not pushed",
+                               post.url, v["verdict"], v.get("confidence"))
+                elif would_push:
+                    rec = build_record(post, v, run_cfg, drive)
+                    records.append(rec)
+                    all_records.append(rec)
+                    report["pushed"].append(entry)
+                else:
+                    entry["why"] = "acceptable" if v["verdict"] == "Acceptable" else f"{v['verdict']} below threshold / not pushed"
+                    report["skipped"].append(entry)
+                known.add(cu)
+
+            _file_target()
+    except Exception as e:
+        # Whatever has already been filed stays filed; say what stopped the sweep and finish
+        # the report rather than losing the targets that did complete.
+        log.exception("sweep stopped early")
+        report["errors"].append(f"sweep stopped early: {e}")
+        _file_target()
 
     spend["usd"] = round(spend["usd"], 4)
     rate = float(run_cfg.get("usd_to_myr") or 0)
@@ -319,35 +369,19 @@ def main(argv: Optional[List[str]] = None) -> int:
         spend["myr"] = round(spend["usd"] * rate, 2)
         spend["myr_rate_used"] = rate
     report["spend"] = spend
-    log.info("%d non-compliant post(s) to push, %d skipped", len(records), len(report["skipped"]))
+    log.info("%d non-compliant post(s) found, %d skipped", len(all_records), len(report["skipped"]))
 
-    # --- push -----------------------------------------------------------------------
-    if records:
-        if args.dry_run or client is None:
-            preview = [{k: (v if k != "screenshot_base64" else f"<{len(v)} b64 chars>") for k, v in r.items()} for r in records]
-            with open(os.path.join(run_dir, "payload_preview.json"), "w", encoding="utf-8") as f:
-                json.dump(preview, f, ensure_ascii=False, indent=2)
-            log.info("dry run: payload written to %s", os.path.join(run_dir, "payload_preview.json"))
-        else:
-            try:
-                totals = client.insert(records)
-                report["insert"] = {k: (v if k != "ids" else v) for k, v in totals.items()}
-                log.info("inserted=%d duplicates=%d errors=%d", totals["inserted"], len(totals["duplicates"]), len(totals["errors"]))
-            except Exception as e:
-                log.error("insert failed: %s", e)
-                report["errors"].append(f"insert: {e}")
-                # keep the payload on disk so it can be replayed by hand
-                with open(os.path.join(run_dir, "payload_failed.json"), "w", encoding="utf-8") as f:
-                    json.dump(records, f, ensure_ascii=False)
-
-    # Last, and deliberately after the insert: a post must never be marked reviewed before the
-    # complaint it produced has actually reached the sheet, or a failed insert would bury it.
-    if reviewed and not args.dry_run and client is not None:
-        added = client.mark_seen(reviewed)
-        report["marked_seen"] = added
-        log.info("ledger: %d of %d reviewed post(s) recorded as seen", added, len(reviewed))
-    elif reviewed and args.dry_run:
-        log.info("dry run: %d reviewed post(s) not recorded in the ledger", len(reviewed))
+    # A live run filed each target as it finished; nothing is held back to the end any more.
+    # A dry run files nothing, so its payload is written out here instead.
+    if all_records and (args.dry_run or client is None):
+        preview = [{k: (v if k != "screenshot_base64" else f"<{len(v)} b64 chars>") for k, v in r.items()}
+                   for r in all_records]
+        with open(os.path.join(run_dir, "payload_preview.json"), "w", encoding="utf-8") as f:
+            json.dump(preview, f, ensure_ascii=False, indent=2)
+        log.info("dry run: payload written to %s", os.path.join(run_dir, "payload_preview.json"))
+    elif report.get("marked_seen"):
+        log.info("ledger: %d reviewed post(s) recorded as seen across %d target(s)",
+                 report["marked_seen"], len(report["targets"]))
 
     report["finished_myt"] = datetime.now(MYT).isoformat()
     report["duration_s"] = round(time.time() - started.timestamp(), 1)

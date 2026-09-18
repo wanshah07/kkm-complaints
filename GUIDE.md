@@ -115,6 +115,28 @@ Any row whose **Type** is not blank, `Brand`, `own` or `Company` is judged as an
 
 An endorsement or undisclosed partnership around an identifiable cosmetic is Unacceptable under s.4.1 **even when every individual claim would pass the Part 8 tables**. A post by such a person showing no identifiable product and making no claim is Acceptable — the prompt says so explicitly, so the reviewer is not pushed into reaching for a finding.
 
+### What happens when a run runs out of time
+
+Found 18 Sep 2026, the expensive way. Run 35293333610 scraped for **three hours**, was cut off by the job's 180-minute ceiling with roughly one target left, and wrote **nothing at all** — no complaints, no ledger, not even a summary. It had not reviewed a single post, because the old order of work was:
+
+```
+1. scrape every target      ← the timeout landed here, at ~99%
+2. review every post
+3. push everything to the sheet
+```
+
+Phases 2 and 3 never started, so three hours of scraping went in the bin.
+
+Each target is now scraped, reviewed and filed before the next one is touched. A run that is cut short — by the ceiling, a browser crash, or a cancelled job — keeps every target it had already finished. The log shows a `filed:` line per target rather than one insert at the end:
+
+```
+filed: inserted=1 duplicates=0 errors=0
+```
+
+The order within a target is still insert first, ledger second: a post is not marked reviewed until any complaint it produced has reached the sheet.
+
+**This does not raise the ceiling.** A list too long for 180 minutes still gets cut off; you just keep what was done and can run the remainder separately. Watch the run summary for which targets appear — anything missing from the list was never reached.
+
 ### How many targets fit in one run
 
 Roughly **3 minutes per brand × platform**, most of it the deliberate pacing (section 5). Ten targets is about 30 minutes. The workflow stops at 180 minutes, so keep it under about 50 targets, or cut `max_posts_per_profile` / the `pause_*` ranges to fit more. Reviewer cost runs about USD 0.007 per post examined.
