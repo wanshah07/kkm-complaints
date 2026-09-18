@@ -255,6 +255,23 @@ Gateways differ in what they accept. Strict `json_schema` falls back to `json_ob
 
 There is no failover between providers. A dead key or a refusing gateway drops the post to the **regex rules only** (`reviewer=rules-only` in Remarks), which catches blatant prohibited wording and misses every judgement call.
 
+### When the reviewer cites wording that was never said
+
+Found 17 Sep 2026. A Threads post — a pink-office meme captioned *"when they ask me what i actually did during my 9 - 5 shift"*, nothing else — came back **Unacceptable (0.85), "sunburn/burn healing"**. There is no such wording anywhere on the post. The reviewer invented it.
+
+This is a different failure from the screenshot bugs above. Those made the reviewer look at the wrong thing. This one shows it can look at the right thing and still state something false, confidently, as if quoting the post. A high confidence number does not mean the citation is real.
+
+**Every Risky or Unacceptable verdict that quotes specific wording is now checked against the post's own scraped caption.** If the quoted phrase appears nowhere in that text, the row is held back — never pushed to the sheet — and the run summary shows it plainly:
+
+```
+pushed: 0   skipped: 12   flagged: 1   errors: 1
+  ⚠ HOLD Unacceptable (0.85) Treatment claim — needs visual verification before filing - see GUIDE.md
+      [VERIFY before filing: quoted wording not found in the scraped caption ("sunburn and burn
+      healing") - confirm against the screenshot before this reaches the sheet] The post claims...
+```
+
+**What this catches:** a fabricated quote — wording attributed to the post's text that the scrape never captured. **What it cannot catch:** a fabricated claim read off the *image* rather than the caption, since there is no caption text to check it against. A flagged row still needs your eyes before it becomes a sheet entry; an unflagged Risky or Unacceptable is not thereby proven true — it only means nothing in its own citation contradicted itself. Open the run's artifact and look at the screenshot before treating any high-confidence verdict as settled, flagged or not.
+
 ### Checking a reviewer before you trust it
 
 A model that agrees with Haiku on five compliant posts has proved nothing — compliant posts are easy and everything agrees on them. What tells you whether a reviewer is safe to run is where it *disagrees*, and whether you side with it.

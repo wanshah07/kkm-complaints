@@ -131,7 +131,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     run_dir = os.path.join(args.out, started.strftime("%Y%m%d_%H%M%S"))
     os.makedirs(run_dir, exist_ok=True)
     report: Dict = {"started_myt": started.isoformat(), "targets": [], "pushed": [], "skipped": [],
-                    "errors": [], "comparison": []}
+                    "errors": [], "comparison": [], "flagged": []}
 
     # --- review-only mode (no browser, no webhook) ---------------------------
     if args.review_only:
@@ -282,10 +282,18 @@ def main(argv: Optional[List[str]] = None) -> int:
             entry = {"url": post.url, "verdict": v["verdict"], "confidence": v.get("confidence"),
                      "type": v.get("violation_type"), "reviewer": v.get("reviewer"),
                      "product": v.get("product_name", ""), "reason": (v.get("violation_reason") or "")[:600]}
-            if v["verdict"] == "Unacceptable" and v.get("confidence", 0) >= min_conf:
-                records.append(build_record(post, v, run_cfg, drive))
-                report["pushed"].append(entry)
-            elif v["verdict"] == "Risky" and push_risky:
+            would_push = ((v["verdict"] == "Unacceptable" and v.get("confidence", 0) >= min_conf)
+                          or (v["verdict"] == "Risky" and push_risky))
+            if would_push and v.get("needs_visual_verification"):
+                # The reviewer's own reasoning cited wording that is not in the caption it was
+                # given. That is the shape of the sunburn/burn hallucination on run 35249509012:
+                # a confident, specific, unsupported verdict. It does not reach the sheet on the
+                # strength of that reasoning alone - it waits for eyes on the screenshot.
+                entry["why"] = "needs visual verification before filing - see GUIDE.md"
+                report["flagged"].append(entry)
+                log.warning("%s: %s (%s) held back pending visual check, not pushed",
+                           post.url, v["verdict"], v.get("confidence"))
+            elif would_push:
                 records.append(build_record(post, v, run_cfg, drive))
                 report["pushed"].append(entry)
             else:
@@ -388,9 +396,15 @@ def _print_summary(report: dict) -> None:
     print("\n=== KKM scraper run summary ===")
     for t in report["targets"]:
         print(f"  {t['brand']:<16} {t['platform']:<10} posts={t['posts']:<3} {('ERR ' + t['error']) if t['error'] else 'ok'}")
-    print(f"  pushed: {len(report['pushed'])}   skipped: {len(report['skipped'])}   errors: {len(report['errors'])}")
+    flagged_n = len(report.get("flagged") or [])
+    print(f"  pushed: {len(report['pushed'])}   skipped: {len(report['skipped'])}   "
+          f"flagged: {flagged_n}   errors: {len(report['errors'])}")
     for p in report["pushed"]:
         print(f"    → PUSH {p['verdict']} ({p['confidence']}) {p['type']}  {p['url']}")
+    for p in report.get("flagged") or []:
+        print(f"    ⚠ HOLD {p['verdict']} ({p['confidence']}) {p['type']} — {p['why']}  {p['url']}")
+        if p.get("reason"):
+            print(f"        {p['reason'].replace(chr(10), ' ')[:500]}")
     for p in report["skipped"]:
         if p.get("verdict"):
             why = f" — {p['why']}" if p.get("why") else ""

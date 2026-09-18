@@ -372,6 +372,44 @@ def _normalise(data: dict) -> dict:
     return data
 
 
+# A reasoner is entitled to read a claim off the screenshot, where there is nothing in the
+# caption text to quote from. It is not entitled to attribute wording to the post that appears
+# nowhere the post actually said anything, caption or reasoning alike. Run 35249509012 read a
+# pink-office meme captioned "when they ask me what i actually did during my 9 - 5 shift" and
+# returned Unacceptable, "sunburn/burn healing", at 0.85 confidence - wording that exists nowhere
+# in the post. This does not need a second reviewer to catch; it needs the first one held to its
+# own citation.
+_QUOTE_RE = re.compile('["\u2018\u2019\u201c\u201d\']([^"\u2018\u2019\u201c\u201d\']{4,120})["\u2018\u2019\u201c\u201d\']')
+
+
+def _normalise_for_match(s: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
+
+
+def _check_grounding(verdict: dict, inp: ReviewInput) -> dict:
+    if verdict.get("verdict") not in ("Risky", "Unacceptable"):
+        return verdict
+    reason = verdict.get("violation_reason") or ""
+    quotes = _QUOTE_RE.findall(reason)
+    if not quotes:
+        return verdict  # nothing to check a reasoning against; a screenshot-only claim can't cite text
+    caption = _normalise_for_match(inp.text)
+    if not caption:
+        return verdict  # no caption at all; the claim can only be from the image, nothing to compare
+    unmatched = [q for q in quotes if _normalise_for_match(q) not in caption]
+    if unmatched and len(unmatched) == len(quotes):
+        # every quoted phrase is absent from the caption text that was actually scraped
+        sample = "; ".join(f'"{q}"' for q in unmatched[:2])
+        verdict["needs_visual_verification"] = True
+        verdict["violation_reason"] = (
+            f"[VERIFY before filing: quoted wording not found in the scraped caption ({sample}) "
+            f"- confirm against the screenshot before this reaches the sheet] " + reason
+        )
+        log.warning("%s: reviewer quoted wording absent from the post's own caption text (%s) - "
+                    "flagged needs_visual_verification", inp.url, sample)
+    return verdict
+
+
 def review(inp: ReviewInput, use_llm: bool = True, provider: Optional[str] = None) -> dict:
     """
     Returns a dict with verdict / confidence / violation_type / violation_reason / product_name /
@@ -400,7 +438,7 @@ def review(inp: ReviewInput, use_llm: bool = True, provider: Optional[str] = Non
             # every field but the verdict has a default, so it used to surface far downstream as
             # KeyError('verdict'). Treat it as the provider failing, which it is.
             raise ValueError(f"reviewer returned no usable verdict (keys: {sorted(data)[:8]})")
-        return _normalise(data)
+        return _check_grounding(_normalise(data), inp)
     except Exception as e:  # any provider failure → rules fallback, never a crashed run
         log.error("LLM review failed for %s: %s — falling back to rules", inp.url, e)
         v = offline_verdict(inp.text)
