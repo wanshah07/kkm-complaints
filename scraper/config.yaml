@@ -9,6 +9,12 @@ run:
   push_risky: true                # also push "Risky" verdicts (status New, type prefixed "Risky:")
   min_confidence: 0.6             # drop Unacceptable verdicts below this reviewer confidence
   usd_to_myr: 0                   # set to your card's rate (e.g. 4.7) to also show RM in the run summary; 0 = USD only
+  # Stop starting new targets once the run has been going this long, and finish cleanly. The
+  # GitHub job is killed at timeout-minutes: 180 (see .github/workflows/scraper.yml) and that
+  # kill lands mid-post: no summary, no report, and the target in flight is wasted. Stopping
+  # ourselves a little earlier means the run ends on its own terms and says what it did not
+  # reach. Raise it only alongside the workflow's timeout-minutes.
+  max_run_minutes: 160
   screenshot_max_width: 1200      # px, before JPEG compression
   screenshot_jpeg_quality: 80
   headless: true

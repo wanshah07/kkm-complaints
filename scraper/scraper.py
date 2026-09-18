@@ -25,7 +25,7 @@ import tempfile
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Iterator, List, Optional, Tuple
+from typing import Callable, Dict, Iterator, List, Optional, Tuple
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from dateutil import parser as dateparser
@@ -675,8 +675,24 @@ class Scraper:
         """Every target, scraped before the first one is looked at. See iter_run."""
         return list(self.iter_run(brands, platform_filter=platform_filter, brand_filter=brand_filter))
 
+    def plan(self, brands: List[dict], platform_filter: Optional[str] = None,
+             brand_filter: Optional[str] = None) -> List[Tuple[str, str, str]]:
+        """Every (brand, platform, handle) this run intends to visit, in order."""
+        out: List[Tuple[str, str, str]] = []
+        for brand in brands:
+            if brand_filter and brand["name"].lower() != brand_filter.lower():
+                continue
+            for platform, handle in (brand.get("handles") or {}).items():
+                if platform_filter and platform.lower() != platform_filter.lower():
+                    continue
+                if platform not in self.platforms or not handle:
+                    continue
+                out.append((brand["name"], platform, str(handle)))
+        return out
+
     def iter_run(self, brands: List[dict], platform_filter: Optional[str] = None,
-                 brand_filter: Optional[str] = None) -> Iterator[TargetResult]:
+                 brand_filter: Optional[str] = None,
+                 should_stop: Optional[Callable[[], bool]] = None) -> Iterator[TargetResult]:
         """
         Yield each target the moment it is scraped, so the caller can review and file it before
         the next one starts. Run 35293333610 scraped 55 targets for three hours, was cut off by
@@ -684,6 +700,7 @@ class Scraper:
         scraped before anything was reviewed, so the cancellation took the lot. Streaming means
         a run that is cut short keeps everything it had already finished.
         """
+        targets = self.plan(brands, platform_filter, brand_filter)
         done = 0
         with sync_playwright() as pw:
             launch_kwargs = dict(headless=bool(self.run_cfg.get("headless", True)),
@@ -698,18 +715,17 @@ class Scraper:
                             chromium_path)
             browser = pw.chromium.launch(**launch_kwargs)
             try:
-                for brand in brands:
-                    if brand_filter and brand["name"].lower() != brand_filter.lower():
-                        continue
-                    for platform, handle in (brand.get("handles") or {}).items():
-                        if platform_filter and platform.lower() != platform_filter.lower():
-                            continue
-                        if platform not in self.platforms or not handle:
-                            continue
-                        if done:  # no wait before the very first profile
-                            _pace(self.run_cfg.get("pause_between_profiles"), f"{brand['name']} on {platform}")
-                        done += 1
-                        yield self._scrape_target(browser, brand["name"], platform, str(handle))
+                for name, platform, handle in targets:
+                    # Checked before a target is started, never in the middle of one: a target
+                    # abandoned halfway is the thing the job timeout already does badly.
+                    if should_stop and should_stop():
+                        log.warning("run budget reached; stopping before %s on %s (%d of %d done)",
+                                    name, platform, done, len(targets))
+                        return
+                    if done:  # no wait before the very first profile
+                        _pace(self.run_cfg.get("pause_between_profiles"), f"{name} on {platform}")
+                    done += 1
+                    yield self._scrape_target(browser, name, platform, handle)
             finally:
                 browser.close()
 

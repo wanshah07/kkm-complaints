@@ -189,7 +189,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     # scraped. The alternative cost a three-hour run: everything was scraped first, the job
     # timeout cut in with one target left, and not a single post had been reviewed or filed.
     scraper = Scraper(cfg, os.path.join(run_dir, "screenshots"))
-    results = scraper.iter_run(brands, platform_filter=args.platform, brand_filter=args.brand)
+    planned = scraper.plan(brands, platform_filter=args.platform, brand_filter=args.brand)
+    budget_min = float(run_cfg.get("max_run_minutes") or 0)
+    deadline = (time.time() + budget_min * 60) if budget_min > 0 else None
+    if deadline:
+        log.info("%d target(s) planned; budget %.0f min, so the run stops starting new targets at %s MYT",
+                 len(planned), budget_min,
+                 datetime.fromtimestamp(deadline, MYT).strftime("%H:%M"))
+    results = scraper.iter_run(brands, platform_filter=args.platform, brand_filter=args.brand,
+                               should_stop=(lambda: deadline is not None and time.time() >= deadline))
+    reached: set = set()
 
     hints = {b["name"]: b.get("product_hints", []) for b in brands}
     types = {b["name"]: b.get("type", "") for b in brands}
@@ -247,6 +256,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     try:
         for tr in results:
+            reached.add((tr.brand, tr.platform))
             report["targets"].append({"brand": tr.brand, "platform": tr.platform, "profile": tr.profile_url,
                                       "posts": len(tr.posts), "error": tr.error})
             for post in tr.posts:
@@ -362,6 +372,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         log.exception("sweep stopped early")
         report["errors"].append(f"sweep stopped early: {e}")
         _file_target()
+
+    missed = [{"brand": b, "platform": p} for b, p, _ in planned if (b, p) not in reached]
+    if missed:
+        report["not_reached"] = missed
+        log.warning("%d of %d target(s) not reached this run; the next run picks them up",
+                    len(missed), len(planned))
 
     spend["usd"] = round(spend["usd"], 4)
     rate = float(run_cfg.get("usd_to_myr") or 0)
@@ -490,6 +506,13 @@ def _print_summary(report: dict) -> None:
             d = r["a"]
             print(f"    = agree  {d['verdict']} ({d['confidence']} / {r['b']['confidence']})  {r['url']}")
         print("  Adjudicate the splits yourself — the reviewers do not settle each other.")
+    if report.get("not_reached"):
+        missed = report["not_reached"]
+        print(f"\n  --- not reached this run ({len(missed)}) ---")
+        print("  The run stopped on its time budget before these. Run again to pick them up;")
+        print("  with the Reviewed ledger deployed, what was already done is skipped.")
+        for m in missed:
+            print(f"    · {m['brand']:<24} {m['platform']}")
     if report.get("insert"):
         print(f"  sheet insert: {report['insert'].get('inserted')} new, {len(report['insert'].get('duplicates', []))} duplicate(s)")
     sp = report.get("spend") or {}

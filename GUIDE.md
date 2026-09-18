@@ -137,6 +137,33 @@ The order within a target is still insert first, ledger second: a post is not ma
 
 **This does not raise the ceiling.** A list too long for 180 minutes still gets cut off; you just keep what was done and can run the remainder separately. Watch the run summary for which targets appear — anything missing from the list was never reached.
 
+### The two limits, and which one you want to hit
+
+| Limit | Where | What happens |
+|---|---|---|
+| `timeout-minutes: 180` | `.github/workflows/scraper.yml` | GitHub **kills** the job. Mid-post, no summary, no report, the target in flight wasted. |
+| `max_run_minutes: 160` | `run:` in `config.yaml` | The run **stops itself** between targets, files everything, prints the summary and lists what it did not reach. |
+
+The soft budget exists so the hard ceiling is never the thing that ends a run. It is checked **before a target starts**, never inside one, so a target is either done properly or not begun. The 20-minute gap is deliberate: enough for the target in flight to finish and file.
+
+At the start of a run:
+
+```
+57 target(s) planned; budget 160 min, so the run stops starting new targets at 02:49 MYT
+```
+
+and at the end, if it ran out:
+
+```
+  --- not reached this run (12) ---
+  The run stopped on its time budget before these. Run again to pick them up;
+  with the Reviewed ledger deployed, what was already done is skipped.
+    · Dr Nurulain            Instagram
+    · dr.yeongbin            Instagram
+```
+
+Raise `max_run_minutes` only together with the workflow's `timeout-minutes`, and keep the gap.
+
 ### How many targets fit in one run
 
 Roughly **3 minutes per brand × platform**, most of it the deliberate pacing (section 5). Ten targets is about 30 minutes. The workflow stops at 180 minutes, so keep it under about 50 targets, or cut `max_posts_per_profile` / the `pause_*` ranges to fit more. Reviewer cost runs about USD 0.007 per post examined.
