@@ -68,6 +68,12 @@ class TargetResult:
     profile_url: str
     posts: List[Post] = field(default_factory=list)
     error: Optional[str] = None
+    # Set when the sheet's handle is not the one the account actually answers to. The run keeps
+    # going on the handle it landed on; the summary says so, so the Targets tab can be corrected.
+    renamed_to: Optional[str] = None
+    # Set when no redirect happened but most of the grid belongs to one other account, which is
+    # what a stale handle looks like when the platform does not redirect.
+    drift_note: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +147,9 @@ _OWNER_PREFIX = re.compile(
 
 
 _IG_PATH_OWNER = re.compile(r"^/([a-z0-9_.]+)/(?:p|reel|tv)/", re.I)
+_PROFILE_PATH = re.compile(r"^/@?([A-Za-z0-9_.\-]+)/?$")
+_NOT_A_HANDLE = {"explore", "accounts", "reels", "p", "login", "directory", "pages",
+                 "profile.php", "people", "search", "home.php", "watch"}
 
 
 def _owner_from_url(url: str, platform: str) -> Optional[str]:
@@ -178,9 +187,57 @@ def _extract_owner(page: Page, platform: str) -> Tuple[Optional[str], bool]:
     return None, False
 
 
+def _landed_handle(url: str) -> Optional[str]:
+    """
+    The handle the browser actually ended up on.
+
+    Instagram redirects an old profile path to the account's current one, so a renamed doctor is
+    still reachable by the handle in the sheet - but every post then sits under the NEW handle and
+    the per-post owner check reads the whole grid as somebody else's. Run 35411935644 threw away
+    all of @drjaynelim_'s posts that way, because the Targets row still said jaynelim_.
+    """
+    seg = _PROFILE_PATH.match(urlsplit(url).path or "")
+    if not seg:
+        return None
+    h = seg.group(1)
+    return None if h.lower() in _NOT_A_HANDLE else h
+
+
 def _handles_match(a: Optional[str], b: Optional[str]) -> bool:
     norm = lambda s: re.sub(r"[._]", "", (s or "").lower())
     return bool(a and b) and norm(a) == norm(b)
+
+
+_OFF_ACCOUNT = re.compile(r"different account: post is by @([A-Za-z0-9_.]+)")
+
+
+def _drift_note(posts: List["Post"], handle: str) -> Optional[str]:
+    """
+    A stale handle on a platform that does not redirect looks like this: the profile opens, but
+    most of what the grid offers belongs to one other account.
+
+    A doctor sharing a clinic's post is the ordinary case and must not be reported - across the
+    18-19 Sep sweep that ran at one or two of six posts. Half the grid, all pointing at the same
+    account, is a different shape, and that is what this reports. It reports; it never reassigns.
+    """
+    if not posts:
+        return None
+    owners: Dict[str, int] = {}
+    for post in posts:
+        if not getattr(post, "not_owned", False):
+            continue
+        for err in post.errors:
+            m = _OFF_ACCOUNT.search(err)
+            if m:
+                owners[m.group(1)] = owners.get(m.group(1), 0) + 1
+                break
+    if not owners:
+        return None
+    top, n = max(owners.items(), key=lambda kv: kv[1])
+    if n * 2 < len(posts):
+        return None
+    return (f"{n} of {len(posts)} posts on @{handle}'s grid belong to @{top} — "
+            f"check whether the Targets row should read @{top}")
 
 
 def _dismiss_dialogs(page: Page) -> None:
@@ -742,6 +799,14 @@ class Scraper:
             page.goto(profile_url, wait_until="domcontentloaded", timeout=45000)
             page.wait_for_timeout(2500)
             _dismiss_dialogs(page)
+            landed = _landed_handle(page.url)
+            if landed and not _handles_match(landed, handle):
+                # The account answers to a different handle now. Its posts are still its own, so
+                # judge them - but say so loudly, because the sheet is what needs correcting.
+                res.renamed_to = landed
+                log.warning("[%s/%s] profile redirects to @%s; reviewing as @%s. "
+                            "Correct the Targets row to @%s.", brand, platform, landed, landed, landed)
+                handle = landed
             if _is_login_wall(page):
                 res.error = "login wall (provide PW_STORAGE_STATE_B64)"
                 log.warning("[%s/%s] %s", brand, platform, res.error)
@@ -816,6 +881,10 @@ class Scraper:
                 if i:  # no wait before the first post of a profile
                     _pace(self.run_cfg.get("pause_between_posts"), "the next post")
                 res.posts.append(self._scrape_post(ctx, brand, platform, link, handle=handle))
+            if res.renamed_to is None:
+                res.drift_note = _drift_note(res.posts, handle)
+                if res.drift_note:
+                    log.warning("[%s/%s] %s", brand, platform, res.drift_note)
         except PWTimeout as e:
             res.error = f"timeout: {e}"
             log.error("[%s/%s] %s", brand, platform, res.error)

@@ -177,7 +177,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     run_dir = os.path.join(args.out, started.strftime("%Y%m%d_%H%M%S"))
     os.makedirs(run_dir, exist_ok=True)
     report: Dict = {"started_myt": started.isoformat(), "targets": [], "pushed": [], "skipped": [],
-                    "errors": [], "comparison": [], "flagged": []}
+                    "errors": [], "comparison": [], "flagged": [], "handle_checks": []}
 
     # --- review-only mode (no browser, no webhook) ---------------------------
     if args.review_only:
@@ -322,6 +322,17 @@ def main(argv: Optional[List[str]] = None) -> int:
             reached.add((tr.brand, tr.platform))
             report["targets"].append({"brand": tr.brand, "platform": tr.platform, "profile": tr.profile_url,
                                       "posts": len(tr.posts), "error": tr.error})
+            # A handle the sheet has wrong costs the whole target, silently, every run. Collect it
+            # so the summary names it instead of leaving it to be found in a log.
+            if tr.renamed_to:
+                report["handle_checks"].append(
+                    {"brand": tr.brand, "platform": tr.platform, "kind": "renamed",
+                     "suggest": tr.renamed_to,
+                     "note": f"profile redirects to @{tr.renamed_to}; reviewed as @{tr.renamed_to}"})
+            elif tr.drift_note:
+                report["handle_checks"].append(
+                    {"brand": tr.brand, "platform": tr.platform, "kind": "drift",
+                     "suggest": None, "note": tr.drift_note})
             for post in tr.posts:
                 cu = canonical_url(post.url)
                 if getattr(post, "not_owned", False):
@@ -569,6 +580,14 @@ def _print_summary(report: dict) -> None:
             d = r["a"]
             print(f"    = agree  {d['verdict']} ({d['confidence']} / {r['b']['confidence']})  {r['url']}")
         print("  Adjudicate the splits yourself — the reviewers do not settle each other.")
+    if report.get("handle_checks"):
+        checks = report["handle_checks"]
+        print(f"\n  --- handles to check in the Targets tab ({len(checks)}) ---")
+        print("  A handle the sheet has wrong costs that target every run, so it is reported here")
+        print("  rather than left in the log. Nothing is changed for you: the sheet is yours.")
+        for c in checks:
+            mark = "RENAMED" if c["kind"] == "renamed" else "drift  "
+            print(f"    {mark}  {c['brand']:<24}{c['platform']:<11}{c['note']}")
     if report.get("not_reached"):
         missed = report["not_reached"]
         print(f"\n  --- not reached this run ({len(missed)}) ---")

@@ -95,6 +95,24 @@ Three things worth knowing:
 
 The `Reviewed` tab builds itself on first use; `setup()` does not need re-running. Until it is deployed the run logs `no reviewed-post ledger on this deployment` and carries on exactly as before, re-reviewing clean posts. Nothing breaks; it just keeps costing.
 
+### When a handle in the sheet is wrong
+
+A wrong handle costs the whole target, quietly, every run — the profile opens, the grid loads, and every post is discarded as somebody else's. Run `35411935644` lost all of `@drjaynelim_`'s posts that way because the Targets row still read `jaynelim_`. Two different failures, both now reported in the run summary under **handles to check in the Targets tab**:
+
+| Reported as | What happened | What the run does |
+|---|---|---|
+| `RENAMED` | The profile URL redirected: the account answers to a different handle now. | Follows the redirect and **reviews the posts normally**, under the handle it landed on. Nothing is lost. |
+| `drift` | No redirect, but **half or more** of the grid belongs to **one** other account. | Reports it. Nothing is reviewed under the other handle, nothing is reassigned. |
+
+**Neither one edits your sheet.** The Targets tab is yours; the run tells you which row to change and why.
+
+A doctor sharing a clinic's or a brand's post is the ordinary case and is never reported — across the 18–19 September sweep that ran at one or two of six posts per profile. The threshold is deliberately set above that.
+
+Two things that are *not* handle problems, and that no amount of editing will fix:
+
+- **"profile is private to this account"** — the handle is right; the account has not accepted us. Nothing to change in the sheet.
+- **"page shows a login prompt"** (Facebook) — the platform is blocking the runner's IP, not rejecting the handle.
+
 ### Watching a doctor or KOL account
 
 A cosmetic advertisement carried by a doctor is a Part 10 s.4.1 problem in itself, so these accounts are worth watching — but the row has to say what it is.
