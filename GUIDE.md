@@ -144,10 +144,33 @@ The order within a target is still insert first, ledger second: a post is not ma
 1. **Batch by target type.** `only_type=brand` first — the brands are the commercial priority and sit at the end of the Targets tab, so an unbatched run reaches them last and the time budget cuts them first. Then `only_type=person` for the doctors and KOLs, as many runs as it takes.
 2. **Let each run stop itself.** `max_run_minutes: 160` ends it between targets, clear of GitHub's 180-minute kill. A killed run loses the target in flight and prints nothing.
 3. **File per target, never at the end.** Each target is scraped, reviewed and pushed before the next begins, so a run that stops early keeps everything it finished.
-4. **Let the ledger carry the state.** The Reviewed tab records every post judged, so the next run resumes rather than repeating. No manual bookkeeping about who was covered.
+4. **Let the ledger carry the state.** The Reviewed tab records every post judged, so the next run resumes rather than repeating. It also sets the running order: a target we have never judged a post from goes to the front of the list. No manual bookkeeping about who was covered.
 5. **Read the not-reached list, then run again.** Repeat until it comes back empty. That is the definition of a completed sweep.
 
 A hundred-odd targets takes three or four runs. Each one is unattended: fire it, read the summary, fire the next.
+
+### Why each run starts where the last one stopped
+
+The ledger saves the *review* cost, not the *visit* cost. Skipping a judged post still means opening the profile and reading its post grid first — roughly 2.5 minutes a target with the pacing on. So while every run walked the sheet from row 1, a sweep barely moved:
+
+| Run | Targets reached | Still unreached | Net progress |
+|---|---|---|---|
+| 35370699150 | 41 of 97 | 56 | — |
+| 35387245421 | 45 of 97 | 52 | **4 targets in 2h 47m** |
+
+Two hours and twenty minutes of each run went on re-confirming work already done. At four targets a run, fifty-two remaining targets is thirteen more runs.
+
+**The fix is the ledger read we already do.** Every judged post URL carries its handle, so the handle *is* the cursor. Before planning, the run sorts the Targets rows: any row whose handles have never appeared in a judged URL goes first, everything else keeps its order behind them. The log says so on every run:
+
+```
+sweep order: 52 of 97 target(s) have no judged post yet and go first
+```
+
+Nothing new is stored — no sheet column, no Apps Script change, no state file. Consequences worth knowing:
+
+- A row with **several handles** counts as done only when *every* one of them has been judged. A doctor on Instagram and Facebook stays at the front until both have been seen.
+- A target that yields **nothing reviewable** — private, wrong handle, every post outside the date window — never enters the ledger, so it stays at the front run after run. That is deliberate. It costs one profile open, and it is exactly the account you want to re-check in case it posts.
+- On a **dry run** there is no ledger to read, so the order is the sheet's own.
 
 ### Sweeping a long watchlist in batches
 

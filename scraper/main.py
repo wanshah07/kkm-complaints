@@ -21,10 +21,11 @@ import argparse
 import json
 import logging
 import os
+import re
 import sys
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
@@ -107,6 +108,47 @@ def build_record(post, verdict: dict, run_cfg: dict, drive: Optional[DriveUpload
     fname = f"{post.brand}_{post.platform}_{now_my.strftime('%Y%m%d')}_{abs(hash(post.url)) % 10_000_000}.jpg".replace(" ", "_")
     attach_screenshot(rec, post.screenshot_path, run_cfg, drive, fname)
     return rec
+
+
+_HANDLE_IN_URL = re.compile(r"(?:instagram\.com|threads\.net|facebook\.com)/@?([A-Za-z0-9_.\-]+)", re.I)
+
+
+def sweep_order(brands: List[dict], known_urls) -> Tuple[List[dict], int]:
+    """
+    Targets we have never judged a post from, first.
+
+    The watchlist is longer than one run's budget, so a sweep is several runs. Until now every
+    run walked the sheet from row 1, and the ledger only saved the *review* cost: the profile
+    still had to be opened and its post grid read before we could tell the posts were already
+    judged. Run 35370699150 reached 41 of 97 targets, run 35387245421 reached 45 - four
+    targets of progress for 2h47m, because the first 2h20m went on re-walking what was done.
+
+    The ledger already knows which handles we have judged a post from, so the handle is the
+    cursor: rows with an unjudged handle go to the front, the rest keep their order behind
+    them. Successive runs then drain the tail instead of restarting at the top, and no new
+    state, sheet column or Apps Script change is needed.
+
+    A target that yields nothing reviewable - private, wrong handle, every post out of the date
+    window - never enters the ledger and so stays at the front. That is deliberate: it costs one
+    profile open, and it is exactly the target we want to look at again in case it posts.
+    """
+    judged = set()
+    for u in known_urls:
+        m = _HANDLE_IN_URL.search(u or "")
+        if m:
+            judged.add(m.group(1).lower())
+
+    def already_judged(b: dict) -> int:
+        handles = [str(h).lstrip("@").lower()
+                   for h in (b.get("handles") or {}).values() if h]
+        # A row with no usable handle sorts as judged: plan() skips it anyway, and counting it
+        # as fresh would overstate how much of the list is actually still to do.
+        return 0 if any(h not in judged for h in handles) else 1
+
+    # Stable, so the sheet's own order survives inside each group.
+    ordered = sorted(brands, key=already_judged)
+    fresh = sum(1 for b in brands if not already_judged(b))
+    return ordered, fresh
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -203,6 +245,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Streamed, one target at a time, and each is reviewed and filed before the next is
     # scraped. The alternative cost a three-hour run: everything was scraped first, the job
     # timeout cut in with one target left, and not a single post had been reviewed or filed.
+    if known:
+        brands, fresh = sweep_order(brands, known)
+        log.info("sweep order: %d of %d target(s) have no judged post yet and go first",
+                 fresh, len(brands))
+        report["never_judged"] = fresh
+
     scraper = Scraper(cfg, os.path.join(run_dir, "screenshots"))
     planned = scraper.plan(brands, platform_filter=args.platform, brand_filter=args.brand)
     budget_min = float(run_cfg.get("max_run_minutes") or 0)
