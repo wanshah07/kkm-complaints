@@ -27,7 +27,7 @@ Everything you do week to week, and everything you change without touching code.
 
 ## 1. The weekly routine
 
-The scraper runs Friday 23:30 MYT. Saturday morning, open the dashboard.
+The sweep runs Friday 23:30 MYT, driven by the weekly routine (section 6). Saturday morning, open the dashboard.
 
 1. **New** rows are this week's findings. Click one. It moves to **In-Progress** automatically, so you never lose your place.
 2. Read the **Violation Reason**. It quotes each failing claim and cites the Annex I part and clause. This is the reviewer's work, not yours to redo, but it is a screen and not a verdict.
@@ -455,11 +455,14 @@ reach the model, because the regex pre-screen found nothing, cost zero and are n
 
 ## 6. The schedule
 
-`.github/workflows/scraper.yml`
+**The workflow has no cron. It is dispatch-only.** The weekly sweep is driven by the **KKM weekly cosmetic ads sweep** routine, which fires Friday 23:30 MYT and then dispatches the workflow in batches — `only_type=brand` first, then `only_type=person` run after run until nothing is unreached — reporting each batch as it lands.
 
-- **Time**: `cron: '30 15 * * 5'` is UTC, which is Friday 23:30 MYT. GitHub only accepts UTC, so subtract 8 hours from the Malaysian time you want.
-- **Skip a week**: add the date to `SKIP_DATES` in the *Skip suppressed scheduled dates* step, space-separated, `YYYY-MM-DD`, Malaysian date. Manual runs are never affected. Entries expire by themselves.
-- **Dormancy**: GitHub pauses schedules in a repository with no commits for 60 days. Any push, or one manual run, re-arms it.
+**Why the cron went** (Wan, 19 Sep 2026). A cron fires one unbatched run that walks the whole list, so it could never finish the sweep, and it competed for the same concurrency slot as the batch that had real work to do. Run `35381137970` is the worked example: it held the runner for 2h 42m, re-walked 51 already-judged targets, filed nothing and spent nothing, while the next batch sat queued behind it the whole time.
+
+- **Change the time or the cadence**: edit the routine, not this repo. Twice a month, fortnightly, a different day — one edit to its cron.
+- **Skip a week**: there is nothing to suppress. Disable the routine, or just don't run it.
+- **Dormancy**: no longer a concern. GitHub pauses *schedules* in a quiet repository; a dispatch is unaffected.
+- **A one-off run** is still **Actions → KKM complaint scraper → Run workflow**, exactly as in section 7.
 
 ---
 

@@ -6,7 +6,7 @@ Cosmetic Advertisement), with every non-compliant post landed in a Google Sheet 
 mirrors KKM's *Pelaporan Aduan Kosmetik Bernotifikasi* form, ready to submit.
 
 ```
-                      Friday 23:30 MYT (GitHub Actions cron '30 15 * * 5')
+        Friday 23:30 MYT — the weekly routine dispatches this workflow in batches
                                         │
    config.yaml ──▶ scraper/main.py ── Playwright ──▶ Instagram · Facebook · Threads
    (brands, handles)      │                            (profile → newest N posts → text + screenshot)
@@ -27,7 +27,7 @@ mirrors KKM's *Pelaporan Aduan Kosmetik Bernotifikasi* form, ready to submit.
 | A | `apps-script/Code.gs`, `appsscript.json` | Sheet initialiser, `doPost` webhook, `doGet` UI + JSON API, `api*` RPC for the dashboard |
 | B | `apps-script/Index.html` | Tailwind dashboard: stats, filters, table → drawer (auto In-Progress), KKM form fields, manual entry with screenshot upload |
 | C | `scraper/` | Playwright scraper, NPRA rule engine, LLM reviewer, Drive/webhook client |
-| D | `.github/workflows/scraper.yml` | Friday 23:30 MYT cron, manual dispatch with dry-run / brand / platform |
+| D | `.github/workflows/scraper.yml` | Dispatch-only (no cron); inputs dry-run / brand / platform / only-type |
 | E | `web/index.html`, `.github/workflows/pages.yml` | The same dashboard as a static page on GitHub Pages under your own domain, talking to the Apps Script JSON API |
 
 ## Sheet columns (the contract)
@@ -132,17 +132,20 @@ and carries on with the rest.
 payload and the Apps Script files it in Drive (no extra credentials). `drive_api` uploads
 with a service account instead; `none` skips screenshots.
 
-### 3. Cron (Module D)
+### 3. Scheduling (Module D)
 
-**Skipping a scheduled week.** `.github/workflows/scraper.yml` has a `SKIP_DATES` list in the
-*Skip suppressed scheduled dates* step: a space-separated list of MYT dates (`YYYY-MM-DD`) on which
-the Friday cron does nothing. Manual *Run workflow* is never affected. Entries expire on their own
-once the date passes.
+**There is no cron in the workflow** (Wan, 19 Sep 2026). It is dispatch-only. The weekly sweep is
+driven by the **KKM weekly cosmetic ads sweep** routine, which fires Friday 23:30 MYT and then
+dispatches this workflow in batches — `only_type=brand` first, then `only_type=person` until nothing
+is unreached. A cron fired one unbatched run that could never finish a watchlist this long, and it
+competed for the same concurrency slot as the batch that had work to do.
+
+**Changing the time, the cadence, or skipping a week** is an edit to that routine, not to this repo.
 
 GitHub Actions: add the secrets listed at the top of
 `.github/workflows/scraper.yml` under **Settings → Secrets and variables →
-Actions**. The schedule is `30 15 * * 5` (UTC) = Friday 23:30 MYT. Use *Run workflow* for
-a manual or dry run. Each run uploads `out/` (report + screenshots) as an artefact for 30 days.
+Actions**. There is no cron: the weekly routine dispatches the workflow. Use *Run workflow* for
+a manual, batched or dry run. Each run uploads `out/` (report + screenshots) as an artefact for 30 days.
 
 **Windows PC alternative (Option B, residential IP, your own logged-in browser session):**
 
