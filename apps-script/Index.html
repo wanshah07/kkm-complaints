@@ -271,7 +271,7 @@ const STATUS_STYLE = {
 const ARCHIVED = 'Archived';
 // state.rows is the working list; the archive is fetched only when asked for, so a year of
 // closed complaints never slows the page that Wan actually works in.
-const state = { rows: [], archived: null, stats: null, lookups: null, statuses: [], filter: { status: '', brand: '', platform: '', q: '' }, current: null, questUrl: '' };
+const state = { rows: [], archived: null, deep: null, stats: null, lookups: null, statuses: [], filter: { status: '', brand: '', platform: '', q: '' }, current: null, questUrl: '' };
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -376,8 +376,32 @@ async function selectStatus(status) {
   renderAll();
 }
 
+// The rows held in the page carry only the first 300 characters of the caption and the
+// reviewer's reasoning, and never the archive. When a query finds nothing in what is loaded,
+// ask the sheet - it reads every field of every row, closed files included. Debounced, and
+// only on a miss, so ordinary typing still costs nothing.
+let deepTimer = null;
+function scheduleDeepSearch() {
+  clearTimeout(deepTimer);
+  const q = state.filter.q.trim();
+  if (q.length < 3 || filtered().length > 0) return;
+  deepTimer = setTimeout(() => runDeepSearch(q), 450);
+}
+
+async function runDeepSearch(q) {
+  if (state.filter.q.trim() !== q) return;          // moved on while we waited
+  $('count').textContent = 'searching the full log…';
+  try {
+    const r = await rpc('apiList', { q });
+    if (state.filter.q.trim() !== q) return;
+    state.deep = { q, rows: r.rows };
+    renderTable();
+  } catch (e) { toast('Search failed: ' + e.message); renderTable(); }
+}
+
 function filtered() {
   const f = state.filter; const q = f.q.trim().toLowerCase();
+  if (state.deep && state.deep.q === q && q) return state.deep.rows;
   const src = f.status === ARCHIVED ? (state.archived || []) : state.rows;
   return src.filter(r =>
     (f.status === ARCHIVED || !f.status || r['Status'] === f.status) &&
@@ -389,8 +413,13 @@ function filtered() {
 function renderTable() {
   $('loading').classList.add('hidden');
   const rows = filtered();
-  const total = state.filter.status === ARCHIVED ? (state.archived || []).length : state.rows.length;
-  $('count').textContent = `${rows.length} of ${total}`;
+  const q = state.filter.q.trim();
+  if (state.deep && state.deep.q === q && q) {
+    $('count').textContent = `${rows.length} found in the full log`;
+  } else {
+    const total = state.filter.status === ARCHIVED ? (state.archived || []).length : state.rows.length;
+    $('count').textContent = `${rows.length} of ${total}`;
+  }
   $('empty').classList.toggle('hidden', rows.length > 0);
   $('rows').innerHTML = rows.map(r => `
     <tr data-id="${esc(r['ID'])}" class="row-hover cursor-pointer">
@@ -451,10 +480,13 @@ function fillDrawer(r) {
   const st = $('dStatus'); st.textContent = r['Status']; st.className = 'badge ' + (STATUS_STYLE[r['Status']] || '');
   const shot = $('dShot');
   shot.innerHTML = r['Screenshot Link']
-    ? `<a href="${esc(r['Screenshot Link'])}" target="_blank" rel="noopener"><img src="${esc(driveThumb(r['Screenshot Link']))}" alt="screenshot" class="w-full max-h-[420px] object-contain bg-white" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'p-4 text-sm',textContent:'Preview unavailable — open the link.'}))"></a>`
+    ? `<a href="${esc(r['Screenshot Link'])}" target="_blank" rel="noopener"><img src="${esc(driveThumb(r['Screenshot Link']))}" alt="screenshot" loading="lazy" decoding="async" class="w-full max-h-[420px] object-contain bg-white" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'p-4 text-sm',textContent:'Preview unavailable — open the link.'}))"></a>`
     : `<div class="p-4 text-sm text-slate-500">No screenshot.</div>`;
   $('dUrl').textContent = r['Post URL']; $('dUrl').href = r['Post URL'];
-  $('dText').textContent = r['Extracted Text'] || '—';
+  // The list payload carries only the first 300 characters. apiOpen is already in flight and
+  // will refill this with the whole caption, so say so rather than showing a clipped one as
+  // if it were complete.
+  $('dText').textContent = r._truncated ? (r['Extracted Text'] || '') + ' …' : (r['Extracted Text'] || '—');
   $('eViolationType').value = r['Violation Type'] || '';
   if ($('eViolationType').value !== (r['Violation Type'] || '')) { const o = document.createElement('option'); o.value = o.textContent = r['Violation Type']; $('eViolationType').appendChild(o); $('eViolationType').value = r['Violation Type']; }
   $('eViolationReason').value = r['Violation Reason'] || '';
@@ -562,7 +594,7 @@ document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => showMod
 $('manualForm').onsubmit = submitManual;
 $('fBrand').onchange = e => { state.filter.brand = e.target.value; renderTable(); };
 $('fPlatform').onchange = e => { state.filter.platform = e.target.value; renderTable(); };
-$('fSearch').oninput = e => { state.filter.q = e.target.value; renderTable(); };
+$('fSearch').oninput = e => { state.filter.q = e.target.value; renderTable(); scheduleDeepSearch(); };
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { showDrawer(false); showModal(false); } });
 setInterval(() => { if ($('drawer').classList.contains('translate-x-full') && $('modal').classList.contains('hidden')) refresh(true); }, 180000);
 boot();

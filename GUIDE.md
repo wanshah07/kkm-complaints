@@ -37,6 +37,18 @@ The sweep runs Friday 23:30 MYT, driven by the weekly routine (section 6). Satur
 6. Click **Copy Deskripsi**, then **Open KKM form**, and submit.
 7. Back in the dashboard, click **Mark Complete**. Today's date is stamped into **Tarikh Melapor**.
 
+### What the dashboard loads, and what it doesn't
+
+The page used to fetch every field of every row on boot. Two of them dominate: **Extracted Text** (whole captions, routinely 500–2000 characters) and **Violation Reason** (the reviewer's full reasoning, often past 1000). Neither is read in full by the table — the reason shows two clamped lines, the caption isn't shown at all — so most of the payload was bytes nobody looked at, growing with every complaint filed.
+
+Both are now **cut to 300 characters in the list and fetched whole when you open a row**. On a heavy row that is an 83% smaller payload. The drawer is unaffected: opening a row already calls `apiOpen`, which returns the full record, and a clipped caption shows a trailing `…` so it never passes for the whole thing.
+
+**Search still reaches the parts that were cut.** Typing filters what the page holds, as before. When that finds nothing and the query is three characters or more, the sheet is searched directly — every field, every row, **including the archive** — and the count line says `N found in the full log`. It is debounced and only fires on a miss, so ordinary typing costs nothing. That is strictly more than the old search could do: it never saw archived rows at all.
+
+Screenshots in the drawer load with `loading="lazy"`, so a Drive fetch no longer blocks the drawer opening.
+
+**If the log grows past a few hundred live rows**, the next lever is `MAX_ROWS_RETURNED` in `Code.gs` — boot with a page and fetch the rest on scroll. Not needed yet.
+
 ### When KKM replies
 
 Paste NPRA's reply into **KKM Feedback** — in the dashboard drawer, or straight into the column in the sheet, whichever is to hand. The moment that cell has anything in it, the row:

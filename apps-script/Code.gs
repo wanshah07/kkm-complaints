@@ -64,6 +64,27 @@ var STATUS_FLOW = { 'New': 'In-Progress', 'In-Progress': 'Complete', 'Complete':
 // reply not yet in. Clearing the feedback cell brings the row straight back into the list.
 var ARCHIVED_FILTER = 'Archived';
 
+// The list payload used to carry every field of every row, including the two that dominate
+// it: 'Extracted Text' (whole captions, routinely 500-2000 characters) and 'Violation Reason'
+// (the reviewer's full reasoning, often past 1000). Neither is read in full by the table - the
+// reason renders two clamped lines and the caption is not shown at all - so the boot response
+// was mostly bytes nobody looked at, growing linearly with the complaint log.
+//
+// They are truncated rather than dropped so that searching still finds things: Instagram
+// captions front-load the product name and the claim. A match deeper than this is caught by
+// the server-side search below, so nothing the search box promises is quietly lost.
+var LIST_FIELD_LIMIT = 300;
+var LIST_TRUNCATED_FIELDS = ['Extracted Text', 'Violation Reason'];
+
+function listRowToObject_(row) {
+  var o = rowToObject_(row);
+  LIST_TRUNCATED_FIELDS.forEach(function (h) {
+    var v = String(o[h] || '');
+    if (v.length > LIST_FIELD_LIMIT) { o[h] = v.slice(0, LIST_FIELD_LIMIT); o._truncated = true; }
+  });
+  return o;
+}
+
 function isArchived_(rowVals) {
   return String(rowVals[COL['KKM Feedback']] || '').trim() !== '';
 }
@@ -397,7 +418,7 @@ function handleApi_(action, body, p) {
                             return markSeen_(body.entries || []);
       // --- dashboard (DASHBOARD_KEY) or scraper ---
       case 'list':          if (!viewer) return deny;
-                            return { ok: true, rows: listRecords_(p.status || body.status, p.brand || body.brand, p.platform || body.platform), stats: stats_() };
+                            return { ok: true, rows: listRecords_(p.status || body.status, p.brand || body.brand, p.platform || body.platform, p.q || body.q), stats: stats_() };
       case 'get':           if (!viewer) return deny;
                             return { ok: true, row: getRecord_(p.id || body.id) };
       case 'stats':         if (!viewer) return deny;
@@ -577,7 +598,7 @@ function apiBootstrap(key) {
 function apiList(key, filters) {
   requireViewer_(key);
   filters = filters || {};
-  return { rows: listRecords_(filters.status, filters.brand, filters.platform), stats: stats_() };
+  return { rows: listRecords_(filters.status, filters.brand, filters.platform, filters.q), stats: stats_() };
 }
 
 function apiOpen(key, id) {
@@ -744,24 +765,40 @@ function updateStatus_(id, status, remarks) {
   });
 }
 
-function listRecords_(status, brand, platform) {
+function listRecords_(status, brand, platform, q) {
   var sheet = sheet_();
   var last = sheet.getLastRow();
   if (last < 2) return [];
   var vals = sheet.getRange(2, 1, last - 1, HEADERS.length).getValues();
+  var query = String(q || '').trim().toLowerCase();
   var out = [];
   for (var i = vals.length - 1; i >= 0; i--) { // newest first
     var row = vals[i];
     if (!row[COL['ID']]) continue;
-    if (status === ARCHIVED_FILTER) { if (!isArchived_(row)) continue; }
-    else if (isArchived_(row)) continue;              // closed files stay out of the working list
+    // A search reaches everywhere, archive included: not finding a complaint you know you
+    // filed is worse than a longer list. Without one, closed files stay out of the way.
+    if (query) { if (!rowMatches_(row, query)) continue; }
+    else if (status === ARCHIVED_FILTER) { if (!isArchived_(row)) continue; }
+    else if (isArchived_(row)) continue;
     else if (status && row[COL['Status']] !== status) continue;
     if (brand && row[COL['Brand']] !== brand) continue;
     if (platform && row[COL['Platform']] !== platform) continue;
-    out.push(rowToObject_(row));
+    // A search hit is opened and read, so it is worth its full text; a listed row is not.
+    out.push(query ? rowToObject_(row) : listRowToObject_(row));
     if (out.length >= MAX_ROWS_RETURNED) break;
   }
   return out;
+}
+
+var SEARCH_FIELDS = ['Extracted Text', 'Nama Kosmetik', 'Violation Reason', 'Violation Type',
+                     'Post URL', 'Remarks', 'ID', 'KKM Feedback', 'Brand', 'Nombor Notifikasi'];
+
+function rowMatches_(row, query) {
+  for (var i = 0; i < SEARCH_FIELDS.length; i++) {
+    var v = row[COL[SEARCH_FIELDS[i]]];
+    if (v && String(v).toLowerCase().indexOf(query) >= 0) return true;
+  }
+  return false;
 }
 
 function getRecord_(id) {
