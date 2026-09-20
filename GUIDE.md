@@ -37,6 +37,29 @@ The sweep runs Friday 23:30 MYT, driven by the weekly routine (section 6). Satur
 6. Click **Copy Deskripsi**, then **Open KKM form**, and submit.
 7. Back in the dashboard, click **Mark Complete**. Today's date is stamped into **Tarikh Melapor**.
 
+### When KKM replies
+
+Paste NPRA's reply into **KKM Feedback** — in the dashboard drawer, or straight into the column in the sheet, whichever is to hand. The moment that cell has anything in it, the row:
+
+1. is marked **Complete**, and
+2. gets today's date in **Tarikh Melapor** if you never filled it in, and
+3. **leaves the working list.**
+
+It is not deleted and its status is not some new invented state. It moves to the **Archived** tile and chip, where the whole closed file stays searchable. Clear the cell and the row comes straight back.
+
+**Archived is not a Status.** The four statuses are unchanged; archived simply means *KKM Feedback is not empty*. That distinction earns its keep:
+
+| | Meaning |
+|---|---|
+| **Complete** | Submitted to KKM. **Still waiting for a reply.** Stays in the list. |
+| **Archived** | KKM has replied. The file is closed. Out of the list. |
+
+So the list you open on a Saturday morning holds exactly what still needs something from you — including the ones you submitted weeks ago and never heard back on, which is precisely the set that used to get lost.
+
+**Dismissed rows are left alone.** A complaint you chose not to file is not "completed" by someone's answer, so pasting feedback onto a Dismissed row archives it without touching its status.
+
+**Both entry points behave the same.** The dashboard route runs through `updateFields_`; typing into the sheet is caught by an `onEdit` trigger that installs itself — no setup, no extra authorisation, and it writes only the two cells it needs so it can never collide with a scraper insert landing at the same moment.
+
 **Dismiss** is for false positives. The row stays for the record but stops showing as New, and its URL is remembered so it never returns.
 
 **Verdicts you will see**

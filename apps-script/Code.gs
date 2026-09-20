@@ -56,6 +56,17 @@ HEADERS.forEach(function (h, i) { COL[h] = i; });
 
 var STATUSES = ['New', 'In-Progress', 'Complete', 'Dismissed'];
 var STATUS_FLOW = { 'New': 'In-Progress', 'In-Progress': 'Complete', 'Complete': 'Complete', 'Dismissed': 'Dismissed' };
+
+// Archived is not a Status. A complaint is archived when KKM has replied - that is, when
+// 'KKM Feedback' carries anything - because at that point the file is closed and it should
+// stop competing for attention with the ones still waiting. Keeping it out of STATUSES means
+// no schema change, no migration, and 'Complete' keeps its own meaning: submitted to KKM,
+// reply not yet in. Clearing the feedback cell brings the row straight back into the list.
+var ARCHIVED_FILTER = 'Archived';
+
+function isArchived_(rowVals) {
+  return String(rowVals[COL['KKM Feedback']] || '').trim() !== '';
+}
 var JENIS_ADUAN = ['Iklan Kosmetik', 'Kualiti Kosmetik'];
 
 var DEFAULT_BRANDS = ['La Roche-Posay', 'Eucerin', 'QV', 'The Raw'];
@@ -124,6 +135,33 @@ function onOpen() {
     .addItem('Show API token + dashboard key', 'showSecrets_')
     .addItem('Rotate API token', 'rotateApiToken_')
     .addToUi();
+}
+
+function onEdit(e) {
+  // Wan often pastes NPRA's reply straight into the sheet rather than through the dashboard.
+  // This is a simple trigger, so it installs itself and runs as him - no setup, no extra
+  // authorisation. It touches only the two cells it needs, never the whole row, so it cannot
+  // collide with a scraper insert happening at the same moment.
+  try {
+    if (!e || !e.range) return;
+    var sheet = e.range.getSheet();
+    if (sheet.getName() !== SHEET_NAME) return;
+    if (e.range.getColumn() !== COL['KKM Feedback'] + 1) return;
+    var r = e.range.getRow();
+    if (r < 2) return;
+    if (String(e.range.getValue() || '').trim() === '') return;   // cleared: row returns to the list
+
+    var statusCell = sheet.getRange(r, COL['Status'] + 1);
+    if (String(statusCell.getValue()) === 'Dismissed') return;
+    if (String(statusCell.getValue()) !== 'Complete') statusCell.setValue('Complete');
+
+    var dateCell = sheet.getRange(r, COL['Tarikh Melapor'] + 1);
+    if (!dateCell.getValue()) dateCell.setValue(Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd'));
+
+    sheet.getRange(r, COL['Updated At'] + 1).setValue(nowIso_());
+  } catch (err) {
+    console.error(err);   // never let this block the edit itself
+  }
 }
 
 function showSecrets_() {
@@ -489,10 +527,26 @@ function updateFields_(id, fields) {
     Object.keys(fields || {}).forEach(function (k) {
       if (EDITABLE_FIELDS.indexOf(k) >= 0) rowVals[COL[k]] = fields[k] == null ? '' : String(fields[k]);
     });
+    closeOnFeedback_(rowVals);
     rowVals[COL['Updated At']] = nowIso_();
     sheet.getRange(r, 1, 1, HEADERS.length).setValues([rowVals]);
     return { ok: true, row: rowToObject_(rowVals) };
   });
+}
+
+function closeOnFeedback_(rowVals) {
+  // KKM has replied, so the complaint is finished: mark it Complete and, if the submission
+  // date was never filled in by hand, stamp it - a reply cannot arrive before a submission.
+  // Dismissed is left alone: a row we chose not to file is not completed by someone's answer.
+  if (!isArchived_(rowVals)) return false;
+  if (rowVals[COL['Status']] === 'Dismissed') return false;
+  var changed = false;
+  if (rowVals[COL['Status']] !== 'Complete') { rowVals[COL['Status']] = 'Complete'; changed = true; }
+  if (!rowVals[COL['Tarikh Melapor']]) {
+    rowVals[COL['Tarikh Melapor']] = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+    changed = true;
+  }
+  return changed;
 }
 
 function insertManual_(record) {
@@ -699,7 +753,9 @@ function listRecords_(status, brand, platform) {
   for (var i = vals.length - 1; i >= 0; i--) { // newest first
     var row = vals[i];
     if (!row[COL['ID']]) continue;
-    if (status && row[COL['Status']] !== status) continue;
+    if (status === ARCHIVED_FILTER) { if (!isArchived_(row)) continue; }
+    else if (isArchived_(row)) continue;              // closed files stay out of the working list
+    else if (status && row[COL['Status']] !== status) continue;
     if (brand && row[COL['Brand']] !== brand) continue;
     if (platform && row[COL['Platform']] !== platform) continue;
     out.push(rowToObject_(row));
@@ -717,6 +773,7 @@ function getRecord_(id) {
 
 function stats_() {
   var counts = { total: 0 }; STATUSES.forEach(function (s) { counts[s] = 0; });
+  counts[ARCHIVED_FILTER] = 0;
   var byBrand = {}, byPlatform = {};
   var sheet = sheet_();
   var last = sheet.getLastRow();
@@ -725,7 +782,8 @@ function stats_() {
     vals.forEach(function (row) {
       if (!row[COL['ID']]) return;
       counts.total++;
-      var s = row[COL['Status']]; counts[s] = (counts[s] || 0) + 1;
+      if (isArchived_(row)) { counts[ARCHIVED_FILTER]++; }
+      else { var s = row[COL['Status']]; counts[s] = (counts[s] || 0) + 1; }
       var b = row[COL['Brand']]; byBrand[b] = (byBrand[b] || 0) + 1;
       var p = row[COL['Platform']]; byPlatform[p] = (byPlatform[p] || 0) + 1;
     });
