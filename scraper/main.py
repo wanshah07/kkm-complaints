@@ -167,6 +167,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="put every post to both reviewers and print where they disagree; never pushes")
     ap.add_argument("--targets", choices=["auto", "sheet", "config"], default="auto",
                     help="where brands/handles come from: the sheet's Targets tab (needs webhook env), config.yaml, or auto (sheet if reachable)")
+    ap.add_argument("--selftest", metavar="QUERY", nargs="?", const="",
+                    help="check a deployed Apps Script from outside the browser: payload size, "
+                         "field truncation and server-side search. Read-only, no browser, no writes.")
     ap.add_argument("--review-only", metavar="TEXTFILE", help="skip scraping; review this caption file")
     ap.add_argument("--url", default="manual://review", help="URL for --review-only")
     args = ap.parse_args(argv)
@@ -178,6 +181,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     os.makedirs(run_dir, exist_ok=True)
     report: Dict = {"started_myt": started.isoformat(), "targets": [], "pushed": [], "skipped": [],
                     "errors": [], "comparison": [], "flagged": [], "handle_checks": []}
+
+    # --- selftest (no browser, read-only) ------------------------------------
+    if args.selftest is not None:
+        return selftest(args.selftest)
 
     # --- review-only mode (no browser, no webhook) ---------------------------
     if args.review_only:
@@ -477,6 +484,95 @@ def main(argv: Optional[List[str]] = None) -> int:
     report["duration_s"] = round(time.time() - started.timestamp(), 1)
     _write_report(run_dir, report)
     _print_summary(report)
+    return 0
+
+
+def selftest(query: str) -> int:
+    """
+    Prove a deployed Apps Script does what this repo thinks it does.
+
+    The dashboard is the only other client, and it runs in a browser nobody can drive from here,
+    so a deployment that silently did not publish looked exactly like one that did. This asks the
+    live webhook the three questions that matter and says which answer came back. It never writes:
+    'list' and 'ping' are both read-only.
+    """
+    import json as _json
+    log.info("--- selftest against the live Apps Script -------------------------------")
+    try:
+        client = AppsScriptClient()
+        log.info("ping: %s", client.ping())
+    except Exception as e:
+        log.error("webhook unreachable: %s", e)
+        return 1
+
+    rows = client.list_rows()
+    if not rows:
+        log.warning("the sheet returned no rows, so nothing can be measured. File a complaint first.")
+        return 1
+    log.info("list returned %d row(s)", len(rows))
+
+    # 1. is the trimmed build actually live?
+    limit = 300
+    over = [r for r in rows for f in ("Extracted Text", "Violation Reason")
+            if len(str(r.get(f) or "")) > limit]
+    flagged = [r for r in rows if r.get("_truncated")]
+    longest = max((len(str(r.get(f) or "")) for r in rows
+                   for f in ("Extracted Text", "Violation Reason")), default=0)
+    if over:
+        log.error("NOT the trimmed build: %d row(s) carry a field longer than %d characters "
+                  "(longest %d). The new Code.gs did not publish - Deploy > Manage deployments "
+                  "> New version, not just Save.", len(over), limit, longest)
+        return 1
+    log.info("trim is live: longest list field %d chars (limit %d); %d row(s) marked _truncated",
+             longest, limit, len(flagged))
+
+    size = len(_json.dumps(rows))
+    log.info("list payload %d bytes for %d rows (~%d bytes/row)", size, len(rows), size // len(rows))
+
+    # 2. does a row still carry its full text when opened?
+    if flagged:
+        rid = flagged[0]["ID"]
+        full = client._post({"action": "get", "id": rid}).get("row") or {}
+        short = len(str(flagged[0].get("Extracted Text") or ""))
+        whole = len(str(full.get("Extracted Text") or ""))
+        if whole > short:
+            log.info("drawer still gets the whole caption: %s is %d chars in the list, %d on open",
+                     rid, short, whole)
+        else:
+            log.error("a truncated row did not grow when fetched singly (%s: %d -> %d). "
+                      "The drawer would show a clipped caption.", rid, short, whole)
+            return 1
+    else:
+        log.info("no row is long enough to be truncated yet; nothing to compare on open")
+
+    # 3. does the server-side search work, and does it reach past the cut?
+    if not query:
+        deep = None
+        for r in rows:
+            txt = str(r.get("Extracted Text") or "")
+            if r.get("_truncated") and len(txt) >= 40:
+                deep = txt[-30:].strip().split()[0] if txt[-30:].strip() else None
+                if deep and len(deep) >= 4:
+                    break
+                deep = None
+        query = deep or str(rows[0].get("Brand") or "").strip()
+    if not query:
+        log.warning("no usable query could be derived; pass one: --selftest \"uriage\"")
+        return 1
+
+    hits = client.list_rows(q=query)
+    log.info("search %r -> %d row(s)", query, len(hits))
+    if hits:
+        log.info("first hit: %s  %s", hits[0].get("ID"), (hits[0].get("Post URL") or "")[:80])
+        untrimmed = any(len(str(h.get(f) or "")) > limit
+                        for h in hits for f in ("Extracted Text", "Violation Reason"))
+        log.info("search hits carry their %s text", "FULL" if untrimmed else "short (none long enough to tell)")
+    else:
+        log.error("search returned nothing for %r. Either the deployed Code.gs has no query "
+                  "support, or that word is genuinely absent.", query)
+        return 1
+
+    log.info("--- selftest passed ------------------------------------------------------")
     return 0
 
 

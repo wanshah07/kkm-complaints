@@ -49,6 +49,20 @@ Screenshots in the drawer load with `loading="lazy"`, so a Drive fetch no longer
 
 **If the log grows past a few hundred live rows**, the next lever is `MAX_ROWS_RETURNED` in `Code.gs` — boot with a page and fetch the rest on scroll. Not needed yet.
 
+### Checking a deployment without opening the browser
+
+Saving in the Apps Script editor publishes nothing — a deployment that never went out looks exactly like one that did, until a caption comes back clipped. **Actions → KKM complaint scraper → Run workflow → `selftest`**: put a word to search for, or `1` to let it pick one. It finishes in seconds, opens no browser, scrapes nothing and writes nothing — `ping`, `list` and `get` are all read-only.
+
+It answers three questions and says which one failed:
+
+| | What it proves |
+|---|---|
+| **Is the trimmed build live?** | No list field exceeds 300 characters. If one does, the new `Code.gs` never published — *Deploy → Manage deployments → New version*, not just Save. |
+| **Does the drawer still get the whole caption?** | Takes a truncated row, fetches it singly, and checks it grew. If it didn't, the drawer would show a clipped caption as though it were complete. |
+| **Does the search reach past the cut?** | Runs a server-side query and reports the hits. Nothing back means either the deployed `Code.gs` has no query support, or the word genuinely isn't there. |
+
+It also prints the list payload in bytes per row, which is the number to watch as the log grows.
+
 ### When KKM replies
 
 Paste NPRA's reply into **KKM Feedback** — in the dashboard drawer, or straight into the column in the sheet, whichever is to hand. The moment that cell has anything in it, the row:

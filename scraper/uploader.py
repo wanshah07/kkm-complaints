@@ -167,6 +167,16 @@ class AppsScriptClient:
         data = self._post({"action": "targets"})
         return data.get("targets", [])
 
+    def list_rows(self, q: str = "", status: str = "") -> List[dict]:
+        """
+        The dashboard's own list call, used by --selftest to check a deployment from outside the
+        browser. Read-only: 'list' is viewer-gated and writes nothing.
+        """
+        payload = {"action": "list"}
+        if q: payload["q"] = q
+        if status: payload["status"] = status
+        return self._post(payload).get("rows", [])
+
     def known_urls(self) -> List[str]:
         data = self._post({"action": "known_urls"})
         return data.get("urls", [])

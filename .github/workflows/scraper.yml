@@ -43,6 +43,10 @@ on:
         description: 'Review every post with BOTH reviewers and print where they disagree (never pushes)'
         type: boolean
         default: false
+      selftest:
+        description: 'Check the deployed Apps Script instead of scraping: payload size, truncation, search. Read-only, finishes in seconds. Put a word here to search for, or "1" to pick one.'
+        type: string
+        default: ''
 
 concurrency:
   group: kkm-complaint-scraper
@@ -108,6 +112,11 @@ jobs:
           if [ -n "${{ github.event.inputs.platform }}" ]; then ARGS="$ARGS --platform ${{ github.event.inputs.platform }}"; fi
           if [ -n "${{ github.event.inputs.only_type }}" ]; then ARGS="$ARGS --only-type ${{ github.event.inputs.only_type }}"; fi
           if [ "${{ github.event.inputs.compare }}" = "true" ]; then ARGS="$ARGS --compare"; fi
+          # A selftest replaces the run rather than adding to it: no browser, no scrape, no writes.
+          if [ -n "${{ github.event.inputs.selftest }}" ]; then
+            if [ "${{ github.event.inputs.selftest }}" = "1" ]; then ARGS="--selftest"
+            else ARGS="--selftest \"${{ github.event.inputs.selftest }}\""; fi
+          fi
           eval python main.py $ARGS
 
       - name: Upload run artefacts (report + screenshots)
