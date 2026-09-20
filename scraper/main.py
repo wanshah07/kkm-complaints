@@ -543,19 +543,34 @@ def selftest(query: str) -> int:
                       "The drawer would show a clipped caption.", rid, short, whole)
             return 1
     else:
+        rid, full, whole = "", {}, 0
         log.info("no row is long enough to be truncated yet; nothing to compare on open")
 
     # 3. does the server-side search work, and does it reach past the cut?
     if not query:
-        deep = None
-        for r in rows:
-            txt = str(r.get("Extracted Text") or "")
-            if r.get("_truncated") and len(txt) >= 40:
-                deep = txt[-30:].strip().split()[0] if txt[-30:].strip() else None
-                if deep and len(deep) >= 4:
-                    break
-                deep = None
-        query = deep or str(rows[0].get("Brand") or "").strip()
+        # The word has to come from BEYOND the cut, and the only place that text exists is the
+        # full row fetched above - a word taken from the list response is one the page already
+        # holds, so finding it would prove nothing about the server-side search. Run 35514013100
+        # made exactly that mistake: it derived from rows[-30:] of an ALREADY TRUNCATED caption,
+        # which is characters 270-300 of what was shipped, and passed without testing the point.
+        query = ""
+        if flagged and whole > limit:
+            beyond = str(full.get("Extracted Text") or "")[limit:]
+            for w in beyond.split():
+                w = w.strip(".,;:!?\"'()[]{}").lower()
+                if 5 <= len(w) <= 30 and w.isalnum():   # a word, not a run of characters
+                    # and it must be absent from every listed row, or the page could find it too
+                    if not any(w in str(r.get(f) or "").lower()
+                               for r in rows for f in ("Extracted Text", "Violation Reason")):
+                        query = w
+                        log.info("derived %r from character %d of %s's caption - past the 300-char "
+                                 "cut and in no listed row, so only a server-side search can find it",
+                                 w, limit + beyond.lower().index(w), rid)
+                        break
+        if not query:
+            log.warning("no word past the cut is unique enough to prove the deep search; "
+                        "falling back to a Brand, which the page could have found itself")
+            query = str(rows[0].get("Brand") or "").strip()
     if not query:
         log.warning("no usable query could be derived; pass one: --selftest \"uriage\"")
         return 1

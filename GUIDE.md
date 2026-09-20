@@ -59,7 +59,9 @@ It answers three questions and says which one failed:
 |---|---|
 | **Is the trimmed build live?** | No list field exceeds 300 characters. If one does, the new `Code.gs` never published — *Deploy → Manage deployments → New version*, not just Save. |
 | **Does the drawer still get the whole caption?** | Takes a truncated row, fetches it singly, and checks it grew. If it didn't, the drawer would show a clipped caption as though it were complete. |
-| **Does the search reach past the cut?** | Runs a server-side query and reports the hits. Nothing back means either the deployed `Code.gs` has no query support, or the word genuinely isn't there. |
+| **Does the search reach past the cut?** | Takes a word from **beyond character 300** of a full caption, checks it appears in no listed row, then searches for it. A hit can only have come from the sheet. Nothing back means either the deployed `Code.gs` has no query support, or that word genuinely isn't there. |
+
+That third check is worth its own note. Run `35514013100` **passed it without testing anything**: the word was taken from the tail of an already-truncated caption — characters 270–300 of what had been shipped — so the page held it all along and a client-side filter would have found it too. A check that can pass on the wrong evidence is worse than no check, because it buys confidence. The word now comes from the full row fetched in the previous step, and must be absent from every listed row before it is used.
 
 It also prints the list payload in bytes per row, which is the number to watch as the log grows.
 
