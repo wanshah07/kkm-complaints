@@ -1,0 +1,86 @@
+# Ask an OpenAI-compatible endpoint whether it can actually do the KKM
+# complaint review, from a GitHub runner, before anything is pointed at it.
+#
+# Why this is a workflow and not a script run locally: the question is not
+# "does Mireld work", it is "does Mireld answer THIS MACHINE". It already
+# failed here once — on 19 Sep 2026 api.mireld.my took a runner's connection,
+# completed TLS and then sent nothing for the full sixty seconds. A host can
+# be perfectly healthy from a laptop in Kuala Lumpur and mute to a GitHub
+# runner in Virginia, and only a runner can settle that.
+#
+# The other half is just as important and cheaper to learn here than on a
+# Friday night: evaluator.review() wraps every provider failure in a try and
+# falls back to the regex rulebook. A gateway that cannot do
+# response_format=json_schema therefore does not break the scrape — it stops
+# reviewing, quietly, and the sheet fills with rules-only verdicts that look
+# like real ones. The probe asks for structured output on purpose.
+#
+# Costs a few tokens. Writes nothing. Dispatch only.
+#
+# Repository secret   OPENAI_API_KEY     whichever service the key belongs to
+# Repository variable OPENAI_BASE_URL    the API root; unset means OpenAI direct
+
+name: LLM endpoint probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'Model to ask (blank = OPENAI_MODEL, else gpt-4.1)'
+        type: string
+        default: ''
+      base_url:
+        description: 'Override the endpoint for this run (blank = OPENAI_BASE_URL)'
+        type: string
+        default: ''
+      timeout:
+        description: 'Seconds to wait for each answer'
+        type: string
+        default: '45'
+      transport:
+        description: 'Only this transport (blank = try all three in order)'
+        type: choice
+        options: ['', urllib, headers, browser]
+        default: ''
+
+concurrency:
+  group: llm-probe
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONUNBUFFERED: '1'
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ inputs.base_url || vars.OPENAI_BASE_URL }}
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+      PROBE_MODEL: ${{ inputs.model }}
+      PROBE_TIMEOUT: ${{ inputs.timeout }}
+      PROBE_TRANSPORT: ${{ inputs.transport }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # The first two transports are stdlib only and would need no install at
+      # all. The third is the point of the exercise: a real Chromium, because a
+      # host that goes silent on Python and answers a browser is telling us the
+      # block is the CALLER, not the network -- and the KKM scraper already
+      # drives exactly this browser.
+      - name: Install Playwright Chromium
+        run: |
+          python -m pip install --upgrade pip playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Probe
+        run: python tools/llm_probe.py
