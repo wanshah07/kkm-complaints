@@ -39,6 +39,10 @@ on:
         type: choice
         options: ['', 'brand', 'person']
         default: ''
+      offset:
+        description: 'Rotate the already-judged targets by N. The watchlist is longer than one run, and without this every run re-walks it from the top and the tail is never reached. Increase by one each run.'
+        type: string
+        default: '0'
       compare:
         description: 'Review every post with BOTH reviewers and print where they disagree (never pushes)'
         type: boolean
@@ -111,6 +115,7 @@ jobs:
           if [ -n "${{ github.event.inputs.brand }}" ]; then ARGS="$ARGS --brand \"${{ github.event.inputs.brand }}\""; fi
           if [ -n "${{ github.event.inputs.platform }}" ]; then ARGS="$ARGS --platform ${{ github.event.inputs.platform }}"; fi
           if [ -n "${{ github.event.inputs.only_type }}" ]; then ARGS="$ARGS --only-type ${{ github.event.inputs.only_type }}"; fi
+          if [ -n "${{ github.event.inputs.offset }}" ] && [ "${{ github.event.inputs.offset }}" != "0" ]; then ARGS="$ARGS --offset ${{ github.event.inputs.offset }}"; fi
           if [ "${{ github.event.inputs.compare }}" = "true" ]; then ARGS="$ARGS --compare"; fi
           # A selftest replaces the run rather than adding to it: no browser, no scrape, no writes.
           if [ -n "${{ github.event.inputs.selftest }}" ]; then

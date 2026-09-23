@@ -113,7 +113,7 @@ def build_record(post, verdict: dict, run_cfg: dict, drive: Optional[DriveUpload
 _HANDLE_IN_URL = re.compile(r"(?:instagram\.com|threads\.net|facebook\.com)/@?([A-Za-z0-9_.\-]+)", re.I)
 
 
-def sweep_order(brands: List[dict], known_urls) -> Tuple[List[dict], int]:
+def sweep_order(brands: List[dict], known_urls, offset: int = 0) -> Tuple[List[dict], int]:
     """
     Targets we have never judged a post from, first.
 
@@ -148,6 +148,30 @@ def sweep_order(brands: List[dict], known_urls) -> Tuple[List[dict], int]:
     # Stable, so the sheet's own order survives inside each group.
     ordered = sorted(brands, key=already_judged)
     fresh = sum(1 for b in brands if not already_judged(b))
+
+    # ROTATE THE JUDGED TAIL, or the sweep stops converging (measured 23-24 Sep 2026).
+    #
+    # The unjudged-first cursor above drains only while unjudged rows still turn into judged
+    # ones. A row that can never yield a reviewable post -- private account, wrong handle, no
+    # content on that platform -- never enters the ledger, so it is unjudged for ever and sits
+    # at the front of EVERY run. Ten such handles were doing exactly that: 20 of each run's
+    # ~45 targets, 45% of the budget, on rows that cannot produce anything.
+    #
+    # While there was real work behind them that was only a tax. Once the unjudged count
+    # flattened (27 -> 16 -> 13 -> 13) the ordering had nothing left to prioritise, so every
+    # run walked the judged group from row 1 and died on the budget in the same place. Run 4
+    # covered 25 handles of which 23 were run 3's, to reach 2 new ones, and 165 of 214 targets
+    # had never been visited at all. Without this the tail is never reached, ever.
+    #
+    # The rotation is deterministic and needs no new state, no sheet column and no Apps Script
+    # change (deploying one is manual and not ours to do): the caller passes an increasing
+    # offset per run and successive runs start the judged group at different points. Unjudged
+    # rows keep their priority, so a newly added handle is still picked up first.
+    judged_from = fresh
+    tail = ordered[judged_from:]
+    if tail and offset:
+        k = offset % len(tail)
+        ordered = ordered[:judged_from] + tail[k:] + tail[:k]
     return ordered, fresh
 
 
@@ -170,6 +194,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--selftest", metavar="QUERY", nargs="?", const="",
                     help="check a deployed Apps Script from outside the browser: payload size, "
                          "field truncation and server-side search. Read-only, no browser, no writes.")
+    ap.add_argument("--offset", type=int, default=0,
+                    help="rotate the already-judged targets by N so successive runs cover "
+                         "different slices of a watchlist longer than one run's budget")
     ap.add_argument("--review-only", metavar="TEXTFILE", help="skip scraping; review this caption file")
     ap.add_argument("--url", default="manual://review", help="URL for --review-only")
     args = ap.parse_args(argv)
@@ -253,10 +280,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     # scraped. The alternative cost a three-hour run: everything was scraped first, the job
     # timeout cut in with one target left, and not a single post had been reviewed or filed.
     if known:
-        brands, fresh = sweep_order(brands, known)
-        log.info("sweep order: %d of %d target(s) have no judged post yet and go first",
-                 fresh, len(brands))
+        brands, fresh = sweep_order(brands, known, offset=args.offset)
+        log.info("sweep order: %d of %d target(s) have no judged post yet and go first%s",
+                 fresh, len(brands),
+                 (", judged tail rotated by %d" % args.offset) if args.offset else "")
         report["never_judged"] = fresh
+        report["offset"] = args.offset
 
     scraper = Scraper(cfg, os.path.join(run_dir, "screenshots"))
     planned = scraper.plan(brands, platform_filter=args.platform, brand_filter=args.brand)
