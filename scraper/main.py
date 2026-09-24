@@ -113,7 +113,8 @@ def build_record(post, verdict: dict, run_cfg: dict, drive: Optional[DriveUpload
 _HANDLE_IN_URL = re.compile(r"(?:instagram\.com|threads\.net|facebook\.com)/@?([A-Za-z0-9_.\-]+)", re.I)
 
 
-def sweep_order(brands: List[dict], known_urls, offset: int = 0) -> Tuple[List[dict], int]:
+def sweep_order(brands: List[dict], known_urls, offset: int = 0,
+                skip_unjudged: bool = False) -> Tuple[List[dict], int]:
     """
     Targets we have never judged a post from, first.
 
@@ -171,8 +172,34 @@ def sweep_order(brands: List[dict], known_urls, offset: int = 0) -> Tuple[List[d
     tail = ordered[judged_from:]
     if tail and offset:
         k = offset % len(tail)
-        ordered = ordered[:judged_from] + tail[k:] + tail[:k]
-    return ordered, fresh
+        tail = tail[k:] + tail[:k]
+
+    # DROP THE UNJUDGED GROUP ENTIRELY, when the caller asks for it (24 Sep 2026).
+    #
+    # The rotation above stops the dead rows BLOCKING the tail. It does not stop them costing
+    # the tail. They are still walked first on every run, and they are the majority of it:
+    # run 6 (35942154765) covered 20 handles, 13 of them these, to reach 7 judged ones. Two
+    # thirds of a 160-minute budget on rows measured over five runs as unable to produce a
+    # reviewable post - private to this account, a handle that is not the person's, or no
+    # content inside the date window.
+    #
+    # This is deliberately NOT the default and deliberately NOT automatic. "Unjudged" is not
+    # the same as "dead": a handle Wan adds to the Targets tab today is unjudged too, and it
+    # is the one row we most want looked at. A rule that skipped rows after N barren runs
+    # would need per-row state nobody can see and would quietly bury a new handle. So the
+    # dispatcher decides, per run, and the discipline is: pass it while draining the judged
+    # tail, drop it whenever handles have been added or a Targets row has been corrected.
+    #
+    # Offsets are unaffected. The flag removes a PREFIX, so every position in the judged tail
+    # keeps the index it had - a run at offset 19 covers the same rows with or without it.
+    #
+    # The real fix is still Wan marking those rows Inactive in the Targets tab. This buys the
+    # sweep its throughput back in the meantime; it does not decide anything on his behalf,
+    # because the moment he stops passing the flag the rows are back.
+    if skip_unjudged:
+        return tail, fresh
+
+    return ordered[:judged_from] + tail, fresh
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -197,6 +224,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--offset", type=int, default=0,
                     help="rotate the already-judged targets by N so successive runs cover "
                          "different slices of a watchlist longer than one run's budget")
+    ap.add_argument("--skip-unjudged", action="store_true",
+                    help="skip targets we have never judged a post from. They are walked first "
+                         "on every run and are mostly rows that cannot produce one (private, "
+                         "wrong handle, nothing in the date window). Do NOT pass this on a run "
+                         "after handles have been added: a new handle is unjudged too")
     ap.add_argument("--review-only", metavar="TEXTFILE", help="skip scraping; review this caption file")
     ap.add_argument("--url", default="manual://review", help="URL for --review-only")
     args = ap.parse_args(argv)
@@ -280,12 +312,29 @@ def main(argv: Optional[List[str]] = None) -> int:
     # scraped. The alternative cost a three-hour run: everything was scraped first, the job
     # timeout cut in with one target left, and not a single post had been reviewed or filed.
     if known:
-        brands, fresh = sweep_order(brands, known, offset=args.offset)
-        log.info("sweep order: %d of %d target(s) have no judged post yet and go first%s",
-                 fresh, len(brands),
-                 (", judged tail rotated by %d" % args.offset) if args.offset else "")
+        total_rows = len(brands)
+        brands_before = brands
+        brands, fresh = sweep_order(brands, known, offset=args.offset,
+                                    skip_unjudged=args.skip_unjudged)
+        if args.skip_unjudged and not brands:
+            # Every row unjudged means the ledger does not cover this watchlist at all, and
+            # skipping would make the run a silent no-op: three hours booked, nothing walked,
+            # exit 0. Fall back rather than return zero quietly.
+            brands, fresh = sweep_order(brands_before, known, offset=args.offset)
+            log.warning("--skip-unjudged would have left NOTHING to walk (all %d target rows are "
+                        "unjudged); ignoring it and walking the full list", total_rows)
+        elif args.skip_unjudged:
+            log.info("sweep order: %d of %d target(s) have no judged post yet and are SKIPPED "
+                     "(--skip-unjudged); %d judged target(s) remain%s",
+                     fresh, total_rows, len(brands),
+                     (", rotated by %d" % args.offset) if args.offset else "")
+        else:
+            log.info("sweep order: %d of %d target(s) have no judged post yet and go first%s",
+                     fresh, total_rows,
+                     (", judged tail rotated by %d" % args.offset) if args.offset else "")
         report["never_judged"] = fresh
         report["offset"] = args.offset
+        report["skip_unjudged"] = bool(args.skip_unjudged)
 
     scraper = Scraper(cfg, os.path.join(run_dir, "screenshots"))
     planned = scraper.plan(brands, platform_filter=args.platform, brand_filter=args.brand)
