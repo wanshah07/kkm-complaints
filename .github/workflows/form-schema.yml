@@ -1,0 +1,39 @@
+# Read the KKM complaint Google Form's questions and entry ids, for the dashboard's
+# "Fill KKM form" button (a Google pre-filled link). See tools/form_schema.py.
+#
+# Why a workflow: docs.google.com is not reachable from the Claude environment; a
+# GitHub runner reaches it. Re-run this whenever KKM changes the form - if a
+# question was re-created its entry id changes and that field would open blank.
+#
+# Reads the form URL from the backend (bootstrap), reads the form, prints both.
+# Writes nothing and submits nothing. Dispatch only.
+
+name: KKM form schema
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Form URL (blank = the one saved behind Open KKM form)'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PYTHONUNBUFFERED: '1'
+      APPS_SCRIPT_WEBHOOK_URL: ${{ secrets.APPS_SCRIPT_WEBHOOK_URL }}
+      APPS_SCRIPT_API_TOKEN: ${{ secrets.APPS_SCRIPT_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -q requests
+      - name: Read the form
+        run: python tools/form_schema.py ${{ inputs.url }}
