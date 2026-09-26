@@ -26,8 +26,6 @@ import sys
 
 import requests
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scraper"))
-
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/128.0 Safari/537.36")
 
@@ -40,8 +38,15 @@ NO_ANSWER = {6, 8, 11, 12}
 
 
 def form_url_from_backend() -> str:
-    from uploader import AppsScriptClient
-    data = AppsScriptClient()._post({"action": "bootstrap"})
+    # The same call AppsScriptClient._post makes, done directly: importing the client drags in
+    # the scraper module and Playwright, which a five-second read has no use for.
+    url, token = os.environ.get("APPS_SCRIPT_WEBHOOK_URL", ""), os.environ.get("APPS_SCRIPT_API_TOKEN", "")
+    if not url or not token:
+        raise SystemExit("APPS_SCRIPT_WEBHOOK_URL and APPS_SCRIPT_API_TOKEN are required")
+    r = requests.post(url, json={"action": "bootstrap", "token": token}, timeout=120, allow_redirects=True)
+    data = r.json()
+    if not data.get("ok"):
+        raise SystemExit(f"backend refused bootstrap: {data.get('error')}")
     return (data.get("kkmFormUrl") or "").strip()
 
 
