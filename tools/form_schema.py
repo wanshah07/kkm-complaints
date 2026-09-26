@@ -43,8 +43,14 @@ def form_url_from_backend() -> str:
     url, token = os.environ.get("APPS_SCRIPT_WEBHOOK_URL", ""), os.environ.get("APPS_SCRIPT_API_TOKEN", "")
     if not url or not token:
         raise SystemExit("APPS_SCRIPT_WEBHOOK_URL and APPS_SCRIPT_API_TOKEN are required")
-    r = requests.post(url, json={"action": "bootstrap", "token": token}, timeout=120, allow_redirects=True)
-    data = r.json()
+    r = requests.post(url, json={"action": "bootstrap", "token": token}, timeout=180, allow_redirects=True)
+    try:
+        data = r.json()
+    except ValueError:
+        title = re.search(r"<title>(.*?)</title>", r.text or "", re.S | re.I)
+        raise SystemExit(f"backend answered HTTP {r.status_code} ({r.headers.get('content-type', '?')}) "
+                         f"with no JSON; page title: {title.group(1).strip() if title else '-'}; "
+                         f"first bytes: {(r.text or '')[:240]!r}")
     if not data.get("ok"):
         raise SystemExit(f"backend refused bootstrap: {data.get('error')}")
     return (data.get("kkmFormUrl") or "").strip()
