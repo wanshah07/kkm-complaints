@@ -175,6 +175,19 @@
         <button id="btnCopyUrl" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50">Copy Sumber iklan (URL)</button>
         <button id="btnOpenForm" class="rounded-lg bg-slate-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-slate-800">Open KKM form ↗</button>
       </div>
+      <!-- Fill KKM form: Google's own pre-filled link, opened only once every check below passes and Wan has ticked the confirmation. It never submits. -->
+      <div id="kkmFill" class="rounded-xl border border-amber-300 bg-white p-3 space-y-2">
+        <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Isi borang KKM secara automatik</div>
+        <ul id="kkmChecks" class="text-sm space-y-0.5"></ul>
+        <label class="flex items-start gap-2 text-sm">
+          <input id="kkmConfirm" type="checkbox" class="mt-0.5">
+          <span>Saya telah semak semua maklumat di atas dan ia lengkap serta betul.</span>
+        </label>
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="btnFillForm" disabled class="rounded-lg bg-amber-600 text-white px-3 py-1.5 text-sm font-semibold hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed">Isi borang KKM ↗</button>
+          <span id="kkmFillHint" class="text-xs text-slate-500"></span>
+        </div>
+      </div>
     </div>
 
     <label class="block">
@@ -333,12 +346,12 @@ function renderLookups() {
 // KKM form: opens the saved URL, or asks for it once and stores it in Script Properties (KKM_FORM_URL).
 // Hold Shift while clicking to replace a saved URL.
 function openKkmForm(ev) {
-  if (KKM_FORM_URL && !(ev && ev.shiftKey)) { window.open(KKM_FORM_URL, '_blank', 'noopener'); return; }
-  const u = (prompt('Paste the KKM complaint form URL (Google Form). It is saved once; Shift+click this button to change it later.', KKM_FORM_URL || '') || '').trim();
+  if (KKM_FORM_URL && !(ev && ev.shiftKey)) { window.open(kkmPlainUrl(KKM_FORM_URL), '_blank', 'noopener'); return; }
+  const u = (prompt('Paste the KKM complaint form URL (Google Form), or the pre-fill template from kkm-form-helper.html. It is saved once; Shift+click this button to change it later.', KKM_FORM_URL || '') || '').trim();
   if (!u) return;
   if (!/^https?:\/\/\S+$/.test(u)) { toast('That does not look like a URL'); return; }
   rpc('apiSetKkmFormUrl', u)
-    .then(() => { KKM_FORM_URL = u; toast('KKM form URL saved'); window.open(u, '_blank', 'noopener'); })
+    .then(() => { KKM_FORM_URL = u; toast(kkmIsTemplate(u) ? 'KKM form template saved' : 'KKM form URL saved'); kkmGate(); window.open(kkmPlainUrl(u), '_blank', 'noopener'); })
     .catch(e => toast('Could not save: ' + e.message, 4000));
 }
 
@@ -578,12 +591,146 @@ async function submitManual(ev) {
 }
 
 // ---------------------------------------------------------------------------
+// Fill KKM form (Wan, 26 Sep 2026: "fill up kkm complaint form automatically after I confirm
+// all information complete").
+//
+// The form is a Google Form that answers 401 to anyone not signed in, so nothing outside Wan's
+// own browser can read it or fill it. The route that survives that is Google's OWN pre-filled
+// link, ?usp=pp_url&entry.N=value, opened in his signed-in browser. KKM_FORM_URL may therefore
+// hold a TEMPLATE: the pre-fill link with {Column_Name} placeholders where a row's values go,
+// and his own details (name, phone, e-mail) as plain values. kkm-form-helper.html builds it
+// from the live form, once, and again whenever KKM changes the form.
+//
+// It FILLS and never submits. Submitting a complaint to a regulator stays Wan's own click
+// (GUIDE.md section 10), and the screenshot has to be attached by hand: Google cannot pre-fill
+// a file-upload question.
+// ---------------------------------------------------------------------------
+const KKM_PLACEHOLDER = /\{([^{}]+)\}/g;
+// A pre-fill link far past this risks Google refusing it; the Deskripsi then goes by clipboard.
+const KKM_URL_MAX = 8000;
+
+function kkmIsTemplate(u) { return /\{[^{}]+\}/.test(u || ''); }
+// The plain form, for "Open KKM form": the template's base with no answers in it.
+function kkmPlainUrl(u) {
+  if (!kkmIsTemplate(u)) return u;
+  return String(u).split('?')[0];
+}
+
+// The row as it stands in the drawer, unsaved edits included, keyed by sheet column name.
+function kkmValues() {
+  const r = Object.assign({}, state.current || {});
+  r['Nama Kosmetik'] = $('eNama').value.trim();
+  r['Nombor Notifikasi'] = $('eNot').value.trim();
+  r['Jenis Aduan'] = $('eJenis').value;
+  r['Deskripsi Aduan'] = $('eDeskripsi').value.trim();
+  r['Violation Type'] = $('eViolationType').value;
+  r['Violation Reason'] = $('eViolationReason').value.trim();
+  r['Remarks'] = $('eRemarks').value.trim();
+  const d = new Date(); const p = n => String(n).padStart(2, '0');
+  r['Today'] = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  return r;
+}
+
+// Each check is [ok, text, hard]. A hard miss disables the button; a soft one is a warning.
+function kkmChecks(v, template) {
+  const open = s => /\[(SAHKAN|VERIFY)\b/i.test(s || '');
+  const notOk = /^NOT\s*\d/i.test(v['Nombor Notifikasi'] || '');
+  const st = v['Status'] || '';
+  return [
+    [!!template && kkmIsTemplate(template), 'Borang KKM sudah disediakan (templat pra-isi)', true],
+    [st !== 'Complete' && st !== 'Dismissed', `Status bukan Complete / Dismissed (sekarang: ${st || '-'})`, true],
+    [!!v['Post URL'], 'Pautan iklan (Post URL) ada', true],
+    [!!v['Nama Kosmetik'], 'Nama kosmetik diisi', true],
+    [!!v['Nombor Notifikasi'], 'Nombor Notifikasi diisi (semak QUEST3+)', true],
+    [notOk || !v['Nombor Notifikasi'], 'Nombor Notifikasi bermula dengan "NOT" dan nombor', false],
+    [!!v['Deskripsi Aduan'], 'Deskripsi Aduan diisi', true],
+    [!open(v['Deskripsi Aduan']) && !open(v['Violation Reason']) && !open(v['Remarks']),
+     'Tiada tanda [SAHKAN: …] / [VERIFY …] yang belum selesai', true],
+    [!!v['Screenshot Link'], 'Screenshot ada (lampirkan sendiri dalam borang)', false],
+  ];
+}
+
+// Substitute every {Column} with the row's value, URL-encoded. Unknown columns come back blank
+// and are named, so a template that drifted from the sheet is visible rather than silent.
+function kkmBuildUrl(template, v, omit) {
+  const unknown = [];
+  const url = String(template).replace(KKM_PLACEHOLDER, (m, key) => {
+    // Placeholders are written with _ for a space ({Nama_Kosmetik}): a pasted URL may not hold a space.
+    const k = key.trim().replace(/_/g, ' ');
+    if (omit && omit.includes(k)) return '';
+    if (!(k in v)) { unknown.push(k); return ''; }
+    return encodeURIComponent(v[k] == null ? '' : String(v[k]));
+  });
+  return { url, unknown };
+}
+
+function kkmGate() {
+  if (!$('kkmChecks')) return;
+  const v = kkmValues(); const checks = kkmChecks(v, KKM_FORM_URL);
+  const list = $('kkmChecks'); list.textContent = '';
+  checks.forEach(([ok, text, hard]) => {
+    const li = document.createElement('li');
+    li.className = ok ? 'text-emerald-700' : (hard ? 'text-rose-700' : 'text-amber-700');
+    li.textContent = (ok ? '✓ ' : (hard ? '✗ ' : '! ')) + text;
+    list.appendChild(li);
+  });
+  const hardOk = checks.every(([ok, , hard]) => ok || !hard);
+  $('btnFillForm').disabled = !(hardOk && $('kkmConfirm').checked);
+  $('kkmFillHint').textContent = !kkmIsTemplate(KKM_FORM_URL)
+    ? 'Sediakan sekali: buka /kkm-form-helper.html (Guide: Filling the KKM form automatically).'
+    : (!hardOk ? 'Lengkapkan yang bertanda ✗ dahulu.' : ($('kkmConfirm').checked ? '' : 'Tandakan pengesahan untuk teruskan.'));
+}
+
+async function fillKkmForm() {
+  if (!state.current || $('btnFillForm').disabled) return;
+  // Opened now, inside the click, so no popup blocker stops it; the address is set after saving.
+  const w = window.open('', '_blank');
+  $('btnFillForm').disabled = true;
+  try {
+    const fields = {
+      'Violation Type': $('eViolationType').value, 'Violation Reason': $('eViolationReason').value,
+      'Nama Kosmetik': $('eNama').value, 'Nombor Notifikasi': $('eNot').value, 'Jenis Aduan': $('eJenis').value,
+      'Deskripsi Aduan': $('eDeskripsi').value, 'KKM Feedback': $('eFeedback').value, 'Remarks': $('eRemarks').value
+    };
+    const r = await rpc('apiUpdateFields', state.current['ID'], fields);   // what is filed is what is saved
+    mergeRow(r.row); fillDrawer(r.row);
+    const v = kkmValues();
+    let { url, unknown } = kkmBuildUrl(KKM_FORM_URL, v);
+    let note = '';
+    if (url.length > KKM_URL_MAX) {
+      ({ url, unknown } = kkmBuildUrl(KKM_FORM_URL, v, ['Deskripsi Aduan']));
+      copy(v['Deskripsi Aduan'], 'Deskripsi');
+      note = ' Deskripsi terlalu panjang untuk pautan: sudah disalin, tampal ke dalam borang.';
+    }
+    if (w) { w.opener = null; w.location.href = url; } else { window.open(url, '_blank', 'noopener'); }
+    toast('Borang dibuka dan diisi. Semak, lampirkan screenshot, tekan Submit, kemudian Mark Complete.' + note
+          + (unknown.length ? ` Tiada nilai untuk: ${unknown.join(', ')}.` : ''), 9000);
+  } catch (e) {
+    if (w) w.close();
+    toast('Tidak dibuka: ' + e.message, 5000);
+  } finally { kkmGate(); }
+}
+
+// Re-run the gate whenever a row is drawn or an input it reads changes. The tick is cleared on
+// every newly opened row: a confirmation belongs to one complaint, never carried to the next.
+const kkmFillDrawer_ = fillDrawer;
+fillDrawer = function (r) {
+  const same = state.current && r && state.current['ID'] === r['ID'];
+  kkmFillDrawer_(r);
+  if (!same && $('kkmConfirm')) $('kkmConfirm').checked = false;
+  kkmGate();
+};
+
+// ---------------------------------------------------------------------------
 // Wiring
 // ---------------------------------------------------------------------------
 $('btnRefresh').onclick = () => refresh(false);
 $('btnNew').onclick = () => showModal(true);
 $('kkmFormLink').onclick = openKkmForm;
 $('btnOpenForm').onclick = openKkmForm;
+$('btnFillForm').onclick = fillKkmForm;
+$('kkmConfirm').onchange = kkmGate;
+['eNama', 'eNot', 'eJenis', 'eDeskripsi', 'eViolationReason', 'eRemarks'].forEach(id => $(id).addEventListener('input', kkmGate));
 $('btnClose').onclick = () => showDrawer(false);
 $('overlay').onclick = () => showDrawer(false);
 $('btnSave').onclick = saveDrawer;

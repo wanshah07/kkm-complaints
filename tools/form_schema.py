@@ -85,6 +85,10 @@ def main(argv) -> int:
         print("No form URL is saved yet. Open the dashboard, click 'Open KKM form' once and paste "
               "the form link; it is stored in the sheet's Script Properties as KKM_FORM_URL.")
         return 2
+    # A saved TEMPLATE carries Wan's own answers (name, phone) as plain values. Never print it:
+    # read and log only the bare form address.
+    if "{" in url or "usp=pp_url" in url:
+        url = url.split("?")[0]
     print(f"form URL : {url}")
     s = requests.Session()
     r = s.get(url, headers={"User-Agent": UA, "Accept-Language": "ms-MY,ms;q=0.9,en;q=0.8"},

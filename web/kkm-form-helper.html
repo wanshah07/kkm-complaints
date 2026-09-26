@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ms">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KKM form helper</title>
+<style>
+  :root { --bg:#f8fafc; --fg:#0f172a; --muted:#475569; --card:#fff; --line:#e2e8f0; --accent:#b45309; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0b1220; --fg:#e2e8f0; --muted:#94a3b8; --card:#111a2e; --line:#1e293b; --accent:#f59e0b; } }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.55 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:22px; margin:0 0 4px; } h2 { font-size:16px; margin:28px 0 8px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; }
+  .muted { color:var(--muted); font-size:13px; }
+  a.bm { display:inline-block; padding:10px 16px; border-radius:10px; background:var(--accent); color:#fff; font-weight:600; text-decoration:none; cursor:grab; }
+  ol li { margin:6px 0; } code { font-size:13px; }
+  textarea { width:100%; box-sizing:border-box; min-height:120px; font:12px/1.4 ui-monospace, Menlo, Consolas, monospace; background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:8px; }
+  button { font:inherit; padding:6px 12px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--fg); cursor:pointer; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Isi borang KKM: persediaan sekali</h1>
+  <p class="muted">Set up once, and again only if KKM changes the form.</p>
+
+  <div class="card">
+    <p><b>Kenapa perlu ini?</b> Borang aduan KKM ialah Google Form yang memerlukan log masuk Google. Tiada sistem di luar pelayar anda boleh membacanya. Butang ini dijalankan <i>dalam</i> pelayar anda, pada borang itu sendiri. Ia membaca soalan-soalan borang dan menyediakan templat pautan pra-isi Google. Selepas itu dashboard boleh membuka borang yang sudah diisi. Ia <b>tidak menghantar</b> apa-apa.</p>
+    <p class="muted">The KKM form needs a Google sign-in, so only your own browser can read it. This bookmark runs on the form page, reads its questions and builds Google's own pre-fill link template. It never submits anything.</p>
+  </div>
+
+  <h2>1. Seret butang ini ke bar bookmark</h2>
+  <p><a id="bm" class="bm" href="#">KKM: baca borang</a></p>
+  <p class="muted">Drag it to the bookmarks bar (Ctrl+Shift+B shows the bar). Clicking it on this page does nothing.</p>
+
+  <h2>2. Buka borang KKM dan klik bookmark itu</h2>
+  <ol>
+    <li>Log masuk Google dan buka borang aduan KKM seperti biasa.</li>
+    <li><b>Pilihan:</b> taip maklumat diri anda sendiri (nama, telefon, e-mel dan lain-lain) ke dalam borang. Maklumat itu akan diisi setiap kali. Jangan taip butiran aduan.</li>
+    <li>Klik <b>KKM: baca borang</b> di bar bookmark. Satu kotak akan keluar dengan senarai soalan dan <b>TEMPLATE</b>.</li>
+    <li>Klik <b>Salin semua</b> dan tampal ke dalam chat supaya Claude boleh semak padanan setiap soalan sebelum ia digunakan.</li>
+  </ol>
+
+  <h2>3. Simpan templat</h2>
+  <p>Selepas templat disahkan: di dashboard, <b>Shift+klik</b> “Open KKM form”, tampal baris TEMPLATE, dan simpan. Butang <b>Isi borang KKM</b> dalam setiap aduan akan aktif apabila semua semakan lulus dan anda tandakan pengesahan.</p>
+
+  <h2>Jika bookmark tidak berjalan</h2>
+  <p class="muted">Sesetengah pelayar menyekat bookmarklet pada halaman Google. Buka borang, tekan F12, pilih tab Console, tampal kod ini, dan tekan Enter.</p>
+  <textarea id="code" readonly></textarea>
+  <p><button id="copyCode">Salin kod</button></p>
+</main>
+
+<script type="text/plain" id="src">
+(function () {
+  var D = window.FB_PUBLIC_LOAD_DATA_;
+  if (!D || !D[1] || !D[1][1]) { alert('KKM: buka halaman soalan borang Google KKM dahulu, kemudian klik bookmark ini.'); return; }
+  var TYPES = {0:'jawapan pendek',1:'perenggan',2:'pilihan',3:'dropdown',4:'kotak semak',5:'skala',7:'grid',9:'tarikh',10:'masa',13:'muat naik fail'};
+  // Order matters: the first rule that matches a question's title wins. A guess, and marked as one.
+  var RULES = [
+    ['Nombor Notifikasi', /notifikasi|nombor\s*not\b|\bno\.?\s*not\b/i],
+    ['Nama Kosmetik', /nama\s*(produk|kosmetik)|product\s*name/i],
+    ['Jenis Aduan', /jenis\s*aduan|kategori\s*aduan/i],
+    ['Deskripsi Aduan', /deskripsi|keterangan\s*aduan|butiran\s*aduan|huraian|ringkasan\s*aduan|description/i],
+    ['Post URL', /pautan|\burl\b|\blink\b|sumber\s*iklan|laman\s*sesawang/i],
+    ['Platform', /platform|medium\s*iklan|media\s*sosial/i],
+    ['Brand', /jenama|\bbrand\b/i],
+    ['Date', /tarikh\s*(iklan|siaran|dilihat|dikesan|kejadian)/i]
+  ];
+  var typed = {};
+  document.querySelectorAll('input[name^="entry."]').forEach(function (i) {
+    if (!/_sentinel$/.test(i.name) && i.value) typed[i.name] = i.value;
+  });
+  var m = location.href.match(/\/forms\/d\/e\/([A-Za-z0-9_-]+)\//);
+  var base = m ? 'https://docs.google.com/forms/d/e/' + m[1] + '/viewform' : location.href.split('?')[0];
+  var lines = ['KKM form helper - ' + (D[1][8] || D[3] || '') , 'form: ' + base, ''];
+  var parts = ['usp=pp_url'], used = {}, q = 0;
+  D[1][1].forEach(function (it, n) {
+    var kind = it[3], title = (it[1] || '').trim();
+    if (!it[4] || !it[4].length) return;
+    it[4].forEach(function (f) {
+      var entry = 'entry.' + f[0];
+      var opts = (f[1] || []).map(function (o) { return o && o[0]; }).filter(Boolean);
+      var ph = null;
+      for (var r = 0; r < RULES.length; r++) if (!used[RULES[r][0]] && RULES[r][1].test(title)) { ph = RULES[r][0]; break; }
+      var how;
+      if (kind === 13) how = 'lampir sendiri (fail tidak boleh dipra-isi)';
+      else if (ph) { used[ph] = 1; var key = ph.replace(/ /g, '_'); parts.push(entry + '={' + key + '}'); how = '{' + key + '}  <- TEKAAN, sila sahkan'; }
+      else if (typed[entry]) { parts.push(entry + '=' + encodeURIComponent(typed[entry])); how = 'tetap: "' + typed[entry] + '" (yang anda taip)'; }
+      else how = '(kosong)';
+      lines.push('Q' + (++q) + ' [' + (TYPES[kind] || ('jenis ' + kind)) + '] ' + (f[2] ? '*' : '') + '"' + title + '"  ' + entry);
+      lines.push('     -> ' + how);
+      if (opts.length) lines.push('     pilihan: ' + opts.join(' | '));
+    });
+  });
+  lines.push('', 'TEMPLATE:', base + '?' + parts.join('&'));
+  var text = lines.join('\n');
+  var box = document.createElement('div');
+  box.setAttribute('style', 'position:fixed;z-index:2147483647;top:16px;right:16px;width:min(720px,92vw);max-height:86vh;overflow:auto;background:#fff;color:#0f172a;border:2px solid #b45309;border-radius:12px;padding:12px;font:13px/1.4 system-ui,sans-serif;box-shadow:0 10px 40px rgba(0,0,0,.35)');
+  var h = document.createElement('div'); h.textContent = 'KKM: baca borang - salin dan tampal ke dalam chat untuk semakan'; h.setAttribute('style', 'font-weight:700;margin-bottom:8px');
+  var ta = document.createElement('textarea'); ta.value = text; ta.readOnly = true; ta.setAttribute('style', 'width:100%;height:50vh;font:12px/1.35 ui-monospace,Consolas,monospace;box-sizing:border-box');
+  var row = document.createElement('div'); row.setAttribute('style', 'margin-top:8px;display:flex;gap:8px');
+  var b1 = document.createElement('button'); b1.textContent = 'Salin semua';
+  b1.onclick = function () { ta.select(); (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(function () { b1.textContent = 'Disalin'; }, function () { document.execCommand('copy'); b1.textContent = 'Disalin'; }); };
+  var b2 = document.createElement('button'); b2.textContent = 'Tutup'; b2.onclick = function () { box.remove(); };
+  row.appendChild(b1); row.appendChild(b2); box.appendChild(h); box.appendChild(ta); box.appendChild(row);
+  document.body.appendChild(box);
+})();
+</script>
+<script>
+  const src = document.getElementById('src').textContent.trim();
+  document.getElementById('bm').href = 'javascript:' + encodeURIComponent(src);
+  document.getElementById('bm').addEventListener('click', e => { e.preventDefault(); alert('Seret butang ini ke bar bookmark. Drag it to the bookmarks bar.'); });
+  document.getElementById('code').value = src;
+  document.getElementById('copyCode').onclick = () => navigator.clipboard.writeText(src);
+</script>
+</body>
+</html>

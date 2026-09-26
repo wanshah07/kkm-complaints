@@ -34,8 +34,38 @@ The sweep runs Friday 23:30 MYT, driven by the weekly routine (section 6). Satur
 3. Check the **screenshot** in the drawer. Most violations here are on the artwork, not in the caption. Confirm the claim is really on screen.
 4. **Verify the notification number.** Click *Semak QUEST3+*, search the product, copy the NOT number into **Nombor Notifikasi**. The scraper never guesses this.
 5. Edit **Deskripsi Aduan** if you want to sharpen it. It is written in BM and ready to paste. Replace any `[SAHKAN: …]` marker before filing.
-6. Click **Copy Deskripsi**, then **Open KKM form**, and submit.
+6. Tick **Saya telah semak semua maklumat…** and click **Isi borang KKM**. The form opens already filled (see *Filling the KKM form automatically* below). Attach the screenshot, read it through, and press **Submit** yourself. Until the form is set up, click **Copy Deskripsi**, then **Open KKM form**, and paste.
 7. Back in the dashboard, click **Mark Complete**. Today's date is stamped into **Tarikh Melapor**.
+
+### Filling the KKM form automatically
+
+The **Isi borang KKM** button opens the KKM complaint form with every answer already in place, using Google's own pre-filled link. It **fills, it never submits**: pressing Submit to a regulator stays your click (section 10).
+
+**It only opens when the complaint is ready.** The panel under the KKM fields lists the checks and the button stays grey until every ✗ is gone and you tick the confirmation:
+
+| Check | Blocks the button? |
+|---|---|
+| The form template is set up | yes |
+| Status is not Complete or Dismissed | yes |
+| Post URL, Nama kosmetik, Nombor Notifikasi and Deskripsi Aduan are filled | yes |
+| No `[SAHKAN: …]` or `[VERIFY …]` left in Deskripsi, Violation Reason or Remarks | yes |
+| Nombor Notifikasi starts with "NOT" and a number | warning only |
+| A screenshot is on the row | warning only: you attach it yourself |
+
+The tick is cleared every time you open another row, because a confirmation belongs to one complaint. Whatever is in the drawer when you click is **saved first** and that saved version is what goes into the form. If Deskripsi is too long to fit in a link, it is left out of the link and copied to the clipboard instead, and the message tells you to paste it.
+
+**Two things it cannot do.** Google cannot pre-fill a **file upload** question, so the screenshot is always attached by hand. And nothing outside your own browser can read the form: it answers *401* to anyone not signed in to Google (checked from a GitHub runner on 26 Sep 2026), which is why the setup below runs in your browser.
+
+**Setting it up (once, and again if KKM changes the form).**
+
+1. Open `https://aduan.kkmhalalconsultant.com/kkm-form-helper.html` and drag **KKM: baca borang** to the bookmarks bar.
+2. Sign in to Google and open the KKM form. If you want your own details filled in every time (name, phone, e-mail), type them into the form now. Type nothing about the complaint itself.
+3. Click **KKM: baca borang**. A box lists every question, what it will be filled with, and a **TEMPLATE** line. The field matches are guesses from each question's wording, marked *TEKAAN*. Check them, or paste the whole box to Claude to check.
+4. In the dashboard, **Shift+click Open KKM form**, paste the TEMPLATE line, and save. *Open KKM form* still opens the blank form; the template only feeds *Isi borang KKM*.
+
+A template is the form's own pre-fill link with the row's values written as `{Column_Name}`, which is a sheet column name with `_` for each space: `{Nama_Kosmetik}`, `{Nombor_Notifikasi}`, `{Jenis_Aduan}`, `{Deskripsi_Aduan}`, `{Post_URL}`, `{Platform}`, `{Brand}`, `{Date}`, `{Violation_Type}`, `{Screenshot_Link}`, and `{Today}` for today's date. A column the sheet does not have comes out blank and the message names it. A multiple-choice answer only takes if the value matches one of the form's options word for word, which is why the helper prints each question's options.
+
+**If KKM changes the form**, a re-created question gets a new id and would open blank. That is visible rather than wrong, and the fix is to repeat the setup. Only the dashboard at aduan.kkmhalalconsultant.com updates by itself; the copy served from Apps Script picks this up at its next redeploy.
 
 ### What the dashboard loads, and what it doesn't
 
@@ -688,4 +718,4 @@ Being clear about this matters for how you use the output.
 - **It reads what is public.** It does not log into brand accounts, read private posts, or touch anything behind a paywall.
 - **It cannot verify a notification number.** QUEST3+ has no API here. That lookup is manual, by design, because a wrong NOT number in a complaint is worse than a blank one.
 - **It does not judge ingredients.** Annex II to VII questions need the live PDFs, which change often. This system covers Part 8 claims and Part 10 presentation only.
-- **It does not submit to KKM.** The form is filled by you. Nothing is sent to a regulator automatically, and that is deliberate.
+- **It does not submit to KKM.** It can fill the form for you (*Filling the KKM form automatically*, section 1), but the Submit is yours. Nothing is sent to a regulator automatically, and that is deliberate.
