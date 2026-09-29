@@ -708,7 +708,12 @@ function kkmIsTemplate(u) { return /\{[^{}]+\}/.test(u || ''); }
 function kkmPickOption(val, opts) {
   if (!opts || !opts.length || !val) return val;
   const n = s => s.toLowerCase().replace(/\s+/g, ' ').trim(); const w = n(val);
-  return opts.find(o => n(o) === w) || opts.find(o => n(o).startsWith(w)) || opts.find(o => n(o).split('/')[0].trim() === w) || val;
+  const hit = opts.find(o => n(o) === w) || opts.find(o => n(o).startsWith(w)) || opts.find(o => n(o).split('/')[0].trim() === w);
+  if (hit) return hit;
+  // Last resort, the one option sharing the value's first word. KKM's live form spells its own
+  // option 'Kualiti Kosmetiik / Cosmetic Quality', so 'Kualiti Kosmetik' matches nothing above.
+  const first = w.split(' ')[0]; const byWord = opts.filter(o => n(o).split(' ')[0] === first);
+  return byWord.length === 1 ? byWord[0] : val;
 }
 // The account a template was built under (its authuser), which is the default for every fill.
 function kkmTemplateAccount(u) { const m = /[?&]authuser=([^&]+)/.exec(u || ''); try { return m ? decodeURIComponent(m[1]) : ''; } catch (e) { return ''; } }
@@ -770,6 +775,7 @@ function kkmValues() {
   r['Remarks'] = $('eRemarks').value.trim();
   const d = new Date(); const p = n => String(n).padStart(2, '0');
   r['Today'] = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  r['Akaun'] = ($('kkmEmail') && ![KKM_CHOOSE, KKM_ADD].includes($('kkmEmail').value)) ? $('kkmEmail').value : '';
   return r;
 }
 
@@ -850,6 +856,8 @@ async function fillKkmForm() {
     mergeRow(r.row); fillDrawer(r.row);
     const v = kkmValues();
     const email = $('kkmEmail') ? $('kkmEmail').value : KKM_CHOOSE;
+    // {Akaun} fills a form's own e-mail question with the account the form opens under.
+    v['Akaun'] = (email && email !== KKM_CHOOSE && email !== KKM_ADD) ? email : '';
     let { url, unknown } = kkmBuildUrl(KKM_FORM_URL, v); url = kkmWithAccount(url, email);
     let note = '';
     if (url.length > KKM_URL_MAX) {

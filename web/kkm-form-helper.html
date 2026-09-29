@@ -63,7 +63,9 @@
     ['Post URL', /pautan|\burl\b|\blink\b|sumber\s*iklan|laman\s*sesawang/i],
     ['Platform', /platform|medium\s*iklan|media\s*sosial/i],
     ['Brand', /jenama|\bbrand\b/i],
-    ['Date', /tarikh\s*(iklan|siaran|dilihat|dikesan|kejadian)/i]
+    ['Date', /tarikh\s*(iklan|siaran|dilihat|dikesan|kejadian)/i],
+    ['Today', /tarikh\s*(melapor|laporan|aduan)|date of report/i],
+    ['Akaun', /alamat\s*e-?mel|e-?mail\s*address/i]
   ];
   var typed = {};
   document.querySelectorAll('input[name^="entry."]').forEach(function (i) {
