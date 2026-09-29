@@ -47,8 +47,8 @@
   <p>Borang KKM merekod akaun Google yang membukanya. Google tidak menerima alamat e-mel dalam pautan. Ia hanya menerima <b>kedudukan</b> akaun dalam pelayar anda: akaun pertama yang log masuk ialah 0, yang kedua 1, dan seterusnya.</p>
   <ol>
     <li>Pada borang KKM, klik <b>Switch account</b> dan pilih akaun yang mesti menghantar aduan.</li>
-    <li>Lihat bar alamat. Ia patut mengandungi <code>/forms/u/1/</code> (atau nombor lain). Jika tiada <code>/u/</code>, akaun itu ialah akaun lalai (0).</li>
-    <li>Klik bookmark <b>KKM: baca borang</b> di halaman itu. Baris <code>akaun:</code> akan menunjukkan <i>akaun ke-N</i>. Kemudian simpan TEMPLATE seperti biasa.</li>
+    <li>Klik bookmark <b>KKM: baca borang</b> di halaman itu. Jika bar alamat mengandungi <code>/forms/u/N/</code>, baris <code>akaun:</code> akan menunjukkan <i>akaun ke-N</i>.</li>
+    <li><b>Jika ia menunjukkan "kedudukan TIDAK dikesan"</b>: selepas Switch account, Google selalunya tidak meletakkan <code>/u/N/</code> dalam alamat, jadi nombor itu perlu diuji. Buka borang dengan <code>/forms/u/1/</code> di tempat <code>/forms/</code> dan lihat akaun di bahagian atas. Jika bukan akaun yang betul, cuba 2, kemudian 3. Nombor yang menunjukkan akaun yang betul itulah N. Tambah <code>&amp;kkm_u=N</code> di hujung TEMPLATE sebelum menyimpannya.</li>
   </ol>
   <p class="muted">Kedudukan ini berubah jika anda log keluar dan log masuk semula dalam susunan lain. Jika borang dibuka di bawah akaun yang salah, ulang langkah di atas. <b>Cara paling pasti:</b> buat satu profil Chrome yang hanya log masuk ke akaun itu, dan buka dashboard dari profil tersebut.</p>
   <p class="muted">Kotak <i>Continue current draft?</i> ialah draf yang Google simpan sendiri. <b>Continue</b> mengekalkan jawapan pada skrin, iaitu yang dipra-isi. <b>Use previous draft</b> membawa balik jawapan lama.</p>
