@@ -725,49 +725,87 @@ function kkmTemplateIndex(u) { const m = /[?&]kkm_u=(\d+)/.exec(u || ''); return
 function kkmTemplateAccount(u) { const m = /[?&]authuser=([^&]+)/.exec(u || ''); try { return m ? decodeURIComponent(m[1]) : ''; } catch (e) { return ''; } }
 
 // Which Google account submits (Wan, 29 Sep 2026: "make sure boleh pilih email untuk submit kkm
-// form"). A signed-in form records the account it was opened under, so the choice is made by
-// opening it under that account: authuser=<email> is Google's own switch for that. emailAddress
-// fills the e-mail box on a form that asks for one. Picking "choose on the form" opens it under
-// the browser's current account, and the form's own "Switch account" link does the rest. The
-// list is a per-browser preference, kept in localStorage; nothing about it goes to the sheet.
+// form", then "add <two more accounts>, let me able to choose which email to submit").
+//
+// A signed-in form records the account it is opened under, and Google Forms ignores an e-mail in
+// the link: it honours only the account's POSITION among the browser's signed-in accounts,
+// /forms/u/N/ (measured 29 Sep 2026 - authuser=<email> opened under the default account, /u/2/
+// opened under the account in that slot). So every account needs its own N:
+//   - from the template, kkm_acc=<email>:<N>,<email>:<N>,... (and the older authuser=<email> with
+//     kkm_u=N), kept in Script Properties, so the list appears in any browser;
+//   - or added here with "+ Tambah / kemas kini e-mel", kept in this browser's localStorage.
+// Positions are a fact about ONE browser, so the local entry wins where both exist. An account
+// with no known position is not opened at all (see kkmChecks): it would land on the default account
+// and be sent by the wrong person, which is worse than not opening.
 const KKM_CHOOSE = '__choose', KKM_ADD = '__add';
+function kkmTemplateAccounts(u) {
+  const out = [];
+  const m = /[?&]kkm_acc=([^&]+)/.exec(u || '');
+  if (m) {
+    let raw = m[1]; try { raw = decodeURIComponent(raw); } catch (e) {}
+    raw.split(',').forEach(part => {
+      const i = part.lastIndexOf(':'); if (i < 1) return;
+      const email = part.slice(0, i).trim().toLowerCase(), n = part.slice(i + 1).trim();
+      if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && /^\d+$/.test(n) && !out.some(a => a.email === email)) out.push({ email, n });
+    });
+  }
+  const legacy = kkmTemplateAccount(u), li = kkmTemplateIndex(u);
+  if (legacy && !out.some(a => a.email === legacy.toLowerCase())) out.unshift({ email: legacy.toLowerCase(), n: li });
+  return out;
+}
+function kkmLocalPositions() { try { return JSON.parse(localStorage.getItem('kkm.emailPos') || '{}') || {}; } catch (e) { return {}; } }
 function kkmEmails() { try { return JSON.parse(localStorage.getItem('kkm.emails') || '[]').filter(Boolean); } catch (e) { return []; } }
+// The browser position for an account: this browser's own entry first, then the template's.
+function kkmPosition(email) {
+  if (!email) return null;
+  const local = kkmLocalPositions()[email];
+  if (local != null && /^\d+$/.test(String(local))) return String(local);
+  const t = kkmTemplateAccounts(KKM_FORM_URL).find(a => a.email === email);
+  return t && t.n != null ? String(t.n) : null;
+}
+function kkmAllAccounts() {
+  const list = kkmTemplateAccounts(KKM_FORM_URL).map(a => a.email);
+  kkmEmails().forEach(e => { if (!list.includes(e)) list.push(e); });
+  return list;
+}
 function kkmRenderEmails(sel) {
   const el = $('kkmEmail'); if (!el) return;
-  let last = sel; if (last == null) { try { last = localStorage.getItem('kkm.email') || kkmTemplateAccount(KKM_FORM_URL) || KKM_CHOOSE; } catch (e) { last = kkmTemplateAccount(KKM_FORM_URL) || KKM_CHOOSE; } }
+  const accs = kkmAllAccounts();
+  let last = sel; if (last == null) { try { last = localStorage.getItem('kkm.email'); } catch (e) {} }
+  if (!last) last = accs[0] || KKM_CHOOSE;
   el.textContent = '';
   const add = (v, t) => { const o = document.createElement('option'); o.value = v; o.textContent = t; el.appendChild(o); };
-  const tpl = kkmTemplateAccount(KKM_FORM_URL);
-  if (tpl) add(tpl, tpl + '  (akaun templat)');
-  kkmEmails().filter(e => e !== tpl).forEach(e => add(e, e));
+  accs.forEach(e => { const n = kkmPosition(e); add(e, e + (n != null ? `  (akaun ke-${n})` : '  (kedudukan belum ditetapkan)')); });
   add(KKM_CHOOSE, 'Pilih akaun pada borang (Switch account)');
-  add(KKM_ADD, '+ Tambah e-mel…');
-  el.value = [...el.options].some(o => o.value === last) ? last : KKM_CHOOSE;
+  add(KKM_ADD, '+ Tambah / kemas kini e-mel…');
+  el.value = [...el.options].some(o => o.value === last) ? last : (accs[0] || KKM_CHOOSE);
 }
 function kkmOnEmail() {
   const el = $('kkmEmail');
   if (el.value === KKM_ADD) {
     const e = (prompt('E-mel akaun Google untuk menghantar borang KKM:') || '').trim().toLowerCase();
-    if (e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
-      const list = kkmEmails(); if (!list.includes(e)) list.push(e);
-      try { localStorage.setItem('kkm.emails', JSON.stringify(list)); localStorage.setItem('kkm.email', e); } catch (x) {}
-      kkmRenderEmails(e); toast('E-mel disimpan: ' + e);
-    } else { if (e) toast('Itu bukan alamat e-mel'); kkmRenderEmails(); }
+    if (!e) { kkmRenderEmails(); kkmGate(); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { toast('Itu bukan alamat e-mel'); kkmRenderEmails(); kkmGate(); return; }
+    const cur = kkmPosition(e);
+    const n = (prompt(`Kedudukan akaun ${e} dalam pelayar ini (0, 1, 2, …).\nKlik gambar profil di google.com: senarai bermula dari 0.`, cur != null ? cur : '') || '').trim();
+    const list = kkmEmails(); if (!list.includes(e)) list.push(e);
+    const pos = kkmLocalPositions();
+    if (/^\d+$/.test(n)) pos[e] = n; else if (n === '') delete pos[e]; else toast('Kedudukan mesti nombor: tidak disimpan');
+    try { localStorage.setItem('kkm.emails', JSON.stringify(list)); localStorage.setItem('kkm.emailPos', JSON.stringify(pos)); localStorage.setItem('kkm.email', e); } catch (x) {}
+    kkmRenderEmails(e);
+    toast(kkmPosition(e) != null ? `Disimpan: ${e}, akaun ke-${kkmPosition(e)}` : `Disimpan: ${e} (tiada kedudukan: borang tidak akan dibuka untuknya)`, 5000);
   } else { try { localStorage.setItem('kkm.email', el.value); } catch (x) {} }
+  kkmGate();
 }
 function kkmWithAccount(url, email) {
   // Appended as text, not through URL(): re-serialising would re-encode every answer, and the
   // answers are left exactly as kkmBuildUrl wrote them. A template's own copies are dropped first.
-  const clean = String(url).replace(/([?&])(authuser|emailAddress|kkm_u)=[^&]*/g, '$1').replace(/[?&]+$/, '').replace(/&&+/g, '&').replace(/\?&/, '?');
+  const clean = String(url).replace(/([?&])(authuser|emailAddress|kkm_u|kkm_acc)=[^&]*/g, '$1').replace(/[?&]+$/, '').replace(/&&+/g, '&').replace(/\?&/, '?');
   if (!email || email === KKM_CHOOSE || email === KKM_ADD) return clean;   // the browser's current account
-  const e = encodeURIComponent(email);
-  // The template's own account with a known position: open at /forms/u/N/, the address Google
-  // itself uses for the Nth signed-in account. Any other account: authuser=<email>, which Forms
-  // was seen to ignore, so the form's Switch account is the fallback there.
-  const idx = kkmTemplateIndex(KKM_FORM_URL);
-  if (idx != null && email === kkmTemplateAccount(KKM_FORM_URL)) {
-    const at = clean.replace(/\/forms\/(?:u\/\d+\/)?d\/e\//, `/forms/u/${idx}/d/e/`);
-    return at + (at.includes('?') ? '&' : '?') + 'authuser=' + idx + '&emailAddress=' + e;
+  const e = encodeURIComponent(email), n = kkmPosition(email);
+  if (n != null) {
+    const at = clean.replace(/\/forms\/(?:u\/\d+\/)?d\/e\//, `/forms/u/${n}/d/e/`);
+    return at + (at.includes('?') ? '&' : '?') + 'authuser=' + n + '&emailAddress=' + e;
   }
   return clean + (clean.includes('?') ? '&' : '?') + 'authuser=' + e + '&emailAddress=' + e;
 }
@@ -799,9 +837,14 @@ function kkmChecks(v, template) {
   const notOk = /^NOT\s*\d/i.test(v['Nombor Notifikasi'] || '');
   const st = v['Status'] || '';
   return [
-    [!!template && kkmIsTemplate(template), 'Borang KKM sudah disediakan (templat pra-isi)'
-      + (kkmIsTemplate(template) ? ' - akaun ' + (kkmTemplateAccount(template) || 'tidak ditetapkan')
-         + (kkmTemplateIndex(template) != null ? `, dibuka di /forms/u/${kkmTemplateIndex(template)}/` : ', TIADA kedudukan (kkm_u) - akan dibuka di akaun lalai') : ''), true],
+    [!!template && kkmIsTemplate(template), 'Borang KKM sudah disediakan (templat pra-isi)', true],
+    (() => {
+      const sel = $('kkmEmail') ? $('kkmEmail').value : KKM_CHOOSE;
+      if (!sel || sel === KKM_CHOOSE || sel === KKM_ADD) return [true, 'Hantar sebagai: akaun semasa pelayar - semak dan tukar pada borang (Switch account)', false];
+      const pos = kkmPosition(sel);
+      return pos != null ? [true, `Hantar sebagai ${sel} - dibuka di /forms/u/${pos}/`, true]
+        : [false, `Hantar sebagai ${sel} - kedudukan akaun belum ditetapkan. Pilih "+ Tambah / kemas kini e-mel" dan masukkan nombornya, atau borang akan dibuka di akaun lalai.`, true];
+    })(),
     [st !== 'Complete' && st !== 'Dismissed', st === 'Complete'
       ? 'Status: Complete - aduan ini sudah ditanda dihantar. Jika sebenarnya belum, klik "Mark In-Progress" dahulu.'
       : (st === 'Dismissed' ? 'Status: Dismissed - aduan ini ditolak. Klik "Mark In-Progress" jika mahu memfailkannya.'
@@ -898,7 +941,8 @@ fillDrawer = function (r) {
   const same = state.current && r && state.current['ID'] === r['ID'];
   kkmFillDrawer_(r);
   if (!same && $('kkmConfirm')) $('kkmConfirm').checked = false;
-  if ($('kkmEmail') && !$('kkmEmail').options.length || (kkmTemplateAccount(KKM_FORM_URL) && ![...$('kkmEmail').options].some(o => o.value === kkmTemplateAccount(KKM_FORM_URL)))) kkmRenderEmails();
+  // The template (and so its account list) arrives with bootstrap, after the picker was first drawn.
+  if ($('kkmEmail') && (!$('kkmEmail').options.length || kkmAllAccounts().some(a => ![...$('kkmEmail').options].some(o => o.value === a)))) kkmRenderEmails();
   kkmGate();
 };
 
