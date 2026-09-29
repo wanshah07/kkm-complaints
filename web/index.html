@@ -883,7 +883,7 @@ async function fillKkmForm() {
     }
     if (w) { w.opener = null; w.location.href = url; } else { window.open(url, '_blank', 'noopener'); }
     $('kkmLastUrl').textContent = url.slice(0, 140) + (url.length > 140 ? '…' : ''); $('kkmLast').dataset.url = url; $('kkmLast').classList.remove('hidden');
-    toast('Borang dibuka dan diisi' + (email && email !== KKM_CHOOSE ? ` sebagai ${email}` : '') + '. Semak akaun di atas borang, lampirkan screenshot, tekan Submit, kemudian Mark Complete.' + note
+    toast('Borang dibuka dan diisi' + (email && email !== KKM_CHOOSE ? ` sebagai ${email}` : '') + '. Semak akaun di atas borang. Jika keluar "Continue current draft?", JANGAN tekan Continue (ia tukar ke akaun lalai): tekan Use previous draft, Clear form, dan isi semula. Lampirkan screenshot, tekan Submit, kemudian Mark Complete.' + note
           + (unknown.length ? ` Tiada nilai untuk: ${unknown.join(', ')}.` : ''), 9000);
   } catch (e) {
     if (w) w.close();
