@@ -52,7 +52,13 @@ The **Isi borang KKM** button opens the KKM complaint form with every answer alr
 | Nombor Notifikasi starts with "NOT" and a number | warning only |
 | A screenshot is on the row | warning only: you attach it yourself |
 
-The tick is cleared every time you open another row, because a confirmation belongs to one complaint. Whatever is in the drawer when you click is **saved first** and that saved version is what goes into the form. If Deskripsi is too long to fit in a link, it is left out of the link and copied to the clipboard instead, and the message tells you to paste it.
+**Which account submits.** The KKM form records the Google account it is opened under (*Record … as the email to be included with my response*). The setup reads that account off the form and writes it into the template as `authuser`, so every fill opens under the same account, and **Hantar sebagai** shows it first as *(akaun templat)*. You can add other accounts to that list, or pick *Pilih akaun pada borang* to use the form's own **Switch account** link. Always glance at the account line at the top of the form before you press Submit. The address is kept only in the template, in Script Properties, never in the dashboard's code, because this repository is public.
+
+**Choice questions.** KKM's options are bilingual, e.g. *Iklan Kosmetik / Cosmetic Advertisement*, while the sheet says *Iklan Kosmetik*. The template carries each choice question's options, and the dashboard ticks the option that starts with the row's value. A value that matches no option is left unticked, which you will see on the form. It never picks the wrong box.
+
+**A row marked Complete is blocked** because it has already been filed. If it was marked Complete by mistake, click **Mark In-Progress** first.
+
+The tick is cleared every time you open another row, because a confirmation belongs to one complaint. Whatever is in the drawer when you click is **saved first** and that saved version is what goes into the form. All text goes into the form exactly as saved, including line breaks, `&`, `%`, `+`, accents and em dashes (each is checked by the test). The one exception: if Deskripsi is too long to fit in a link, the checklist warns you before you click, and the whole Deskripsi is copied to the clipboard for you to paste. The rest of the form is still filled.
 
 **Two things it cannot do.** Google cannot pre-fill a **file upload** question, so the screenshot is always attached by hand. And nothing outside your own browser can read the form: it answers *401* to anyone not signed in to Google (checked from a GitHub runner on 26 Sep 2026), which is why the setup below runs in your browser.
 

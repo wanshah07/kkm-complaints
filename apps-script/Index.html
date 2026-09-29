@@ -179,6 +179,10 @@
       <div id="kkmFill" class="rounded-xl border border-amber-300 bg-white p-3 space-y-2">
         <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Isi borang KKM secara automatik</div>
         <ul id="kkmChecks" class="text-sm space-y-0.5"></ul>
+        <label class="block">
+          <span class="text-xs font-medium text-slate-600">Hantar sebagai (akaun Google / e-mel)</span>
+          <select id="kkmEmail" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white"></select>
+        </label>
         <label class="flex items-start gap-2 text-sm">
           <input id="kkmConfirm" type="checkbox" class="mt-0.5">
           <span>Saya telah semak semua maklumat di atas dan ia lengkap serta betul.</span>
@@ -351,7 +355,7 @@ function openKkmForm(ev) {
   if (!u) return;
   if (!/^https?:\/\/\S+$/.test(u)) { toast('That does not look like a URL'); return; }
   rpc('apiSetKkmFormUrl', u)
-    .then(() => { KKM_FORM_URL = u; toast(kkmIsTemplate(u) ? 'KKM form template saved' : 'KKM form URL saved'); kkmGate(); window.open(kkmPlainUrl(u), '_blank', 'noopener'); })
+    .then(() => { KKM_FORM_URL = u; toast(kkmIsTemplate(u) ? 'KKM form template saved' : 'KKM form URL saved'); kkmRenderEmails(kkmTemplateAccount(u) || null); kkmGate(); window.open(kkmPlainUrl(u), '_blank', 'noopener'); })
     .catch(e => toast('Could not save: ' + e.message, 4000));
 }
 
@@ -609,7 +613,58 @@ const KKM_PLACEHOLDER = /\{([^{}]+)\}/g;
 // A pre-fill link far past this risks Google refusing it; the Deskripsi then goes by clipboard.
 const KKM_URL_MAX = 8000;
 
+const KKM_HELPER_URL = 'https://aduan.kkmhalalconsultant.com/kkm-form-helper.html';
 function kkmIsTemplate(u) { return /\{[^{}]+\}/.test(u || ''); }
+// The form option the row's value stands for: an exact match, else the one that starts with it
+// ('Iklan Kosmetik' -> 'Iklan Kosmetik / Cosmetic Advertisement'), else the value unchanged, which
+// Google then leaves unselected - visible on the form, never a wrong box ticked.
+function kkmPickOption(val, opts) {
+  if (!opts || !opts.length || !val) return val;
+  const n = s => s.toLowerCase().replace(/\s+/g, ' ').trim(); const w = n(val);
+  return opts.find(o => n(o) === w) || opts.find(o => n(o).startsWith(w)) || opts.find(o => n(o).split('/')[0].trim() === w) || val;
+}
+// The account a template was built under (its authuser), which is the default for every fill.
+function kkmTemplateAccount(u) { const m = /[?&]authuser=([^&]+)/.exec(u || ''); try { return m ? decodeURIComponent(m[1]) : ''; } catch (e) { return ''; } }
+
+// Which Google account submits (Wan, 29 Sep 2026: "make sure boleh pilih email untuk submit kkm
+// form"). A signed-in form records the account it was opened under, so the choice is made by
+// opening it under that account: authuser=<email> is Google's own switch for that. emailAddress
+// fills the e-mail box on a form that asks for one. Picking "choose on the form" opens it under
+// the browser's current account, and the form's own "Switch account" link does the rest. The
+// list is a per-browser preference, kept in localStorage; nothing about it goes to the sheet.
+const KKM_CHOOSE = '__choose', KKM_ADD = '__add';
+function kkmEmails() { try { return JSON.parse(localStorage.getItem('kkm.emails') || '[]').filter(Boolean); } catch (e) { return []; } }
+function kkmRenderEmails(sel) {
+  const el = $('kkmEmail'); if (!el) return;
+  let last = sel; if (last == null) { try { last = localStorage.getItem('kkm.email') || kkmTemplateAccount(KKM_FORM_URL) || KKM_CHOOSE; } catch (e) { last = kkmTemplateAccount(KKM_FORM_URL) || KKM_CHOOSE; } }
+  el.textContent = '';
+  const add = (v, t) => { const o = document.createElement('option'); o.value = v; o.textContent = t; el.appendChild(o); };
+  const tpl = kkmTemplateAccount(KKM_FORM_URL);
+  if (tpl) add(tpl, tpl + '  (akaun templat)');
+  kkmEmails().filter(e => e !== tpl).forEach(e => add(e, e));
+  add(KKM_CHOOSE, 'Pilih akaun pada borang (Switch account)');
+  add(KKM_ADD, '+ Tambah e-mel…');
+  el.value = [...el.options].some(o => o.value === last) ? last : KKM_CHOOSE;
+}
+function kkmOnEmail() {
+  const el = $('kkmEmail');
+  if (el.value === KKM_ADD) {
+    const e = (prompt('E-mel akaun Google untuk menghantar borang KKM:') || '').trim().toLowerCase();
+    if (e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
+      const list = kkmEmails(); if (!list.includes(e)) list.push(e);
+      try { localStorage.setItem('kkm.emails', JSON.stringify(list)); localStorage.setItem('kkm.email', e); } catch (x) {}
+      kkmRenderEmails(e); toast('E-mel disimpan: ' + e);
+    } else { if (e) toast('Itu bukan alamat e-mel'); kkmRenderEmails(); }
+  } else { try { localStorage.setItem('kkm.email', el.value); } catch (x) {} }
+}
+function kkmWithAccount(url, email) {
+  // Appended as text, not through URL(): re-serialising would re-encode every answer, and the
+  // answers are left exactly as kkmBuildUrl wrote them. A template's own copies are dropped first.
+  const clean = String(url).replace(/([?&])(authuser|emailAddress)=[^&]*/g, '$1').replace(/[?&]+$/, '').replace(/&&+/g, '&').replace(/\?&/, '?');
+  if (!email || email === KKM_CHOOSE || email === KKM_ADD) return clean;   // the browser's current account
+  const e = encodeURIComponent(email);
+  return clean + (clean.includes('?') ? '&' : '?') + 'authuser=' + e + '&emailAddress=' + e;
+}
 // The plain form, for "Open KKM form": the template's base with no answers in it.
 function kkmPlainUrl(u) {
   if (!kkmIsTemplate(u)) return u;
@@ -638,7 +693,10 @@ function kkmChecks(v, template) {
   const st = v['Status'] || '';
   return [
     [!!template && kkmIsTemplate(template), 'Borang KKM sudah disediakan (templat pra-isi)', true],
-    [st !== 'Complete' && st !== 'Dismissed', `Status bukan Complete / Dismissed (sekarang: ${st || '-'})`, true],
+    [st !== 'Complete' && st !== 'Dismissed', st === 'Complete'
+      ? 'Status: Complete - aduan ini sudah ditanda dihantar. Jika sebenarnya belum, klik "Mark In-Progress" dahulu.'
+      : (st === 'Dismissed' ? 'Status: Dismissed - aduan ini ditolak. Klik "Mark In-Progress" jika mahu memfailkannya.'
+      : `Status sedia untuk difailkan (${st || '-'})`), true],
     [!!v['Post URL'], 'Pautan iklan (Post URL) ada', true],
     [!!v['Nama Kosmetik'], 'Nama kosmetik diisi', true],
     [!!v['Nombor Notifikasi'], 'Nombor Notifikasi diisi (semak QUEST3+)', true],
@@ -647,6 +705,8 @@ function kkmChecks(v, template) {
     [!open(v['Deskripsi Aduan']) && !open(v['Violation Reason']) && !open(v['Remarks']),
      'Tiada tanda [SAHKAN: …] / [VERIFY …] yang belum selesai', true],
     [!!v['Screenshot Link'], 'Screenshot ada (lampirkan sendiri dalam borang)', false],
+    [!template || !kkmIsTemplate(template) || kkmBuildUrl(template, v).url.length <= KKM_URL_MAX,
+     'Semua teks muat dalam pautan (jika tidak, Deskripsi disalin ke clipboard untuk ditampal)', false],
   ];
 }
 
@@ -656,10 +716,13 @@ function kkmBuildUrl(template, v, omit) {
   const unknown = [];
   const url = String(template).replace(KKM_PLACEHOLDER, (m, key) => {
     // Placeholders are written with _ for a space ({Nama_Kosmetik}): a pasted URL may not hold a space.
-    const k = key.trim().replace(/_/g, ' ');
+    // A choice question carries its options: {Jenis_Aduan~Iklan%20Kosmetik%20%2F%20...~...}.
+    const bits = key.split('~');
+    const k = bits[0].trim().replace(/_/g, ' ');
+    const opts = bits.slice(1).map(o => { try { return decodeURIComponent(o); } catch (e) { return o; } });
     if (omit && omit.includes(k)) return '';
     if (!(k in v)) { unknown.push(k); return ''; }
-    return encodeURIComponent(v[k] == null ? '' : String(v[k]));
+    return encodeURIComponent(kkmPickOption(v[k] == null ? '' : String(v[k]), opts));
   });
   return { url, unknown };
 }
@@ -676,9 +739,13 @@ function kkmGate() {
   });
   const hardOk = checks.every(([ok, , hard]) => ok || !hard);
   $('btnFillForm').disabled = !(hardOk && $('kkmConfirm').checked);
-  $('kkmFillHint').textContent = !kkmIsTemplate(KKM_FORM_URL)
-    ? 'Sediakan sekali: buka /kkm-form-helper.html (Guide: Filling the KKM form automatically).'
-    : (!hardOk ? 'Lengkapkan yang bertanda ✗ dahulu.' : ($('kkmConfirm').checked ? '' : 'Tandakan pengesahan untuk teruskan.'));
+  const hint = $('kkmFillHint'); hint.textContent = '';
+  if (!kkmIsTemplate(KKM_FORM_URL)) {
+    hint.append('Persediaan sekali: ');
+    const a = document.createElement('a'); a.href = KKM_HELPER_URL; a.target = '_blank'; a.rel = 'noopener';
+    a.className = 'text-blue-700 underline'; a.textContent = 'buka halaman persediaan ↗';
+    hint.append(a, ', jalankan bookmark pada borang KKM, kemudian Shift+klik "Open KKM form" dan tampal TEMPLATE.');
+  } else hint.textContent = !hardOk ? 'Lengkapkan yang bertanda ✗ dahulu.' : ($('kkmConfirm').checked ? '' : 'Tandakan pengesahan untuk teruskan.');
 }
 
 async function fillKkmForm() {
@@ -695,15 +762,16 @@ async function fillKkmForm() {
     const r = await rpc('apiUpdateFields', state.current['ID'], fields);   // what is filed is what is saved
     mergeRow(r.row); fillDrawer(r.row);
     const v = kkmValues();
-    let { url, unknown } = kkmBuildUrl(KKM_FORM_URL, v);
+    const email = $('kkmEmail') ? $('kkmEmail').value : KKM_CHOOSE;
+    let { url, unknown } = kkmBuildUrl(KKM_FORM_URL, v); url = kkmWithAccount(url, email);
     let note = '';
     if (url.length > KKM_URL_MAX) {
-      ({ url, unknown } = kkmBuildUrl(KKM_FORM_URL, v, ['Deskripsi Aduan']));
+      ({ url, unknown } = kkmBuildUrl(KKM_FORM_URL, v, ['Deskripsi Aduan'])); url = kkmWithAccount(url, email);
       copy(v['Deskripsi Aduan'], 'Deskripsi');
       note = ' Deskripsi terlalu panjang untuk pautan: sudah disalin, tampal ke dalam borang.';
     }
     if (w) { w.opener = null; w.location.href = url; } else { window.open(url, '_blank', 'noopener'); }
-    toast('Borang dibuka dan diisi. Semak, lampirkan screenshot, tekan Submit, kemudian Mark Complete.' + note
+    toast('Borang dibuka dan diisi' + (email && email !== KKM_CHOOSE ? ` sebagai ${email}` : '') + '. Semak akaun di atas borang, lampirkan screenshot, tekan Submit, kemudian Mark Complete.' + note
           + (unknown.length ? ` Tiada nilai untuk: ${unknown.join(', ')}.` : ''), 9000);
   } catch (e) {
     if (w) w.close();
@@ -718,6 +786,7 @@ fillDrawer = function (r) {
   const same = state.current && r && state.current['ID'] === r['ID'];
   kkmFillDrawer_(r);
   if (!same && $('kkmConfirm')) $('kkmConfirm').checked = false;
+  if ($('kkmEmail') && !$('kkmEmail').options.length || (kkmTemplateAccount(KKM_FORM_URL) && ![...$('kkmEmail').options].some(o => o.value === kkmTemplateAccount(KKM_FORM_URL)))) kkmRenderEmails();
   kkmGate();
 };
 
@@ -730,6 +799,8 @@ $('kkmFormLink').onclick = openKkmForm;
 $('btnOpenForm').onclick = openKkmForm;
 $('btnFillForm').onclick = fillKkmForm;
 $('kkmConfirm').onchange = kkmGate;
+$('kkmEmail').onchange = kkmOnEmail;
+kkmRenderEmails();
 ['eNama', 'eNot', 'eJenis', 'eDeskripsi', 'eViolationReason', 'eRemarks'].forEach(id => $(id).addEventListener('input', kkmGate));
 $('btnClose').onclick = () => showDrawer(false);
 $('overlay').onclick = () => showDrawer(false);

@@ -83,7 +83,14 @@
       for (var r = 0; r < RULES.length; r++) if (!used[RULES[r][0]] && RULES[r][1].test(title)) { ph = RULES[r][0]; break; }
       var how;
       if (kind === 13) how = 'lampir sendiri (fail tidak boleh dipra-isi)';
-      else if (ph) { used[ph] = 1; var key = ph.replace(/ /g, '_'); parts.push(entry + '={' + key + '}'); how = '{' + key + '}  <- TEKAAN, sila sahkan'; }
+      else if (ph) {
+        used[ph] = 1; var key = ph.replace(/ /g, '_');
+        // A choice question only takes an answer that matches an option word for word, and KKM's
+        // options are bilingual ('Iklan Kosmetik / Cosmetic Advertisement'). The options ride in
+        // the placeholder, so the dashboard can pick the one that starts with the row's value.
+        if ((kind === 2 || kind === 3 || kind === 4) && opts.length) key += '~' + opts.map(encodeURIComponent).join('~');
+        parts.push(entry + '={' + key + '}'); how = '{' + ph.replace(/ /g, '_') + '}' + (opts.length ? ' (pilih ikut pilihan borang)' : '') + '  <- TEKAAN, sila sahkan';
+      }
       else if (typed[entry]) { parts.push(entry + '=' + encodeURIComponent(typed[entry])); how = 'tetap: "' + typed[entry] + '" (yang anda taip)'; }
       else how = '(kosong)';
       lines.push('Q' + (++q) + ' [' + (TYPES[kind] || ('jenis ' + kind)) + '] ' + (f[2] ? '*' : '') + '"' + title + '"  ' + entry);
@@ -91,6 +98,18 @@
       if (opts.length) lines.push('     pilihan: ' + opts.join(' | '));
     });
   });
+  // The account the form is open under is the one it records. Read it off the page (the header and
+  // the 'Record ... as the email' line both show it) and put it in the template as authuser, so
+  // every fill opens under the same account. It lives in the template, never in public code.
+  var EM = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/, who = '';
+  // The smallest element holding 'Switch account' is the account line; a form's own description
+  // may carry other addresses, so the first e-mail on the page is not good enough.
+  var near = [].slice.call(document.querySelectorAll('div,span')).filter(function (el) { return /Switch account|Tukar akaun/i.test(el.textContent) && EM.test(el.textContent); })
+    .sort(function (a, b) { return a.textContent.length - b.textContent.length; })[0];
+  if (near) who = near.textContent.match(EM)[0];
+  if (!who) { var rec = document.body.innerText.match(/(?:Record|Rekod\w*)\s+([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/i); if (rec) who = rec[1]; }
+  if (who) parts.push('authuser=' + encodeURIComponent(who.toLowerCase()));
+  lines.splice(2, 0, 'akaun: ' + (who || 'TIDAK DIKESAN - log masuk dahulu') + (document.querySelector('input[name="emailAddress"]') ? '   (borang minta e-mel ditaip)' : '   (e-mel direkod dari akaun Google)'));
   lines.push('', 'TEMPLATE:', base + '?' + parts.join('&'));
   var text = lines.join('\n');
   var box = document.createElement('div');
