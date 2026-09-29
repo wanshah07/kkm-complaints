@@ -43,6 +43,16 @@
   <h2>3. Simpan templat</h2>
   <p>Selepas templat disahkan: di dashboard, <b>Shift+klik</b> “Open KKM form”, tampal baris TEMPLATE, dan simpan. Butang <b>Isi borang KKM</b> dalam setiap aduan akan aktif apabila semua semakan lulus dan anda tandakan pengesahan.</p>
 
+  <h2>Akaun yang menghantar borang</h2>
+  <p>Borang KKM merekod akaun Google yang membukanya. Google tidak menerima alamat e-mel dalam pautan. Ia hanya menerima <b>kedudukan</b> akaun dalam pelayar anda: akaun pertama yang log masuk ialah 0, yang kedua 1, dan seterusnya.</p>
+  <ol>
+    <li>Pada borang KKM, klik <b>Switch account</b> dan pilih akaun yang mesti menghantar aduan.</li>
+    <li>Lihat bar alamat. Ia patut mengandungi <code>/forms/u/1/</code> (atau nombor lain). Jika tiada <code>/u/</code>, akaun itu ialah akaun lalai (0).</li>
+    <li>Klik bookmark <b>KKM: baca borang</b> di halaman itu. Baris <code>akaun:</code> akan menunjukkan <i>akaun ke-N</i>. Kemudian simpan TEMPLATE seperti biasa.</li>
+  </ol>
+  <p class="muted">Kedudukan ini berubah jika anda log keluar dan log masuk semula dalam susunan lain. Jika borang dibuka di bawah akaun yang salah, ulang langkah di atas. <b>Cara paling pasti:</b> buat satu profil Chrome yang hanya log masuk ke akaun itu, dan buka dashboard dari profil tersebut.</p>
+  <p class="muted">Kotak <i>Continue current draft?</i> ialah draf yang Google simpan sendiri. <b>Continue</b> mengekalkan jawapan pada skrin, iaitu yang dipra-isi. <b>Use previous draft</b> membawa balik jawapan lama.</p>
+
   <h2>Jika bookmark tidak berjalan</h2>
   <p class="muted">Sesetengah pelayar menyekat bookmarklet pada halaman Google. Buka borang, tekan F12, pilih tab Console, tampal kod ini, dan tekan Enter.</p>
   <textarea id="code" readonly></textarea>
@@ -71,7 +81,7 @@
   document.querySelectorAll('input[name^="entry."]').forEach(function (i) {
     if (!/_sentinel$/.test(i.name) && i.value) typed[i.name] = i.value;
   });
-  var m = location.href.match(/\/forms\/d\/e\/([A-Za-z0-9_-]+)\//);
+  var m = location.href.match(/\/forms\/(?:u\/\d+\/)?d\/e\/([A-Za-z0-9_-]+)\//);
   var base = m ? 'https://docs.google.com/forms/d/e/' + m[1] + '/viewform' : location.href.split('?')[0];
   var lines = ['KKM form helper - ' + (D[1][8] || D[3] || '') , 'form: ' + base, ''];
   var parts = ['usp=pp_url'], used = {}, q = 0;
@@ -111,7 +121,12 @@
   if (near) who = near.textContent.match(EM)[0];
   if (!who) { var rec = document.body.innerText.match(/(?:Record|Rekod\w*)\s+([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/i); if (rec) who = rec[1]; }
   if (who) parts.push('authuser=' + encodeURIComponent(who.toLowerCase()));
-  lines.splice(2, 0, 'akaun: ' + (who || 'TIDAK DIKESAN - log masuk dahulu') + (document.querySelector('input[name="emailAddress"]') ? '   (borang minta e-mel ditaip)' : '   (e-mel direkod dari akaun Google)'));
+  // Google ignores authuser=<email> on Forms (29 Sep 2026: the form opened under the browser's
+  // default account). What it does honour is the account's POSITION in this browser, /u/N/ in
+  // the address. Read it off this page, which is open under the account that should submit.
+  var idx = (location.pathname.match(/\/u\/(\d+)\//) || location.search.match(/[?&]authuser=(\d+)(?:&|$)/) || [])[1];
+  if (idx != null) parts.push('kkm_u=' + idx);
+  lines.splice(2, 0, 'akaun: ' + (who || 'TIDAK DIKESAN - log masuk dahulu') + (idx != null ? '   [akaun ke-' + idx + ' dalam pelayar]' : '   [kedudukan akaun TIDAK dikesan - lihat nota di halaman persediaan]') + (document.querySelector('input[name="emailAddress"]') ? '   (borang minta e-mel ditaip)' : '   (e-mel direkod dari akaun Google)'));
   lines.push('', 'TEMPLATE:', base + '?' + parts.join('&'));
   var text = lines.join('\n');
   var box = document.createElement('div');

@@ -716,6 +716,8 @@ function kkmPickOption(val, opts) {
   return byWord.length === 1 ? byWord[0] : val;
 }
 // The account a template was built under (its authuser), which is the default for every fill.
+// The account's position in the browser (/u/N/), which Forms honours where it ignores an e-mail.
+function kkmTemplateIndex(u) { const m = /[?&]kkm_u=(\d+)/.exec(u || ''); return m ? m[1] : null; }
 function kkmTemplateAccount(u) { const m = /[?&]authuser=([^&]+)/.exec(u || ''); try { return m ? decodeURIComponent(m[1]) : ''; } catch (e) { return ''; } }
 
 // Which Google account submits (Wan, 29 Sep 2026: "make sure boleh pilih email untuk submit kkm
@@ -752,9 +754,17 @@ function kkmOnEmail() {
 function kkmWithAccount(url, email) {
   // Appended as text, not through URL(): re-serialising would re-encode every answer, and the
   // answers are left exactly as kkmBuildUrl wrote them. A template's own copies are dropped first.
-  const clean = String(url).replace(/([?&])(authuser|emailAddress)=[^&]*/g, '$1').replace(/[?&]+$/, '').replace(/&&+/g, '&').replace(/\?&/, '?');
+  const clean = String(url).replace(/([?&])(authuser|emailAddress|kkm_u)=[^&]*/g, '$1').replace(/[?&]+$/, '').replace(/&&+/g, '&').replace(/\?&/, '?');
   if (!email || email === KKM_CHOOSE || email === KKM_ADD) return clean;   // the browser's current account
   const e = encodeURIComponent(email);
+  // The template's own account with a known position: open at /forms/u/N/, the address Google
+  // itself uses for the Nth signed-in account. Any other account: authuser=<email>, which Forms
+  // was seen to ignore, so the form's Switch account is the fallback there.
+  const idx = kkmTemplateIndex(KKM_FORM_URL);
+  if (idx != null && email === kkmTemplateAccount(KKM_FORM_URL)) {
+    const at = clean.replace(/\/forms\/(?:u\/\d+\/)?d\/e\//, `/forms/u/${idx}/d/e/`);
+    return at + (at.includes('?') ? '&' : '?') + 'authuser=' + idx + '&emailAddress=' + e;
+  }
   return clean + (clean.includes('?') ? '&' : '?') + 'authuser=' + e + '&emailAddress=' + e;
 }
 // The plain form, for "Open KKM form": the template's base with no answers in it.
