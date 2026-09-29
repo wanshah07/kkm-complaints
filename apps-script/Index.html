@@ -191,6 +191,10 @@
           <button id="btnFillForm" disabled class="rounded-lg bg-amber-600 text-white px-3 py-1.5 text-sm font-semibold hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed">Isi borang KKM ↗</button>
           <span id="kkmFillHint" class="text-xs text-slate-500"></span>
         </div>
+        <div id="kkmLast" class="hidden text-xs text-slate-500 break-all">
+          Pautan terakhir dibuka: <span id="kkmLastUrl" class="font-mono"></span>
+          <button id="kkmCopyLast" type="button" class="ml-1 underline text-blue-700">Salin pautan</button>
+        </div>
       </div>
     </div>
 
@@ -708,7 +712,9 @@ function kkmChecks(v, template) {
   const notOk = /^NOT\s*\d/i.test(v['Nombor Notifikasi'] || '');
   const st = v['Status'] || '';
   return [
-    [!!template && kkmIsTemplate(template), 'Borang KKM sudah disediakan (templat pra-isi)', true],
+    [!!template && kkmIsTemplate(template), 'Borang KKM sudah disediakan (templat pra-isi)'
+      + (kkmIsTemplate(template) ? ' - akaun ' + (kkmTemplateAccount(template) || 'tidak ditetapkan')
+         + (kkmTemplateIndex(template) != null ? `, dibuka di /forms/u/${kkmTemplateIndex(template)}/` : ', TIADA kedudukan (kkm_u) - akan dibuka di akaun lalai') : ''), true],
     [st !== 'Complete' && st !== 'Dismissed', st === 'Complete'
       ? 'Status: Complete - aduan ini sudah ditanda dihantar. Jika sebenarnya belum, klik "Mark In-Progress" dahulu.'
       : (st === 'Dismissed' ? 'Status: Dismissed - aduan ini ditolak. Klik "Mark In-Progress" jika mahu memfailkannya.'
@@ -789,6 +795,7 @@ async function fillKkmForm() {
       note = ' Deskripsi terlalu panjang untuk pautan: sudah disalin, tampal ke dalam borang.';
     }
     if (w) { w.opener = null; w.location.href = url; } else { window.open(url, '_blank', 'noopener'); }
+    $('kkmLastUrl').textContent = url.slice(0, 140) + (url.length > 140 ? '…' : ''); $('kkmLast').dataset.url = url; $('kkmLast').classList.remove('hidden');
     toast('Borang dibuka dan diisi' + (email && email !== KKM_CHOOSE ? ` sebagai ${email}` : '') + '. Semak akaun di atas borang, lampirkan screenshot, tekan Submit, kemudian Mark Complete.' + note
           + (unknown.length ? ` Tiada nilai untuk: ${unknown.join(', ')}.` : ''), 9000);
   } catch (e) {
@@ -818,6 +825,7 @@ $('btnOpenForm').onclick = openKkmForm;
 $('btnFillForm').onclick = fillKkmForm;
 $('kkmConfirm').onchange = kkmGate;
 $('kkmEmail').onchange = kkmOnEmail;
+$('kkmCopyLast').onclick = () => copy($('kkmLast').dataset.url, 'Pautan');
 kkmRenderEmails();
 ['eNama', 'eNot', 'eJenis', 'eDeskripsi', 'eViolationReason', 'eRemarks'].forEach(id => $(id).addEventListener('input', kkmGate));
 $('btnClose').onclick = () => showDrawer(false);
