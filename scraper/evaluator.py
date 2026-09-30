@@ -349,6 +349,29 @@ def _review_anthropic(inp: ReviewInput) -> dict:
     return data
 
 
+# A gateway that ignores response_format never shows the model the field names, so it improvises
+# them. 30 Sep 2026, dry run 63, deepseek-v4-pro: every first reply was a prose report, and the
+# retry came back as {"decision": ..., "violation_reason": ...} - no "verdict", no "confidence" -
+# while the five replies that did parse carried a confidence the run read as 0.0, below the push
+# threshold, so a real finding would have been filed as a skip. Say the keys out loud.
+_SCHEMA_HINT = ("Reply with ONLY one JSON object - no prose before or after, no code fence - that follows "
+                "this JSON Schema exactly, using these key names and no others: "
+                + json.dumps(VERDICT_SCHEMA, separators=(",", ":")))
+
+
+def _confidence(v) -> Optional[float]:
+    """0..1 from a number, '0.85', '85' or '85%'; None when the reply gave nothing usable."""
+    if isinstance(v, bool) or v is None:
+        return None
+    try:
+        x = float(str(v).strip().rstrip("%")) if isinstance(v, str) else float(v)
+    except (TypeError, ValueError):
+        return None
+    if x > 1.0 and x <= 100.0:
+        x /= 100.0
+    return x if 0.0 <= x <= 1.0 else None
+
+
 def _parse_reply(raw: str) -> dict:
     """A reviewer reply as an object: bare JSON, or the object inside a fence or prose."""
     try:
@@ -379,7 +402,7 @@ def _review_openai(inp: ReviewInput) -> dict:
     model = env_str("OPENAI_MODEL", "gpt-4.1")
     where = f" via {base_url}" if base_url else ""
 
-    text_part = {"type": "text", "text": _user_prompt(inp)}
+    text_part = {"type": "text", "text": _user_prompt(inp) + "\n\n" + _SCHEMA_HINT}
     image_part = None
     if inp.screenshot_path and env_str("LLM_USE_SCREENSHOT", "1") == "1":
         enc = _encoded_screenshot(inp.screenshot_path)
@@ -430,8 +453,8 @@ def _review_openai(inp: ReviewInput) -> dict:
         retry = dict(kwargs)
         retry["messages"] = list(kwargs["messages"]) + [
             {"role": "assistant", "content": raw},
-            {"role": "user", "content": "That was not a JSON object. Reply with ONLY the JSON object "
-                                        "for your verdict, matching the schema. No prose, no code fence."}]
+            {"role": "user", "content": "That was not a JSON object. Give the same verdict again, in the "
+                                        "required form. " + _SCHEMA_HINT}]
         resp = client.chat.completions.create(**retry)
         raw = resp.choices[0].message.content or ""
         try:
@@ -564,6 +587,13 @@ def review(inp: ReviewInput, use_llm: bool = True, provider: Optional[str] = Non
             # every field but the verdict has a default, so it used to surface far downstream as
             # KeyError('verdict'). Treat it as the provider failing, which it is.
             raise ValueError(f"reviewer returned no usable verdict (keys: {sorted(data)[:8]})")
+        conf = _confidence(data.get("confidence"))
+        if conf is None:
+            # Silence here would become 0.0 in _normalise, which is below every push threshold: a real
+            # Unacceptable would be filed as a skip and ledgered as judged. Fail it instead.
+            raise ValueError(f"reviewer returned no usable confidence ({data.get('confidence')!r}; "
+                             f"keys: {sorted(data)[:8]})")
+        data["confidence"] = conf
         return _check_grounding(_normalise(data), inp)
     except Exception as e:  # any provider failure → rules fallback, never a crashed run
         log.error("LLM review failed for %s: %s — falling back to rules", inp.url, e)

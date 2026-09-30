@@ -193,6 +193,8 @@ What happens now:
 - **If it still fails, the post is left alone**: not filed, not in the ledger, not marked known. The next run reviews it again. The summary prints `REVIEWER FAILED on N post(s)` with the accounts and the first cause, and the run carries a GitHub warning annotation.
 - **Deliberate rules-only stays as it was**: `--no-llm` and a missing API key still produce rules-only verdicts, because there nothing was configured to fail.
 
+**A gateway that ignores `response_format` never shows the model the field names** (dry run 63, deepseek-v4-pro, 30 Sep 2026). Every first reply was a prose report; the retry came back with `decision` instead of `verdict` and no `confidence`; and the replies that did parse read as confidence 0.0, below the push threshold, so a genuine Unacceptable would have been filed as a skip. Now both the first request and the reminder spell out the schema's key names, a confidence is parsed from a number, `"0.85"`, `"85"` or `"85%"`, and a reply with no usable confidence counts as a failed review (left unjudged, reported) rather than a silent 0.0.
+
 To re-screen posts already buried by runs 60 and 62, delete today's rows from the `Reviewed` tab (Reviewer column reads `rules-only`) and the 16 `reviewer=rules-only; LLM failed` rows from `Complaints`. Deleting a Reviewed row is the documented way to re-review a post.
 
 ### When a handle in the sheet is wrong
