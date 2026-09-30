@@ -349,6 +349,18 @@ def _review_anthropic(inp: ReviewInput) -> dict:
     return data
 
 
+def _parse_reply(raw: str) -> dict:
+    """A reviewer reply as an object: bare JSON, or the object inside a fence or prose."""
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        stripped = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```")
+        m = re.search(r"\{.*\}", stripped, re.S)
+        if not m:
+            raise
+        return json.loads(m.group(0))
+
+
 def _review_openai(inp: ReviewInput) -> dict:
     """
     The OpenAI-compatible path. OPENAI_BASE_URL aims it at any gateway that speaks
@@ -407,13 +419,26 @@ def _review_openai(inp: ReviewInput) -> dict:
 
     raw = resp.choices[0].message.content or "{}"
     try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:   # no JSON mode: the object arrives wrapped in a fence or prose
-        stripped = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```")
-        m = re.search(r"\{.*\}", stripped, re.S)
-        if not m:
+        data = _parse_reply(raw)
+    except json.JSONDecodeError:
+        # 30 Sep 2026, runs 60 and 62: 62 of 65 kimi replies were HTTP 200 with prose and no
+        # object in it, and the log said only "Expecting value: line 1 column 1" - nothing to
+        # diagnose from. Say what came back, then ask once more for the object alone, keeping
+        # the model's own answer in the thread so it reformats rather than re-judges.
+        log.warning("reviewer%s: %s replied without a JSON object (%d chars, finish=%s): %r",
+                    where, model, len(raw), getattr(resp.choices[0], "finish_reason", "?"), raw[:300])
+        retry = dict(kwargs)
+        retry["messages"] = list(kwargs["messages"]) + [
+            {"role": "assistant", "content": raw},
+            {"role": "user", "content": "That was not a JSON object. Reply with ONLY the JSON object "
+                                        "for your verdict, matching the schema. No prose, no code fence."}]
+        resp = client.chat.completions.create(**retry)
+        raw = resp.choices[0].message.content or ""
+        try:
+            data = _parse_reply(raw)
+        except json.JSONDecodeError:
+            log.warning("reviewer%s: %s still no JSON object after one reminder: %r", where, model, raw[:300])
             raise
-        data = json.loads(m.group(0))
     data["reviewer"] = f"openai:{model}"
     u = getattr(resp, "usage", None)
     if u is not None:
@@ -544,4 +569,8 @@ def review(inp: ReviewInput, use_llm: bool = True, provider: Optional[str] = Non
         log.error("LLM review failed for %s: %s — falling back to rules", inp.url, e)
         v = offline_verdict(inp.text)
         v["notes"] = f"LLM failed: {e}"
+        # A reviewer was configured and did not answer. The rulebook verdict below is kept for
+        # the record, but it is NOT a review: the caller must not file it or ledger it, or the
+        # post is buried as judged (runs 60 and 62 buried 55 posts and filed 16 Risky rows).
+        v["llm_failed"] = True
         return _normalise(v)

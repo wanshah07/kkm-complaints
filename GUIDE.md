@@ -182,6 +182,19 @@ Three things worth knowing:
 
 The `Reviewed` tab builds itself on first use; `setup()` does not need re-running. Until it is deployed the run logs `no reviewed-post ledger on this deployment` and carries on exactly as before, re-reviewing clean posts. Nothing breaks; it just keeps costing.
 
+### When the reviewer fails, the post is NOT judged (30 Sep 2026)
+
+Runs 60 and 62 reached the model for 65 posts and got prose back for 62 of them: HTTP 200, no JSON object in it. The code fell back to the keyword rulebook, which is fine as a record but is not a review, and the run then did two damaging things with it: it filed 16 rules-only `Risky` rows (confidence 0.4, mostly "the account says Dr"), and it wrote 55 posts to the Reviewed ledger as judged, so no later run would look at them again. A dead reviewer read as a clean sweep.
+
+What happens now:
+
+- **The reply is logged** (first 300 characters) when it has no JSON object, so the cause can be read from the run log instead of guessed.
+- **One reminder is sent** ("reply with ONLY the JSON object"), with the model's own answer kept in the thread so it reformats rather than re-judges.
+- **If it still fails, the post is left alone**: not filed, not in the ledger, not marked known. The next run reviews it again. The summary prints `REVIEWER FAILED on N post(s)` with the accounts and the first cause, and the run carries a GitHub warning annotation.
+- **Deliberate rules-only stays as it was**: `--no-llm` and a missing API key still produce rules-only verdicts, because there nothing was configured to fail.
+
+To re-screen posts already buried by runs 60 and 62, delete today's rows from the `Reviewed` tab (Reviewer column reads `rules-only`) and the 16 `reviewer=rules-only; LLM failed` rows from `Complaints`. Deleting a Reviewed row is the documented way to re-review a post.
+
 ### When a handle in the sheet is wrong
 
 A wrong handle costs the whole target, quietly, every run — the profile opens, the grid loads, and every post is discarded as somebody else's. Run `35411935644` lost all of `@drjaynelim_`'s posts that way because the Targets row still read `jaynelim_`. Two different failures, both now reported in the run summary under **handles to check in the Targets tab**:

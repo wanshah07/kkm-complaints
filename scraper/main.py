@@ -239,7 +239,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     run_dir = os.path.join(args.out, started.strftime("%Y%m%d_%H%M%S"))
     os.makedirs(run_dir, exist_ok=True)
     report: Dict = {"started_myt": started.isoformat(), "targets": [], "pushed": [], "skipped": [],
-                    "errors": [], "comparison": [], "flagged": [], "handle_checks": []}
+                    "errors": [], "comparison": [], "flagged": [], "handle_checks": [],
+                    "reviewer_failed": []}
 
     # --- selftest (no browser, read-only) ------------------------------------
     if args.selftest is not None:
@@ -479,6 +480,16 @@ def main(argv: Optional[List[str]] = None) -> int:
 
                 v = review(ri, use_llm=not args.no_llm)
                 _spend(v)
+                if v.get("llm_failed"):
+                    # A reviewer was configured and gave no answer, so the rulebook verdict is not a
+                    # review. Runs 60 and 62 (30 Sep 2026) filed 16 rules-only Risky rows and wrote 55
+                    # such posts to the ledger as judged, which is how a dead reviewer looks like a
+                    # clean sweep. Leave the post out of the ledger and the sheet, and out of `known`,
+                    # so the next run reviews it again; the summary says how many.
+                    report["reviewer_failed"].append({"url": post.url, "brand": post.brand,
+                                                      "platform": post.platform,
+                                                      "why": str(v.get("notes") or "")[:200]})
+                    continue
                 if not v.get("verdict"):
                     # The rules fallback always produces one, so reaching here means even that failed.
                     # An unreviewed post is an error to surface, never a quiet skip.
@@ -733,6 +744,16 @@ def _print_summary(report: dict) -> None:
     flagged_n = len(report.get("flagged") or [])
     print(f"  pushed: {len(report['pushed'])}   skipped: {len(report['skipped'])}   "
           f"flagged: {flagged_n}   errors: {len(report['errors'])}")
+    rf = report.get("reviewer_failed") or []
+    if rf:
+        by = {}
+        for p in rf:
+            by[p["brand"]] = by.get(p["brand"], 0) + 1
+        print(f"\n  !!! REVIEWER FAILED on {len(rf)} post(s) - NOT judged, NOT filed, NOT in the ledger;"
+              f" the next run reviews them again:")
+        print("      " + ", ".join(f"{b} x{n}" for b, n in sorted(by.items(), key=lambda x: -x[1])))
+        print(f"      first cause: {rf[0]['why']}\n")
+        print(f"::warning title=Reviewer failed::{len(rf)} post(s) were not judged because the reviewer gave no usable answer")
     for p in report["pushed"]:
         print(f"    → PUSH {p['verdict']} ({p['confidence']}) {p['type']}  {p['url']}")
     for p in report.get("flagged") or []:
