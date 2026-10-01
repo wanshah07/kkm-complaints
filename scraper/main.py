@@ -338,6 +338,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         report["skip_unjudged"] = bool(args.skip_unjudged)
 
     scraper = Scraper(cfg, os.path.join(run_dir, "screenshots"))
+    scraper.known_urls = known
     planned = scraper.plan(brands, platform_filter=args.platform, brand_filter=args.brand)
     budget_min = float(run_cfg.get("max_run_minutes") or 0)
     deadline = (time.time() + budget_min * 60) if budget_min > 0 else None

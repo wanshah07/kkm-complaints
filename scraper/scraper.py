@@ -59,6 +59,7 @@ class Post:
     errors: List[str] = field(default_factory=list)
     not_owned: bool = False  # confirmed to be a different account's post; never sent for review
     blocked: bool = False    # the platform served a login wall, not the post; never sent for review
+    known: bool = False      # already in the sheet or the Reviewed ledger: never opened, main.py skips it
 
 
 @dataclass
@@ -587,7 +588,13 @@ def _collect_links(page: Page, patterns: List[str], base: str, limit: int,
                    platform: str = "", handle: str = "", scroll_pause=None) -> List[str]:
     scroll_pause = scroll_pause or [1.5, 3.5]
     hrefs: List[str] = []
-    for _ in range(6):  # scroll to load a few rows
+    # Six rounds fitted a limit of six. A larger limit needs proportionally more scrolling or the
+    # grid never offers that many links and the setting silently does nothing; the loop also
+    # ends on its own after three rounds that add nothing (the end of the feed).
+    rounds = max(6, int(limit) // 2 + 4)
+    stale = 0
+    for _ in range(rounds):  # scroll to load more rows
+        before = len(hrefs)
         try:
             found = page.locator("a[href]").evaluate_all("els => els.map(e => e.getAttribute('href'))")
         except Exception:
@@ -601,6 +608,9 @@ def _collect_links(page: Page, patterns: List[str], base: str, limit: int,
                 if c not in [canonical_url(x) for x in hrefs]:
                     hrefs.append(full)
         if len(hrefs) >= limit * 2:
+            break
+        stale = stale + 1 if len(hrefs) == before else 0
+        if stale >= 3:
             break
         try:
             page.mouse.wheel(0, random.randint(1200, 2000))
@@ -637,6 +647,9 @@ class Scraper:
         self.out_dir = out_dir
         os.makedirs(out_dir, exist_ok=True)
         self._storage_state_path = self._materialise_storage_state()
+        # Canonical URLs main.py already has in the sheet / Reviewed ledger. main.py replaces this
+        # with its live set, which grows as the run files posts.
+        self.known_urls: set = set()
 
     @staticmethod
     def _report_session_age(raw: bytes) -> None:
@@ -877,12 +890,33 @@ class Scraper:
                 hint = _diagnose_empty(page, self.out_dir, f"{brand}_{platform}")
                 res.error = "no post links found" + (f" — {hint}" if hint else " (layout change or restricted profile)")
                 log.warning("[%s/%s] %s", brand, platform, res.error)
-            for i, link in enumerate(links):
-                if i:  # no wait before the first post of a profile
+            # A post already in the sheet or the Reviewed ledger is never opened: opening it costs a
+            # page load and 8-25 s of pacing to learn what main.py already knows. At 60 posts a
+            # profile that is the difference between 19 targets a run and three.
+            # And the grid is newest first, so once several dated posts in a row fall before the
+            # window the rest are older still. Four, not one, because up to three pinned posts
+            # sit at the top of an Instagram grid however old they are.
+            min_date = str(self.run_cfg.get("min_post_date") or "")
+            lookback = int(self.run_cfg.get("lookback_days", 0) or 0)
+            opened = old_streak = 0
+            for link in links:
+                url = clean_post_url(link)
+                if canonical_url(url) in self.known_urls:
+                    res.posts.append(Post(brand=brand, platform=platform, url=url, known=True))
+                    continue
+                if opened:  # no wait before the first post opened on a profile
                     _pace(self.run_cfg.get("pause_between_posts"), "the next post")
-                res.posts.append(self._scrape_post(ctx, brand, platform, link, handle=handle))
+                post = self._scrape_post(ctx, brand, platform, link, handle=handle)
+                res.posts.append(post)
+                opened += 1
+                if post.posted_at:
+                    old_streak = 0 if date_allowed(post.posted_at, lookback, min_date) else old_streak + 1
+                    if old_streak >= 4:
+                        log.info("[%s/%s] four posts in a row before %s; the rest of the grid is older, stopping here",
+                                 brand, platform, min_date or f"{lookback} days ago")
+                        break
             if res.renamed_to is None:
-                res.drift_note = _drift_note(res.posts, handle)
+                res.drift_note = _drift_note([p for p in res.posts if not p.known], handle)
                 if res.drift_note:
                     log.warning("[%s/%s] %s", brand, platform, res.drift_note)
         except PWTimeout as e:
