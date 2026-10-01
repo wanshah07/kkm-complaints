@@ -453,7 +453,7 @@ That file is a live login. Do not leave it on the desktop and do not email it.
 
 | Setting | Now | What it does |
 |---|---|---|
-| `min_post_date` | `2025-09-01` | Only posts published on or after this date are reviewed |
+| `min_post_date` | `2024-06-01` | Only posts published on or after this date are reviewed |
 | `lookback_days` | `0` (off) | Rolling alternative: only the last N days |
 | `max_posts_per_profile` | `6` | Newest posts examined per brand per platform |
 | `push_risky` | `true` | Risky verdicts go to the sheet too |
