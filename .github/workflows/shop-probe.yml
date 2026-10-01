@@ -11,6 +11,10 @@ on:
         description: 'URLs to open, one per line (blank = Shopee home + search, TikTok profile + search). Best: one Shopee product listing and one Shopee shop page.'
         type: string
         default: ''
+      with_session:
+        description: 'Also load the recorded browser session (PW_STORAGE_STATE_B64, a throwaway account). Leave off to see what an anonymous runner sees.'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -32,6 +36,8 @@ jobs:
       - name: Probe
         env:
           URLS: ${{ github.event.inputs.urls }}
+          PROBE_WITH_SESSION: ${{ github.event.inputs.with_session == 'true' && '1' || '0' }}
+          PW_STORAGE_STATE_B64: ${{ secrets.PW_STORAGE_STATE_B64 }}
         run: |
           mapfile -t ARR < <(printf '%s\n' "$URLS" | sed '/^\s*$/d')
           python tools/shop_probe.py "${ARR[@]}"
