@@ -1,0 +1,45 @@
+# Can a GitHub runner read Shopee and TikTok? Read-only: opens each URL in a fresh browser,
+# reports what it saw (content, login wall, captcha, or "not a measurement"), uploads screenshots.
+# Writes nothing to the sheet. Dispatch only. See tools/shop_probe.py for the three outcomes.
+
+name: Shop / TikTok probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: 'URLs to open, one per line (blank = Shopee home + search, TikTok profile + search). Best: one Shopee product listing and one Shopee shop page.'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Playwright
+        run: |
+          python -m pip install --upgrade pip
+          pip install "playwright>=1.47,<2"
+          python -m playwright install --with-deps chromium
+      - name: Probe
+        env:
+          URLS: ${{ github.event.inputs.urls }}
+        run: |
+          mapfile -t ARR < <(printf '%s\n' "$URLS" | sed '/^\s*$/d')
+          python tools/shop_probe.py "${ARR[@]}"
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shop-probe-${{ github.run_id }}
+          path: probe_out/
+          retention-days: 14
+          if-no-files-found: ignore
