@@ -32,11 +32,12 @@ OUT = "probe_out"
 
 def session_path():
     """A recorded browser session, ONLY when asked for (PROBE_WITH_SESSION=1) and the secret is set.
-    Same secret the scraper uses (a throwaway account's Playwright storage_state, base64, optionally
-    gzipped). Never printed."""
+    A SEPARATE secret from the scraper's (PW_STORAGE_STATE_SHOP_B64): a throwaway Shopee / TikTok
+    login in a Playwright storage_state, base64, optionally gzipped. Kept apart so recording it
+    cannot overwrite the Instagram / Facebook / Threads session the sweep runs on. Never printed."""
     if os.environ.get("PROBE_WITH_SESSION") != "1":
         return None
-    raw = (os.environ.get("PW_STORAGE_STATE_B64") or "").strip()
+    raw = (os.environ.get("PW_STORAGE_STATE_SHOP_B64") or "").strip()
     if not raw:
         return None
     b = base64.b64decode(raw)
