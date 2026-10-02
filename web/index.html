@@ -331,7 +331,7 @@ const STATUS_STYLE = {
   'Complete':    'bg-emerald-100 text-emerald-800',
   'Dismissed':   'bg-slate-200 text-slate-700'
 };
-const state = { rows: [], stats: null, lookups: null, statuses: [], filter: { status: '', brand: '', platform: '', q: '' }, current: null, questUrl: '' };
+const state = { rows: [], archived: [], stats: null, lookups: null, statuses: [], filter: { status: '', brand: '', platform: '', q: '' }, current: null, questUrl: '' };
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -420,7 +420,7 @@ async function boot(rethrow) {
     const b = await rpc('apiBootstrap');
     state.rows = b.rows; state.stats = b.stats; state.lookups = b.lookups; state.statuses = b.statuses;
     state.questUrl = b.questUrl; KKM_FORM_URL = b.kkmFormUrl || KKM_FORM_URL;
-    renderLookups(); renderAll();
+    renderLookups(); renderAll(); loadArchived();
   } catch (e) {
     $('loading').innerHTML = `<div class="text-sm text-rose-700">${esc(e.message)}</div>`;
     if (rethrow) throw e;
@@ -433,7 +433,7 @@ async function refresh(silent) {
   btn.disabled = true; btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px"></span>';
   try {
     const r = await rpc('apiList', {});
-    state.rows = r.rows; state.stats = r.stats; renderAll();
+    state.rows = r.rows; state.stats = r.stats; renderAll(); loadArchived();
     if (!silent) toast('Refreshed');
   } catch (e) { toast('Refresh failed: ' + e.message); }
   finally { btn.disabled = false; btn.innerHTML = was; }
@@ -470,11 +470,34 @@ function openKkmForm(ev) {
 
 function renderAll() { renderStats(); renderChips(); renderTable(); }
 
+// A complaint KKM has replied to is "archived" by the backend: it leaves the working list and is no
+// longer counted under its Status, so the Complete tile read 0 while the Complete filter still showed
+// those files (Wan, 2 Oct 2026: "fix complete count"). Complete means submitted to KKM, replied or not,
+// so the tile and the filter both count the replied ones too. The archive is fetched once per load;
+// until it arrives the tile falls back to the server's own Complete + Archived figures.
+function completeRows() {
+  const seen = new Set(), out = [];
+  for (const r of [...state.rows, ...(state.archived || [])]) {
+    if (r['Status'] !== 'Complete' || seen.has(r['ID'])) continue;
+    seen.add(r['ID']); out.push(r);
+  }
+  return out;
+}
+function completeCount() {
+  const c = state.stats.counts;
+  return Math.max((c['Complete'] || 0) + (c['Archived'] || 0), completeRows().length);
+}
+async function loadArchived() {
+  try { state.archived = (await rpc('apiList', { status: 'Archived' })).rows || []; }
+  catch (e) { state.archived = []; }
+  if (state.filter.status === 'Complete' || state.filter.status === '') renderAll(); else renderStats();
+}
+
 function renderStats() {
   const c = state.stats.counts;
   const tiles = [
     ['New', c['New'] || 0, 'text-blue-700'], ['In-Progress', c['In-Progress'] || 0, 'text-amber-700'],
-    ['Complete', c['Complete'] || 0, 'text-emerald-700'], ['Dismissed', c['Dismissed'] || 0, 'text-slate-600'],
+    ['Complete', completeCount(), 'text-emerald-700'], ['Dismissed', c['Dismissed'] || 0, 'text-slate-600'],
     ['Total', c.total || 0, 'text-slate-900']
   ];
   $('stats').innerHTML = tiles.map(([label, n, cls]) => `
@@ -494,7 +517,8 @@ function renderChips() {
 
 function filtered() {
   const f = state.filter; const q = f.q.trim().toLowerCase();
-  return state.rows.filter(r =>
+  const src = f.status === 'Complete' ? completeRows() : state.rows;
+  return src.filter(r =>
     (!f.status || r['Status'] === f.status) &&
     (!f.brand || r['Brand'] === f.brand) &&
     (!f.platform || r['Platform'] === f.platform) &&
@@ -504,7 +528,7 @@ function filtered() {
 function renderTable() {
   $('loading').classList.add('hidden');
   const rows = filtered();
-  $('count').textContent = `${rows.length} of ${state.rows.length}`;
+  $('count').textContent = `${rows.length} of ${state.filter.status === 'Complete' ? completeCount() : state.rows.length}`;
   $('empty').classList.toggle('hidden', rows.length > 0);
   $('rows').innerHTML = rows.map(r => `
     <tr data-id="${esc(r['ID'])}" class="row-hover cursor-pointer">
@@ -546,7 +570,7 @@ function mergeRow(row) {
   if (i >= 0) state.rows[i] = row; else state.rows.unshift(row);
   renderTable();
 }
-async function refreshStatsOnly() { try { const r = await rpc('apiList', {}); state.stats = r.stats; state.rows = r.rows; renderAll(); } catch (e) {} }
+async function refreshStatsOnly() { try { const r = await rpc('apiList', {}); state.stats = r.stats; state.rows = r.rows; renderAll(); loadArchived(); } catch (e) {} }
 
 function fillDrawer(r) {
   state.current = r;
