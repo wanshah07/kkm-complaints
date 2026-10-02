@@ -406,9 +406,13 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     try:
         for tr in results:
-            reached.add((tr.brand, tr.platform))
+            # A target cut short by the run budget is NOT reached: it stays on the not-reached list so
+            # the next run finishes it. Its reviewed posts are filed and ledgered as usual.
+            if not getattr(tr, "truncated", False):
+                reached.add((tr.brand, tr.platform))
             report["targets"].append({"brand": tr.brand, "platform": tr.platform, "profile": tr.profile_url,
-                                      "posts": len(tr.posts), "error": tr.error})
+                                      "posts": len(tr.posts), "error": tr.error,
+                                      "truncated": bool(getattr(tr, "truncated", False))})
             # A handle the sheet has wrong costs the whole target, silently, every run. Collect it
             # so the summary names it instead of leaving it to be found in a log.
             if tr.renamed_to:
@@ -741,7 +745,7 @@ def _write_report(run_dir: str, report: dict) -> None:
 def _print_summary(report: dict) -> None:
     print("\n=== KKM scraper run summary ===")
     for t in report["targets"]:
-        print(f"  {t['brand']:<16} {t['platform']:<10} posts={t['posts']:<3} {('ERR ' + t['error']) if t['error'] else 'ok'}")
+        print(f"  {t['brand']:<16} {t['platform']:<10} posts={t['posts']:<3} {('ERR ' + t['error']) if t['error'] else ('PARTIAL - run budget ended mid-profile' if t.get('truncated') else 'ok')}")
     flagged_n = len(report.get("flagged") or [])
     print(f"  pushed: {len(report['pushed'])}   skipped: {len(report['skipped'])}   "
           f"flagged: {flagged_n}   errors: {len(report['errors'])}")

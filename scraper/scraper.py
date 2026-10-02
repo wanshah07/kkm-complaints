@@ -69,6 +69,7 @@ class TargetResult:
     profile_url: str
     posts: List[Post] = field(default_factory=list)
     error: Optional[str] = None
+    truncated: bool = False  # the run budget ended before every post of this target was opened
     # Set when the sheet's handle is not the one the account actually answers to. The run keeps
     # going on the handle it landed on; the summary says so, so the Targets tab can be corrected.
     renamed_to: Optional[str] = None
@@ -650,6 +651,10 @@ class Scraper:
         # Canonical URLs main.py already has in the sheet / Reviewed ledger. main.py replaces this
         # with its live set, which grows as the run files posts.
         self.known_urls: set = set()
+        # Set by scrape(): True once the run budget is spent. Checked between posts so a target
+        # with dozens of posts ends cleanly instead of being killed by the job timeout with its
+        # work unsaved (run 68 lost a 40-minute target that way).
+        self.should_stop: Optional[Callable[[], bool]] = None
 
     @staticmethod
     def _report_session_age(raw: bytes) -> None:
@@ -771,6 +776,7 @@ class Scraper:
         a run that is cut short keeps everything it had already finished.
         """
         targets = self.plan(brands, platform_filter, brand_filter)
+        self.should_stop = should_stop
         done = 0
         with sync_playwright() as pw:
             launch_kwargs = dict(headless=bool(self.run_cfg.get("headless", True)),
@@ -904,6 +910,12 @@ class Scraper:
                 if canonical_url(url) in self.known_urls:
                     res.posts.append(Post(brand=brand, platform=platform, url=url, known=True))
                     continue
+                stop = getattr(self, "should_stop", None)
+                if stop and stop():
+                    res.truncated = True
+                    log.warning("[%s/%s] run budget reached after %d post(s) opened; the rest of this "
+                                "profile is left for the next run", brand, platform, opened)
+                    break
                 if opened:  # no wait before the first post opened on a profile
                     _pace(self.run_cfg.get("pause_between_posts"), "the next post")
                 post = self._scrape_post(ctx, brand, platform, link, handle=handle)

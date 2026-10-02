@@ -455,7 +455,7 @@ That file is a live login. Do not leave it on the desktop and do not email it.
 |---|---|---|
 | `min_post_date` | `2024-06-01` | Only posts published on or after this date are reviewed |
 | `lookback_days` | `0` (off) | Rolling alternative: only the last N days |
-| `max_posts_per_profile` | `60` | Newest posts looked at per brand per platform. Posts already in the sheet or the Reviewed ledger are not opened, and a profile stops after four dated posts in a row older than `min_post_date`, so only new, in-window posts cost time |
+| `max_posts_per_profile` | `20` | Newest posts looked at per brand per platform. Posts already in the sheet or the Reviewed ledger are not opened, and a profile stops after four dated posts in a row older than `min_post_date`, so only new, in-window posts cost time |
 | `push_risky` | `true` | Risky verdicts go to the sheet too |
 | `min_confidence` | `0.6` | Unacceptable verdicts below this are dropped |
 
