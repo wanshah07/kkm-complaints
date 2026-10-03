@@ -42,7 +42,7 @@ var HEADERS = [
   'Remarks',            // 10
   'Nama Kosmetik',      // 11 product name as advertised (KKM form: Nama kosmetik)
   'Nombor Notifikasi',  // 12 NOT number — blank until verified on QUEST3+
-  'Jenis Aduan',        // 13 Iklan Kosmetik | Kualiti Kosmetik
+  'Jenis Aduan',        // 13 Iklan Kosmetik | Kualiti Kosmetik | route to another regulator (JENIS_ADUAN)
   'Deskripsi Aduan',    // 14 ready-to-paste complaint description (BM)
   'Tarikh Melapor',     // 15 date the report was submitted to KKM
   'KKM Feedback',       // 16 NPRA/KKM reply pasted in by Wan after submission
@@ -88,7 +88,10 @@ function listRowToObject_(row) {
 function isArchived_(rowVals) {
   return String(rowVals[COL['KKM Feedback']] || '').trim() !== '';
 }
-var JENIS_ADUAN = ['Iklan Kosmetik', 'Kualiti Kosmetik'];
+// The first two are the KKM cosmetic form's own options. The rest are routes to other regulators
+// (Wan, 3 Oct 2026); they only mark where a complaint goes and carry no form of their own.
+var JENIS_ADUAN = ['Iklan Kosmetik', 'Kualiti Kosmetik', 'MDA - Peranti Perubatan', 'Amalan Perubatan (MMC)',
+                   'Ubat / Suplemen (Lembaga Iklan Ubat)', 'Makanan (BKKM)', 'Lain-lain'];
 
 var DEFAULT_BRANDS = ['La Roche-Posay', 'Eucerin', 'QV', 'The Raw'];
 var DEFAULT_PLATFORMS = ['Instagram', 'Facebook', 'Threads'];

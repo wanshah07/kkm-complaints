@@ -175,6 +175,20 @@
         <button id="btnCopyUrl" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50">Copy Sumber iklan (URL)</button>
         <button id="btnOpenForm" class="rounded-lg bg-slate-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-slate-800">Open KKM form ↗</button>
       </div>
+      <!-- A complaint that is not for the KKM cosmetic form: no auto-fill, just that route's own form link. -->
+      <div id="routeFill" class="hidden rounded-xl border border-sky-300 bg-white p-3 space-y-2">
+        <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Laluan aduan: <span id="routeName"></span></div>
+        <div id="routeAgency" class="text-xs text-slate-500"></div>
+        <label class="block">
+          <span class="text-xs font-medium text-slate-600">Pautan borang aduan untuk laluan ini</span>
+          <input id="routeFormUrl" placeholder="https://..." class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3">
+        </label>
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="btnRouteSave" type="button" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50">Save link</button>
+          <button id="btnRouteOpen" type="button" disabled class="rounded-lg bg-sky-700 text-white px-3 py-1.5 text-sm font-semibold hover:bg-sky-800 disabled:opacity-40 disabled:cursor-not-allowed">Open complaint form ↗</button>
+          <span id="routeHint" class="text-xs text-slate-500"></span>
+        </div>
+      </div>
       <!-- Fill KKM form: Google's own pre-filled link, opened only once every check below passes and Wan has ticked the confirmation. It never submits. -->
       <div id="kkmFill" class="rounded-xl border border-amber-300 bg-white p-3 space-y-2">
         <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Isi borang KKM secara automatik</div>
@@ -440,6 +454,52 @@ async function refresh(silent) {
 }
 
 // ---------------------------------------------------------------------------
+// Where a complaint goes (Wan, 3 Oct 2026: "for routing other than iklan kosmetik, make another
+// options like MDA, medical practice etc, so later I can setup to link with relevant complaint form").
+// The value is stored in the sheet's Jenis Aduan column. The first two are the KKM cosmetic form's
+// own options and keep the automatic form fill. Every other route has no form of its own here, so
+// the drawer swaps the KKM panel for a plain "paste the complaint form link" box instead of
+// pre-filling the wrong form. To link one for good, put its URL in `form` below; a link pasted in
+// the drawer is kept in this browser and wins over this file.
+// ---------------------------------------------------------------------------
+const ROUTES = [
+  { value: 'Iklan Kosmetik', kkm: true },
+  { value: 'Kualiti Kosmetik', kkm: true },
+  { value: 'MDA - Peranti Perubatan', agency: 'Medical Device Authority (MDA)', form: '' },
+  { value: 'Amalan Perubatan (MMC)', agency: 'Medical practice advertising (MMC / KKM medical practice)', form: '' },
+  { value: 'Ubat / Suplemen (Lembaga Iklan Ubat)', agency: 'Medicine and supplement advertising (NPRA / Medicine Advertisements Board)', form: '' },
+  { value: 'Makanan (BKKM)', agency: 'Food advertising (BKKM)', form: '' },
+  { value: 'Lain-lain', agency: 'Other', form: '' }
+];
+const ROUTE_VALUES = ROUTES.map(r => r.value);
+function routeOf(v) { return ROUTES.find(r => r.value === v) || ROUTES[0]; }
+function isKkmRoute(v) { return !v || !!routeOf(v).kkm || ROUTE_VALUES.indexOf(v) < 0; }
+function routeFormUrl(v) {
+  let u = (routeOf(v).form || '').trim();
+  try { const m = JSON.parse(localStorage.getItem('kkm.routeForms') || '{}') || {}; if (m[v]) u = String(m[v]); } catch (e) {}
+  return u;
+}
+function routeSaveForm(v, url) {
+  let m = {}; try { m = JSON.parse(localStorage.getItem('kkm.routeForms') || '{}') || {}; } catch (e) {}
+  if (url) m[v] = url; else delete m[v];
+  try { localStorage.setItem('kkm.routeForms', JSON.stringify(m)); return true; } catch (e) { return false; }
+}
+function updateRouteUi() {
+  const v = $('eJenis').value; const kkm = isKkmRoute(v);
+  const fill = $('kkmFill'), box = $('routeFill'), open = $('btnOpenForm');
+  if (!fill || !box) return;
+  fill.classList.toggle('hidden', !kkm); box.classList.toggle('hidden', kkm);
+  if (open) open.classList.toggle('hidden', !kkm);
+  if (kkm) return;
+  const r = routeOf(v); const url = routeFormUrl(v);
+  $('routeName').textContent = v;
+  $('routeAgency').textContent = r.agency || '';
+  $('routeFormUrl').value = url;
+  $('btnRouteOpen').disabled = !/^https?:\/\//i.test(url);
+  $('routeHint').textContent = url ? '' : 'No complaint form linked for this route yet. Paste its link above and press Save. Copy Deskripsi and Copy Sumber iklan still work.';
+}
+
+// ---------------------------------------------------------------------------
 // Render
 // ---------------------------------------------------------------------------
 function renderLookups() {
@@ -450,7 +510,8 @@ function renderLookups() {
   };
   fill('fBrand', L.brands, true); fill('fPlatform', L.platforms, true);
   fill('eViolationType', L.violationTypes); fill('mType', L.violationTypes);
-  fill('eJenis', L.jenisAduan); fill('mJenis', L.jenisAduan);
+  const jenis = (L.jenisAduan || []).concat(ROUTE_VALUES.filter(v => (L.jenisAduan || []).indexOf(v) < 0));
+  fill('eJenis', jenis); fill('mJenis', jenis);
   $('brandList').innerHTML = L.brands.map(v => `<option value="${esc(v)}">`).join('');
   $('platformList').innerHTML = L.platforms.map(v => `<option value="${esc(v)}">`).join('');
   $('questLink').href = state.questUrl;
@@ -590,6 +651,7 @@ function fillDrawer(r) {
   $('eNama').value = r['Nama Kosmetik'] || '';
   $('eNot').value = r['Nombor Notifikasi'] || '';
   $('eJenis').value = r['Jenis Aduan'] || 'Iklan Kosmetik';
+  updateRouteUi();
   $('dTarikh').textContent = r['Tarikh Melapor'] || '— (set when marked Complete)';
   $('eDeskripsi').value = r['Deskripsi Aduan'] || '';
   $('eFeedback').value = r['KKM Feedback'] || '';
@@ -978,6 +1040,14 @@ $('btnNew').onclick = () => showModal(true);
 $('kkmFormLink').onclick = openKkmForm;
 $('btnOpenForm').onclick = openKkmForm;
 $('btnFillForm').onclick = fillKkmForm;
+$('eJenis').addEventListener('change', updateRouteUi);
+$('btnRouteSave').onclick = () => {
+  const v = $('eJenis').value; const u = $('routeFormUrl').value.trim();
+  if (u && !/^https?:\/\//i.test(u)) { toast('The link must start with https://'); return; }
+  toast(routeSaveForm(v, u) ? (u ? 'Link saved for this route' : 'Link cleared') : 'Could not save the link in this browser'); updateRouteUi();
+};
+$('routeFormUrl').addEventListener('input', () => { $('btnRouteOpen').disabled = !/^https?:\/\//i.test($('routeFormUrl').value.trim()); });
+$('btnRouteOpen').onclick = () => { const u = $('routeFormUrl').value.trim(); if (/^https?:\/\//i.test(u)) window.open(u, '_blank', 'noopener'); };
 $('kkmConfirm').onchange = kkmGate;
 $('kkmEmail').onchange = kkmOnEmail;
 $('kkmCopyLast').onclick = () => copy($('kkmLast').dataset.url, 'Pautan');
