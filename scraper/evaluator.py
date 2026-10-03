@@ -374,6 +374,11 @@ def _confidence(v) -> Optional[float]:
 
 def _parse_reply(raw: str) -> dict:
     """A reviewer reply as an object: bare JSON, or the object inside a fence or prose."""
+    # 3 Oct 2026, run 74: a deepseek reply carried literal NUL bytes inside its keys
+    # ("violation_reason\x00"). json.loads rejects a control character in a string, so it cost a
+    # whole extra model call to get an answer the first reply already held. NUL is never
+    # legitimate in a verdict, so drop it before parsing.
+    raw = raw.replace("\x00", "")
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
@@ -462,6 +467,26 @@ def _review_openai(inp: ReviewInput) -> dict:
         except json.JSONDecodeError:
             log.warning("reviewer%s: %s still no JSON object after one reminder: %r", where, model, raw[:300])
             raise
+    if str(data.get("verdict") or "").strip().title() not in VERDICTS:
+        # 3 Oct 2026: four Threads posts (runs 67, 70, 73, 77) came back as valid JSON with no
+        # usable "verdict" key, review() raised, and each post was left unjudged until its
+        # account came round again, which on a one-pass sweep is never. Same cure as the
+        # no-JSON case above: keep the model's own answer in the thread and ask once for the
+        # same verdict in the required form, rather than re-judging from scratch.
+        log.warning("reviewer%s: %s replied with no usable verdict (keys: %s); asking once more",
+                    where, model, sorted(data)[:8])
+        retry = dict(kwargs)
+        retry["messages"] = list(kwargs["messages"]) + [
+            {"role": "assistant", "content": raw},
+            {"role": "user", "content": "That object has no valid \"verdict\" key. Give the same "
+                                        "verdict again, in the required form. " + _SCHEMA_HINT}]
+        try:
+            resp2 = client.chat.completions.create(**retry)
+            data2 = _parse_reply(resp2.choices[0].message.content or "")
+            if str(data2.get("verdict") or "").strip().title() in VERDICTS:
+                data, resp = data2, resp2
+        except Exception as e:
+            log.warning("reviewer%s: the verdict retry failed too (%s)", where, str(e)[:160])
     data["reviewer"] = f"openai:{model}"
     u = getattr(resp, "usage", None)
     if u is not None:
