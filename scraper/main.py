@@ -319,6 +319,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             report["errors"].append(f"website targets: {e}")
             _write_report(run_dir, report)
             return 1
+        # Rows the collector will never scan (the retailer parent rows, Shopee) leave the list HERE, before
+        # the rotation, so an offset counts only rows that can be reached and the chain's arithmetic
+        # (offset + targets reached) holds. They are reported once, not once per run per row.
+        _wc = WebCollector(run_cfg)
+        _skipped = [(r, _wc.classify(r)[0]) for r in web_list]
+        report.setdefault("web_rows_skipped", [{"brand": r["name"], "channel": r["type"], "why": k[5:]}
+                                                for r, k in _skipped if k.startswith("skip:")])
+        web_list = [r for r, k in _skipped if not k.startswith("skip:")]
         if args.brand:
             web_list = [r for r in web_list if r["name"].lower() == args.brand.lower()]
         if args.platform:
@@ -327,8 +335,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             k = args.offset % len(web_list)
             web_list = web_list[k:] + web_list[:k]
         brands = web_list
-        log.info("--only-type web: %d website row(s) from %s%s", len(brands), web_source,
-                 (", rotated by %d" % args.offset) if args.offset else "")
+        log.info("--only-type web: %d website row(s) from %s%s (%d parent/Shopee row(s) left out)", len(brands),
+                 web_source, (", rotated by %d" % args.offset) if args.offset else "",
+                 len(report["web_rows_skipped"]))
         report["only_type"] = "web"
         report["offset"] = args.offset
         if not brands:
@@ -375,7 +384,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         report["skip_unjudged"] = bool(args.skip_unjudged)
 
     if web_mode:
-        scraper = WebCollector(run_cfg)
+        scraper = _wc
         scraper.known_urls = known
         planned = scraper.plan(brands)
     else:
@@ -599,8 +608,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         _file_target()
 
     if web_mode:
-        report["web"] = {"source": web_source, "walled_hosts": dict(scraper.walled),
-                         "rows_skipped": scraper.skipped_rows}
+        report["web"] = {"source": web_source, "rows": len(brands), "walled_hosts": dict(scraper.walled),
+                         "rows_skipped": len(report.get("web_rows_skipped", []))}
         if scraper.walled:
             log.warning("walled website host(s): %s", "; ".join(f"{h} ({w})" for h, w in scraper.walled.items()))
     missed = [{"brand": b, "platform": p} for b, p, _ in planned if (b, p) not in reached]
