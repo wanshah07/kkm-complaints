@@ -35,9 +35,9 @@ on:
         type: string
         default: ''
       only_type:
-        description: 'Sweep one kind of target only, so a long watchlist fits inside one run'
+        description: 'Sweep one kind of target only, so a long watchlist fits inside one run (web = the pharmacy / retailer / brand website rows)'
         type: choice
-        options: ['', 'brand', 'person']
+        options: ['', 'brand', 'person', 'web']
         default: ''
       offset:
         description: 'Rotate the already-judged targets by N. The watchlist is longer than one run, and without this every run re-walks it from the top and the tail is never reached. Increase by one each run.'
@@ -72,6 +72,9 @@ jobs:
       PYTHONUNBUFFERED: '1'
       APPS_SCRIPT_WEBHOOK_URL: ${{ secrets.APPS_SCRIPT_WEBHOOK_URL }}
       APPS_SCRIPT_API_TOKEN: ${{ secrets.APPS_SCRIPT_API_TOKEN }}
+      # Not a credential: the id of the Targets sheet, read as CSV for the website feed URLs until the
+      # Apps Script deployment carries them (Code.gs 4 Oct 2026).
+      TARGETS_SHEET_ID: 10ZgXAzG3b3cTp_0vHAymhBZEb_LzwYH3BXNvP8ubyhs
       LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'anthropic' }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL || 'claude-haiku-4-5' }}

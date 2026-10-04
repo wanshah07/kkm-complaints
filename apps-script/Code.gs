@@ -117,7 +117,7 @@ var TARGET_FIXED_HEAD = ['Brand', 'Active'];
 var TARGET_FIXED_TAIL = ['Product hints', 'Notes'];
 // Every other column is read as a platform, so any column that is not one has to be named here.
 // 'Type' marks what the account is: a brand's own page, or a doctor / KOL who promotes products.
-var TARGET_META_COLUMNS = ['Type'];
+var TARGET_META_COLUMNS = ['Type', 'Website feed', 'Product feed'];
 var DEFAULT_TARGET_PLATFORMS = ['Instagram', 'Facebook', 'Threads'];
 var DEFAULT_TARGETS = [
   ['La Roche-Posay', true, 'larocheposaymy', 'LaRochePosayMalaysia', 'larocheposaymy', 'Effaclar, Cicaplast, Anthelios, Toleriane, Lipikar, Mela B3, Hyalu B5', ''],
@@ -324,7 +324,10 @@ function targets_() {
     });
     var hints = iHints >= 0 ? String(row[iHints] || '').split(',').map(function (x) { return x.trim(); }).filter(String) : [];
     var type = iType >= 0 ? String(row[iType] || '').trim() : '';
+    var iWeb = headers.indexOf('Website feed'), iProd = headers.indexOf('Product feed');
     out.push({ name: name, active: active, handles: handles, product_hints: hints, type: type,
+               website_feed: iWeb >= 0 ? String(row[iWeb] || '').trim() : '',
+               product_feed: iProd >= 0 ? String(row[iProd] || '').trim() : '',
                notes: iNotes >= 0 ? String(row[iNotes] || '') : '' });
   });
   return out;

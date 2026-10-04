@@ -38,6 +38,7 @@ except ImportError:
 
 from evaluator import ReviewInput, review
 from scraper import Scraper, canonical_url, date_allowed
+from webfeeds import WEB_TYPE_LABEL, WebCollector, load_web_rows
 from uploader import AppsScriptClient, DriveUploader, attach_screenshot
 
 def _myt():
@@ -210,7 +211,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--platform", help="only this platform")
     ap.add_argument("--dry-run", action="store_true", help="do not POST to the webhook")
     ap.add_argument("--no-llm", action="store_true", help="rules-only review")
-    ap.add_argument("--only-type", choices=["brand", "person"],
+    ap.add_argument("--only-type", choices=["brand", "person", "web"],
                     help="brand = the Targets rows whose Type is blank/Brand/own/Company; "
                          "person = doctors, KOLs, pharmacists and anyone else carrying the ads. "
                          "Lets a long watchlist be swept in batches that fit one run.")
@@ -306,7 +307,33 @@ def main(argv: Optional[List[str]] = None) -> int:
         brands = [b for b in brands if b not in web_rows]
         log.info("%d website target row(s) set aside; the social sweep walks %d", len(web_rows), len(brands))
         report["web_rows_set_aside"] = len(web_rows)
-    if args.only_type:
+    web_mode = args.only_type == "web"
+    web_source = ""
+    if web_mode:
+        # Websites are a different collector: no browser, no handle, a product page is the "post".
+        # Everything downstream (review, grounding, ledger, filing) is shared with the social sweep.
+        try:
+            web_list, web_source = load_web_rows(web_rows)
+        except Exception as e:
+            log.error("website targets unavailable: %s", e)
+            report["errors"].append(f"website targets: {e}")
+            _write_report(run_dir, report)
+            return 1
+        if args.brand:
+            web_list = [r for r in web_list if r["name"].lower() == args.brand.lower()]
+        if args.platform:
+            web_list = [r for r in web_list if r["type"].lower() == args.platform.lower()]
+        if web_list and args.offset:
+            k = args.offset % len(web_list)
+            web_list = web_list[k:] + web_list[:k]
+        brands = web_list
+        log.info("--only-type web: %d website row(s) from %s%s", len(brands), web_source,
+                 (", rotated by %d" % args.offset) if args.offset else "")
+        report["only_type"] = "web"
+        report["offset"] = args.offset
+        if not brands:
+            log.warning("no website rows to scan; nothing to do")
+    elif args.only_type:
         # The same split the reviewer makes: a brand's own page, or a person carrying the ad.
         def _is_brand(t: str) -> bool:
             return (t or "").strip().lower() in ("", "brand", "own", "company")
@@ -322,7 +349,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Streamed, one target at a time, and each is reviewed and filed before the next is
     # scraped. The alternative cost a three-hour run: everything was scraped first, the job
     # timeout cut in with one target left, and not a single post had been reviewed or filed.
-    if known:
+    if known and not web_mode:
         total_rows = len(brands)
         brands_before = brands
         brands, fresh = sweep_order(brands, known, offset=args.offset,
@@ -347,21 +374,30 @@ def main(argv: Optional[List[str]] = None) -> int:
         report["offset"] = args.offset
         report["skip_unjudged"] = bool(args.skip_unjudged)
 
-    scraper = Scraper(cfg, os.path.join(run_dir, "screenshots"))
-    scraper.known_urls = known
-    planned = scraper.plan(brands, platform_filter=args.platform, brand_filter=args.brand)
+    if web_mode:
+        scraper = WebCollector(run_cfg)
+        scraper.known_urls = known
+        planned = scraper.plan(brands)
+    else:
+        scraper = Scraper(cfg, os.path.join(run_dir, "screenshots"))
+        scraper.known_urls = known
+        planned = scraper.plan(brands, platform_filter=args.platform, brand_filter=args.brand)
     budget_min = float(run_cfg.get("max_run_minutes") or 0)
     deadline = (time.time() + budget_min * 60) if budget_min > 0 else None
     if deadline:
         log.info("%d target(s) planned; budget %.0f min, so the run stops starting new targets at %s MYT",
                  len(planned), budget_min,
                  datetime.fromtimestamp(deadline, MYT).strftime("%H:%M"))
-    results = scraper.iter_run(brands, platform_filter=args.platform, brand_filter=args.brand,
-                               should_stop=(lambda: deadline is not None and time.time() >= deadline))
+    _stop = (lambda: deadline is not None and time.time() >= deadline)
+    if web_mode:
+        results = scraper.iter_run(brands, should_stop=_stop)
+    else:
+        results = scraper.iter_run(brands, platform_filter=args.platform, brand_filter=args.brand,
+                                   should_stop=_stop)
     reached: set = set()
 
     hints = {b["name"]: b.get("product_hints", []) for b in brands}
-    types = {b["name"]: b.get("type", "") for b in brands}
+    types = {b["name"]: (WEB_TYPE_LABEL if web_mode else b.get("type", "")) for b in brands}
     spend = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0,
              "cache_creation_input_tokens": 0, "usd": 0.0, "models": {}}
     lookback = int(run_cfg.get("lookback_days", 0) or 0)
@@ -423,6 +459,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             report["targets"].append({"brand": tr.brand, "platform": tr.platform, "profile": tr.profile_url,
                                       "posts": len(tr.posts), "error": tr.error,
                                       "truncated": bool(getattr(tr, "truncated", False))})
+            if web_mode and tr.error and not tr.error.startswith("skipped:"):
+                # A wall or a dead feed is a gap in the sweep, not a pass. Later rows on a walled
+                # host are skipped quietly (their error starts "skipped:"), so it is named once.
+                report["errors"].append(f"{tr.brand}/{tr.platform}: {tr.error}")
             # A handle the sheet has wrong costs the whole target, silently, every run. Collect it
             # so the summary names it instead of leaving it to be found in a log.
             if tr.renamed_to:
@@ -558,6 +598,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         report["errors"].append(f"sweep stopped early: {e}")
         _file_target()
 
+    if web_mode:
+        report["web"] = {"source": web_source, "walled_hosts": dict(scraper.walled),
+                         "rows_skipped": scraper.skipped_rows}
+        if scraper.walled:
+            log.warning("walled website host(s): %s", "; ".join(f"{h} ({w})" for h, w in scraper.walled.items()))
     missed = [{"brand": b, "platform": p} for b, p, _ in planned if (b, p) not in reached]
     if missed:
         report["not_reached"] = missed
@@ -735,7 +780,8 @@ def resolve_targets(cfg: dict, mode: str, client: Optional[AppsScriptClient], re
             else:
                 log.warning("Targets tab: platform column %r has no entry in config.yaml platforms; skipped", plat)
         brands.append({"name": t["name"], "handles": handles, "product_hints": t.get("product_hints", []),
-                       "type": t.get("type", "")})
+                       "type": t.get("type", ""), "active": True,
+                       "website_feed": t.get("website_feed", ""), "product_feed": t.get("product_feed", "")})
     if not brands:
         log.warning("Targets tab has no active rows; using config.yaml")
         report["targets_source"] = "config.yaml (sheet empty)"

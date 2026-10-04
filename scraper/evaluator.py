@@ -169,7 +169,18 @@ def _user_prompt(inp: ReviewInput) -> str:
     ok_block = "\n".join(f'- "{s}"' for s in ok[:10]) or "- none"
     products = ", ".join(inp.product_hints or []) or "unknown"
     kind = (inp.target_type or "").strip().lower()
-    if kind and kind not in ("brand", "own", "company"):
+    if kind.startswith("website"):
+        account = (f"\nSOURCE: a WEBSITE product listing on {inp.platform} for the brand {inp.brand}, not a "
+                   "social post. The text is the listing's own copy (title, vendor, description). "
+                   "Judge it as an advertisement for the cosmetic product it names, under the same "
+                   "claims tables as a brand's own post: a retailer or brand website that carries a "
+                   "claim is responsible for it. Do not apply the s.4.1 health-professional "
+                   "endorsement test unless the copy itself invokes a doctor, dentist, pharmacist or "
+                   "dermatologist. A listing that is only a name, size and ingredient list makes no "
+                   "claim and is Acceptable. If the product is a medicine, supplement, medical "
+                   "device or food rather than a cosmetic, say so in violation_reason and give the "
+                   "verdict the cosmetic rules support, so Wan can route it.")
+    elif kind and kind not in ("brand", "own", "company"):
         account = (f"\nACCOUNT TYPE: {inp.target_type} — this account is not the brand. It is a person "
                    "promoting cosmetic products. Judge the post as an advertisement carried by that "
                    "person: Part 10 s.4.1 makes a doctor / dentist / pharmacist / dermatologist "
