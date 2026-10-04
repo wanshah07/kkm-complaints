@@ -1,0 +1,31 @@
+# Can a GitHub runner read the pharmacy / retailer / brand websites in the Targets tab? Read-only:
+# fetches one sample of each feed type on a plain connection and says what came back (a product
+# list, a wall, or "not a measurement"). Writes nothing to the sheet. Dispatch only.
+name: Web probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: 'URLs to fetch, one per line (blank = one sample of each feed type).'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Probe
+        env:
+          URLS: ${{ github.event.inputs.urls }}
+        run: |
+          mapfile -t ARR < <(printf '%s\n' "$URLS" | sed '/^\s*$/d')
+          python tools/web_probe.py "${ARR[@]}"

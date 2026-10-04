@@ -296,6 +296,16 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # --- targets: the sheet's Targets tab wins over config.yaml when reachable ---------
     brands = resolve_targets(cfg, args.targets, client, report)
+    # Website rows (pharmacy chains, retailers, brand sites; Targets tab, 4 Oct 2026) carry no
+    # Instagram/Facebook/Threads handle, only a Type. They must not enter the social sweep: with
+    # no handle they sort as "judged", so 292 of them would join the rotated tail, change its
+    # length and move every offset the chain has been advancing. Every row that is a person or a
+    # brand page has at least one handle, so this removes nothing the sweep walked before.
+    web_rows = [b for b in brands if not b.get("handles") and (b.get("type") or "").strip()]
+    if web_rows:
+        brands = [b for b in brands if b not in web_rows]
+        log.info("%d website target row(s) set aside; the social sweep walks %d", len(web_rows), len(brands))
+        report["web_rows_set_aside"] = len(web_rows)
     if args.only_type:
         # The same split the reviewer makes: a brand's own page, or a person carrying the ad.
         def _is_brand(t: str) -> bool:
