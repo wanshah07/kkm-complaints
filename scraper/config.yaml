@@ -3,7 +3,7 @@
 # Handles are the public profile slugs. Facebook accepts a page slug or a numeric page ID.
 
 run:
-  max_posts_per_profile: 20       # newest posts examined per brand × platform (posts already in the sheet are not opened)
+  max_posts_per_profile: 40       # newest posts examined per brand × platform (posts already in the sheet are not opened)
   lookback_days: 0                # 0 = off; otherwise skip posts older than N days when a date is known
   min_post_date: "2024-06-01"     # review only posts published on/after this date (YYYY-MM-DD); "" = off
   push_risky: true                # also push "Risky" verdicts (status New, type prefixed "Risky:")
