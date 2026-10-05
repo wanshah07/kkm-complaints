@@ -254,3 +254,20 @@ function linksDismiss_(link) {
     return { ok: true };
   });
 }
+
+// The reason behind a held finding, for the dashboard's popup. Read on demand so the list stays small.
+function linksDetail_(link) {
+  return withLock_(function () {
+    var k = linkKey_(link);
+    var hit = linksRows_(linksSheet_()).filter(function (o) { return linkKey_(o.link) === k; })[0];
+    if (!hit) return { ok: false, error: 'Link not found' };
+    if (!hit.held) return { ok: false, error: 'No finding is held for this link' };
+    var r = JSON.parse(hit.held);
+    return { ok: true, status: hit.status, detail: {
+      link: hit.link, brand: r.brand || '', date: r.date || '',
+      verdict: /^Risky/i.test(String(r.violation_type || '')) ? 'Risky' : 'Unacceptable',
+      confidence: r.confidence, violation_type: String(r.violation_type || '').replace(/^Risky:\s*/i, ''),
+      product: r.product_name || '', reason: r.violation_reason || '', text: String(r.extracted_text || '').slice(0, 3000),
+      screenshot: r.screenshot_link || '', description: r.complaint_description || '', remarks: r.remarks || '' } };
+  });
+}

@@ -454,6 +454,8 @@ function handleApi_(action, body, p) {
                             return linksAdd_(body.links, body.note);
       case 'links_retry':   if (!viewer) return deny;
                             return linksRetry_(body.link);
+      case 'links_detail':  if (!viewer) return deny;
+                            return linksDetail_(body.link);
       case 'links_file':    if (!viewer) return deny;
                             return linksFile_(body.link);
       case 'links_dismiss': if (!viewer) return deny;

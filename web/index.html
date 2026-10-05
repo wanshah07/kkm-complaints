@@ -258,6 +258,32 @@
   </div>
 </div>
 
+<!-- Held finding: why it was flagged -->
+<div id="ldModal" class="fixed inset-0 z-[60] hidden">
+  <div class="absolute inset-0 bg-slate-900/50" data-ldclose></div>
+  <div class="absolute inset-x-0 top-6 mx-auto max-w-2xl bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+    <div class="px-5 py-4 border-b border-slate-200 flex items-start gap-3">
+      <div class="min-w-0">
+        <div class="flex items-center gap-2 flex-wrap"><span id="ldVerdict" class="badge"></span><span id="ldConf" class="text-xs text-slate-500"></span></div>
+        <h2 id="ldTitle" class="font-semibold mt-1 break-words"></h2>
+        <p id="ldMeta" class="text-xs text-slate-500 mt-0.5"></p>
+      </div>
+      <button data-ldclose class="ml-auto rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm hover:bg-slate-50">✕</button>
+    </div>
+    <div class="p-5 space-y-4 text-sm">
+      <section><h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Why it was flagged</h3><div id="ldReason" class="whitespace-pre-wrap text-slate-800"></div></section>
+      <section><h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">What the post says</h3><div id="ldText" class="whitespace-pre-wrap text-slate-600 text-[13px] max-h-40 overflow-y-auto rounded-lg bg-slate-50 p-3"></div></section>
+      <section id="ldDescWrap"><h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Draft complaint (BM)</h3><div id="ldDesc" class="whitespace-pre-wrap text-slate-600 text-[13px] max-h-40 overflow-y-auto rounded-lg bg-slate-50 p-3"></div></section>
+      <div class="flex flex-wrap gap-3 text-sm"><a id="ldVideo" target="_blank" rel="noopener" class="text-blue-700 hover:underline">Open the video ↗</a><a id="ldShot" target="_blank" rel="noopener" class="text-blue-700 hover:underline">Open the screenshot ↗</a></div>
+    </div>
+    <div class="px-5 py-4 border-t border-slate-200 flex flex-wrap items-center gap-2">
+      <button id="ldFile" class="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">Add to database</button>
+      <button id="ldDismiss" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50">Dismiss</button>
+      <span id="ldMsg" class="text-xs text-slate-500"></span>
+    </div>
+  </div>
+</div>
+
 <!-- Manual entry modal -->
 <div id="modal" class="fixed inset-0 z-50 hidden">
   <div class="absolute inset-0 bg-slate-900/40" data-close></div>
@@ -1114,7 +1140,7 @@ $('mDraft').onclick = draftManual;
 $('fBrand').onchange = e => { state.filter.brand = e.target.value; renderTable(); };
 $('fPlatform').onchange = e => { state.filter.platform = e.target.value; renderTable(); };
 $('fSearch').oninput = e => { state.filter.q = e.target.value; renderTable(); };
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { showDrawer(false); showModal(false); showLinks(false); if (cfg.key) showConnect(false); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('ldModal').classList.contains('hidden')) { closeDetail(); return; } showDrawer(false); showModal(false); showLinks(false); if (cfg.key) showConnect(false); } });
 // ---------------------------------------------------------------------------
 // TikTok links (Links.gs): paste here, a scheduled run reads them, the outcome comes back here.
 // ---------------------------------------------------------------------------
@@ -1146,22 +1172,15 @@ async function loadLinks() {
     $('lRows').innerHTML = rows.map(o => {
       const [k, label] = linkState(o.status);
       const short = o.link.replace(/^https?:\/\/(www\.)?/, '');
-      const decide = (k === 'decide' && o.canFile) ? `<div class="flex gap-1 justify-end"><button class="lFile text-xs rounded bg-slate-900 text-white px-2 py-1 hover:bg-slate-800" data-link="${esc(o.link)}">Add to database</button><button class="lDismiss text-xs rounded border border-slate-300 px-2 py-1 hover:bg-slate-50" data-link="${esc(o.link)}">Dismiss</button></div>` : '';
+      const decide = (k === 'decide' && o.canFile) ? `<div class="flex gap-1 justify-end flex-wrap"><button class="lWhy text-xs rounded border border-violet-300 text-violet-800 px-2 py-1 hover:bg-violet-50" data-link="${esc(o.link)}">Why?</button><button class="lFile text-xs rounded bg-slate-900 text-white px-2 py-1 hover:bg-slate-800" data-link="${esc(o.link)}">Add to database</button><button class="lDismiss text-xs rounded border border-slate-300 px-2 py-1 hover:bg-slate-50" data-link="${esc(o.link)}">Dismiss</button></div>` : '';
       const retry = decide || ((k === 'error' && /tiktok\.com/.test(o.link)) ? `<button class="lRetry text-xs rounded border border-slate-300 px-2 py-1 hover:bg-slate-50" data-link="${esc(o.link)}">Retry</button>` : '');
       return `<tr><td class="px-3 py-2 max-w-[260px]"><a class="text-blue-700 hover:underline break-all" href="${esc(o.link)}" target="_blank" rel="noopener">${esc(short.length > 60 ? short.slice(0, 58) + '…' : short)}</a></td>
         <td class="px-3 py-2"><span class="badge ${LINK_BADGE[k]}">${esc(label)}</span>${o.run ? `<div class="text-[11px] text-slate-400 mt-0.5">run ${trimRun(o.run)}</div>` : ''}</td>
         <td class="px-3 py-2 text-slate-700">${esc(o.result)}</td><td class="px-3 py-2 text-right">${retry}</td></tr>`;
     }).join('');
-    document.querySelectorAll('.lFile').forEach(b => b.onclick = async () => {
-      b.disabled = true; b.textContent = 'Adding…';
-      try { const d = await api('links_file', { link: b.dataset.link }); toast(d.result || 'Added'); refresh(true); loadLinks(); }
-      catch (e) { toast(e.message); b.disabled = false; b.textContent = 'Add to database'; }
-    });
-    document.querySelectorAll('.lDismiss').forEach(b => b.onclick = async () => {
-      b.disabled = true;
-      try { await api('links_dismiss', { link: b.dataset.link }); toast('Dismissed. It stays in the reviewed history.'); loadLinks(); }
-      catch (e) { toast(e.message); b.disabled = false; }
-    });
+    document.querySelectorAll('.lWhy').forEach(b => b.onclick = () => openDetail(b.dataset.link));
+    document.querySelectorAll('.lFile').forEach(b => b.onclick = () => fileHeld(b.dataset.link, b));
+    document.querySelectorAll('.lDismiss').forEach(b => b.onclick = () => dismissHeld(b.dataset.link, b));
     document.querySelectorAll('.lRetry').forEach(b => b.onclick = async () => {
       b.disabled = true;
       try { await api('links_retry', { link: b.dataset.link }); toast('Back in the queue'); loadLinks(); } catch (e) { toast(e.message); b.disabled = false; }
@@ -1189,6 +1208,41 @@ async function addLinks() {
   } catch (e) { $('lMsg').textContent = e.message; }
   finally { $('lAdd').disabled = false; }
 }
+
+// Popup with the reason, for a held finding.
+let ldLink = '';
+async function openDetail(link) {
+  ldLink = link; $('ldMsg').textContent = 'Loading…'; $('ldModal').classList.remove('hidden');
+  ['ldVerdict','ldConf','ldTitle','ldMeta','ldReason','ldText','ldDesc'].forEach(id => $(id).textContent = '');
+  try {
+    const d = (await api('links_detail', { link })).detail;
+    const risky = d.verdict === 'Risky';
+    $('ldVerdict').textContent = d.verdict; $('ldVerdict').className = 'badge ' + (risky ? 'bg-amber-100 text-amber-900' : 'bg-red-100 text-red-800');
+    $('ldConf').textContent = d.confidence != null ? 'confidence ' + d.confidence : '';
+    $('ldTitle').textContent = (d.product || 'Product not named') + (d.violation_type ? ' · ' + d.violation_type : '');
+    $('ldMeta').textContent = ['@' + d.brand, d.date && ('posted ' + d.date)].filter(Boolean).join(' · ');
+    $('ldReason').textContent = d.reason || 'No reason recorded.';
+    $('ldText').textContent = d.text || '(no caption text was captured)';
+    $('ldDesc').textContent = d.description; $('ldDescWrap').classList.toggle('hidden', !d.description);
+    $('ldVideo').href = d.link; $('ldShot').href = d.screenshot || '#'; $('ldShot').classList.toggle('hidden', !d.screenshot);
+    $('ldMsg').textContent = '';
+  } catch (e) { $('ldMsg').textContent = /Unknown action/.test(e.message) ? 'The backend needs the latest Links.gs (new version).' : e.message; }
+}
+function closeDetail() { $('ldModal').classList.add('hidden'); }
+async function fileHeld(link, btn) {
+  if (btn) { btn.disabled = true; btn.dataset.t = btn.textContent; btn.textContent = 'Adding…'; }
+  try { const d = await api('links_file', { link }); toast(d.result || 'Added to the database'); closeDetail(); refresh(true); loadLinks(); }
+  catch (e) { toast(e.message); if (btn) { btn.disabled = false; btn.textContent = btn.dataset.t; } $('ldMsg').textContent = e.message; }
+}
+async function dismissHeld(link, btn) {
+  if (!confirm('Dismiss this finding? It stays in the reviewed history, so the same video will not be read again.')) return;
+  if (btn) btn.disabled = true;
+  try { await api('links_dismiss', { link }); toast('Dismissed'); closeDetail(); loadLinks(); }
+  catch (e) { toast(e.message); if (btn) btn.disabled = false; }
+}
+$('ldFile').onclick = () => fileHeld(ldLink, $('ldFile'));
+$('ldDismiss').onclick = () => dismissHeld(ldLink, $('ldDismiss'));
+document.querySelectorAll('[data-ldclose]').forEach(b => b.onclick = closeDetail);
 $('btnLinks').onclick = () => showLinks(true);
 $('lAdd').onclick = addLinks;
 document.querySelectorAll('[data-lclose]').forEach(b => b.onclick = () => showLinks(false));
