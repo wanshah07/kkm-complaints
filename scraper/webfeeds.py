@@ -249,6 +249,12 @@ class _WatsonsBrowser:
         self._pw = self._browser = self._ctx = self._page = self._xvfb = None
 
 
+# Feature rows that carry what the brand says (how to use it, who it is for, what it does). The rest
+# (elabHeight, elabDepth, isGuestCheckoutAllowed, elabIsLivestream ...) is shop plumbing, not a claim.
+_WATSONS_COPY_ROW = re.compile(r"uses?$|usage|direction|benefit|skin.?type|warning|caution|claim|feature|"
+                               r"description|how.?to|indication|suitable|concern|function", re.I)
+
+
 def watsons_text(p: dict) -> str:
     """Listing copy for the reviewer, from one `products/<code>?fields=FULL` answer: the name, the
     description, the directions and other feature rows, the keyword line, the ingredients. Prices,
@@ -268,7 +274,7 @@ def watsons_text(p: dict) -> str:
                 continue
             if "ingredient" in code:
                 ingredients = ingredients or vals
-            else:
+            elif _WATSONS_COPY_ROW.search(code.rsplit(".", 1)[-1]):
                 label = (f.get("name") or code.rsplit(".", 1)[-1]).strip()
                 parts.append(f"{label}: {vals}")
     kw = (p.get("shortDescription") or "").strip()
