@@ -188,7 +188,58 @@ def tiktok_structure(pw, spec, state):
     browser.close()
 
 
+def tiktok_search_structure(pw, query, owner, state, open_n=8):
+    """'tiktok-search:<query>|<owner handle>': how many of the first search hits belong to <owner>.
+    Prints handles, id-dates and counts only; no page body."""
+    import datetime
+    browser = pw.chromium.launch(headless=True)
+    ctx = browser.new_context(storage_state=state, locale="en-MY", timezone_id="Asia/Kuala_Lumpur",
+                              viewport={"width": 1280, "height": 1600},
+                              user_agent=("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                                          "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"))
+    page = ctx.new_page()
+    from urllib.parse import quote
+    for tab in ("video", "user"):
+        page.goto(f"https://www.tiktok.com/search/{tab}?q={quote(query)}", wait_until="domcontentloaded", timeout=45000)
+        page.wait_for_timeout(8000)
+        for _ in range(2):
+            page.mouse.wheel(0, 1500)
+            page.wait_for_timeout(2500)
+        hrefs = page.locator("a[href]").evaluate_all("els => els.map(e => e.getAttribute('href'))")
+        vids = [h for h in dict.fromkeys(hrefs) if h and re.search(r"/video/\d+", h)]
+        users = sorted({m.group(1) for h in hrefs if h for m in [re.match(r"^/@([A-Za-z0-9_.]+)$", h)] if m})
+        print(f"TIKTOK SEARCH tab={tab} q={query!r}: video_links={len(vids)} user_links={len(users)} sample_users={users[:8]}")
+        if tab == "video":
+            hits = []
+            for v in vids[:open_n]:
+                url = "https://www.tiktok.com" + v if v.startswith("/") else v
+                try:
+                    page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                    page.wait_for_timeout(3500)
+                    d = (page.locator("meta[name='description']").first.get_attribute("content", timeout=800) or "")
+                    m = re.search(r"\(@([A-Za-z0-9_.]+)\)", d)
+                    vid = re.search(r"/video/(\d+)", url).group(1)
+                    hits.append((m.group(1) if m else None, datetime.datetime.fromtimestamp(int(vid) >> 32, datetime.timezone.utc).date().isoformat()))
+                except Exception as e:
+                    hits.append(("ERR " + type(e).__name__, ""))
+                time.sleep(2)
+            print("   first hits (handle, date):", hits)
+            print("   own:", sum(1 for h, _ in hits if h and h.lower() == owner.lower()), "of", len(hits))
+    browser.close()
+
+
 def main(argv):
+    ts = [a for a in argv if a.startswith("tiktok-search:")]
+    if ts:
+        state = session_path()
+        print("session:", "recorded session loaded" if state else "anonymous")
+        with sync_playwright() as pw:
+            for a in ts:
+                q, _, owner = a[len("tiktok-search:"):].partition("|")
+                tiktok_search_structure(pw, q, owner, state)
+        if state:
+            os.unlink(state)
+        return 0
     tt = [a for a in argv if a.startswith("tiktok:")]
     if tt:
         state = session_path()
