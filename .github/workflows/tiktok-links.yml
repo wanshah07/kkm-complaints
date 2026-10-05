@@ -1,0 +1,75 @@
+# Review TikTok videos by link (Wan, 5 Oct 2026).
+#
+# A TikTok account's post list is not readable by a runner (measured 5 Oct: the page's own item_list answers an
+# automated session with an empty 200, and search is not per-query), so the posts to review are NAMED: paste
+# video links, one per line. Each is opened one at a time, read, screenshotted, reviewed and filed like any other
+# post. This is its own workflow with its own concurrency group so a handful of links does not wait behind a
+# three-hour sweep. The sweep's workflow (scraper.yml) is untouched.
+#
+# Secrets used: APPS_SCRIPT_WEBHOOK_URL, APPS_SCRIPT_API_TOKEN, the reviewer keys, and PW_STORAGE_STATE_SHOP_B64
+# (the TikTok login, consumer cookies only). No artifacts are uploaded: a logged-in TikTok page is not for a
+# public repo.
+name: TikTok link review
+
+on:
+  workflow_dispatch:
+    inputs:
+      links:
+        description: 'TikTok video links, one per line (https://www.tiktok.com/@handle/video/123...; vm.tiktok.com short links work too).'
+        type: string
+        required: true
+      dry_run:
+        description: 'Read and review, but do not push to the sheet'
+        type: boolean
+        default: false
+
+concurrency:
+  group: kkm-tiktok-links
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TZ: Asia/Kuala_Lumpur
+      PYTHONUNBUFFERED: '1'
+      APPS_SCRIPT_WEBHOOK_URL: ${{ secrets.APPS_SCRIPT_WEBHOOK_URL }}
+      APPS_SCRIPT_API_TOKEN: ${{ secrets.APPS_SCRIPT_API_TOKEN }}
+      LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'anthropic' }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL || 'claude-haiku-4-5' }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4.1' }}
+      OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+      LLM_USE_SCREENSHOT: ${{ vars.LLM_USE_SCREENSHOT || '1' }}
+      SCREENSHOT_MODE: ${{ vars.SCREENSHOT_MODE || 'apps_script' }}
+      PW_STORAGE_STATE_SHOP_B64: ${{ secrets.PW_STORAGE_STATE_SHOP_B64 }}
+      # Links travel as an environment variable, never spliced into the shell line.
+      TIKTOK_LINKS: ${{ github.event.inputs.links }}
+      DRY_RUN: ${{ github.event.inputs.dry_run }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scraper/requirements.txt
+      - name: Install dependencies
+        working-directory: scraper
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Install Chromium
+        working-directory: scraper
+        run: python -m playwright install --with-deps chromium
+      - name: Review the links
+        working-directory: scraper
+        run: |
+          ARGS="--tiktok-links"
+          if [ "$DRY_RUN" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          python main.py $ARGS

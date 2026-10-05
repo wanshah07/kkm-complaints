@@ -51,10 +51,6 @@ on:
         description: 'Review every post with BOTH reviewers and print where they disagree (never pushes)'
         type: boolean
         default: false
-      tiktok_links:
-        description: 'Review these TikTok videos instead of sweeping: one video link per line (or space separated). A TikTok account''s post list is not readable by a runner, so posts are named by link. Replaces the sweep; combine only with dry_run.'
-        type: string
-        default: ''
       selftest:
         description: 'Check the deployed Apps Script instead of scraping: payload size, truncation, search. Read-only, finishes in seconds. Put a word here to search for, or "1" to pick one.'
         type: string
@@ -91,10 +87,6 @@ jobs:
       GDRIVE_SA_JSON: ${{ secrets.GDRIVE_SA_JSON }}
       GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
       PW_STORAGE_STATE_B64: ${{ secrets.PW_STORAGE_STATE_B64 }}
-      # TikTok link review only (Wan, 5 Oct 2026). The links travel as an environment variable, never spliced into
-      # the shell line, and the TikTok session secret is handed over only when links were given.
-      TIKTOK_LINKS: ${{ github.event.inputs.tiktok_links }}
-      PW_STORAGE_STATE_SHOP_B64: ${{ github.event.inputs.tiktok_links != '' && secrets.PW_STORAGE_STATE_SHOP_B64 || '' }}
 
     steps:
       - name: Checkout
@@ -134,11 +126,6 @@ jobs:
           if [ -n "${{ github.event.inputs.offset }}" ] && [ "${{ github.event.inputs.offset }}" != "0" ]; then ARGS="$ARGS --offset ${{ github.event.inputs.offset }}"; fi
           if [ "${{ github.event.inputs.skip_unjudged }}" = "true" ]; then ARGS="$ARGS --skip-unjudged"; fi
           if [ "${{ github.event.inputs.compare }}" = "true" ]; then ARGS="$ARGS --compare"; fi
-          # TikTok link review replaces the sweep too: it opens only the videos named in TIKTOK_LINKS.
-          if [ -n "$TIKTOK_LINKS" ]; then
-            ARGS="--tiktok-links"
-            if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
-          fi
           # A selftest replaces the run rather than adding to it: no browser, no scrape, no writes.
           if [ -n "${{ github.event.inputs.selftest }}" ]; then
             if [ "${{ github.event.inputs.selftest }}" = "1" ]; then ARGS="--selftest"
