@@ -464,6 +464,28 @@ def _has_post_content(page: Page) -> bool:
         return False
 
 
+# TikTok answers a removed, private or logged-out-restricted video with a placeholder that still carries the
+# video container, so _has_post_content() is true and the wall check above waves it through. The screenshot of
+# that placeholder then reached the reviewer, which correctly found nothing wrong with a page that says nothing:
+# an "Acceptable" on a video nobody saw (5 Oct 2026, a dr_ingky link). It is a post that could not be read.
+_UNAVAILABLE_MARKERS = (
+    "video currently unavailable",
+    "this video is unavailable",
+    "video isn't available",
+    "video is not available",
+    "this content isn't available",
+    "couldn't find this account",
+)
+
+
+def _is_unavailable(page: Page) -> bool:
+    try:
+        body = (page.locator("body").inner_text(timeout=1500) or "").lower()
+    except Exception:
+        return False
+    return any(m in body for m in _UNAVAILABLE_MARKERS)
+
+
 def _is_login_wall(page: Page) -> bool:
     url = page.url.lower()
     if any(part in url for part in _WALL_URL_PARTS):
@@ -1024,6 +1046,12 @@ class Scraper:
             page.goto(url, wait_until="domcontentloaded", timeout=45000)
             page.wait_for_timeout(2500)
             _dismiss_dialogs(page)
+            if platform == "TikTok" and _is_unavailable(page):
+                post.errors.append("TikTok shows this video as unavailable (private, removed, or hidden from a "
+                                   "logged-out viewer) - not reviewed")
+                post.blocked = True
+                _save_screenshot(page, post, brand, platform, url, self.out_dir)
+                return post
             if _is_login_wall(page):
                 # The screenshot here is the gate, not the post. Reviewing it asks the model to
                 # judge a page with no cosmetic claim on it, and the honest answer to that is

@@ -272,6 +272,8 @@ def link_outcomes(report: dict, link_map: Dict[str, str], links: List[str],
                     status, result = "done", why[:200]
                 elif "below threshold" in low:
                     status, result = "done", "reviewed: " + why[:200]
+                elif "unavailable" in low:
+                    status, result = "error", "TikTok shows the video as unavailable (private, removed, or hidden from a logged-out viewer): not reviewed"
                 elif any(w in low for w in ("login", "wall", "verif", "blocked", "session")):
                     status, result = "error", "TikTok login wall: the saved session may have expired"
                 else:
