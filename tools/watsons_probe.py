@@ -36,7 +36,7 @@ def probe(browser, url):
             if "json" in ct and "watsons" in r.url:
                 out["json_calls"].append(f"{r.status} {r.url[:150]}")
                 if "/products/search" in r.url or re.search(r"/products/\d+\?", r.url):
-                    out["api"].append((r.url, r.text()[:60000]))
+                    out["api"].append((r.url, r.text()[:900000]))
         except Exception:
             pass
     page.on("response", on_resp)
@@ -52,6 +52,19 @@ def probe(browser, url):
         text = page.inner_text("body")[:200000] if page.query_selector("body") else ""
         out["rm_prices"] = len(RM.findall(text))
         out["excerpt"] = re.sub(r"\s+", " ", text)[:700]
+        m = re.search(r"/all-brands/list/(\d+)/", url)
+        if m:
+            test = ("https://api.watsons.com.my/api/v2/wtcmy/products/search?fields=FULL&query=%3AbestSeller%3AproductBrandCode%3A"
+                    + m.group(1) + "&pageSize=100&currentPage=0&sort=bestSeller&lang=en&curr=MYR")
+            try:
+                res = page.evaluate("async (u) => { const r = await fetch(u, {credentials: 'include'}); "
+                                    "const t = await r.text(); let n = null, pg = null; "
+                                    "try { const d = JSON.parse(t); n = (d.products || []).length; pg = d.pagination; } catch (e) {} "
+                                    "return {status: r.status, len: t.length, n, pg}; }", test)
+                out["detail"] += f" IN-PAGE FETCH pageSize=100: {res}"
+                print("  IN-PAGE FETCH pageSize=100:", res)
+            except Exception as e:
+                print("  IN-PAGE FETCH failed:", type(e).__name__, str(e)[:200])
         hrefs = page.eval_on_selector_all('a[href*="/p/BP_"]', "els => els.map(e => e.href)")
         out["links"] = list(dict.fromkeys(hrefs))
         if (out["status"] and out["status"] >= 400) or WALL.search(out["title"] + " " + text[:600]):
@@ -88,6 +101,16 @@ def main():
             print("  API", u[:500])
             try:
                 d = json.loads(body)
+                if "fields=FULL" in u and "productBrandCode" in u:
+                    pr0 = d["products"][0]
+                    print("   FULL product: every top-level key -> type/len/preview")
+                    for k, v in pr0.items():
+                        print(f"     {k}: {type(v).__name__} {len(str(v))} {str(v)[:110]!r}")
+                    for c in pr0.get("classifications") or []:
+                        for f in c.get("features") or []:
+                            vals = [x.get("value", "") for x in f.get("featureValues") or []]
+                            print("     feature", f.get("name"), "|", f.get("code", "")[-40:], "|", str(vals)[:120])
+                    print("   pagination:", d.get("pagination"), "n products:", len(d["products"]))
                 print("   keys:", list(d)[:12], "pagination:", d.get("pagination"))
                 pr = (d.get("products") or [d])[0]
                 print("   product keys:", list(pr)[:40])
