@@ -207,8 +207,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(description="KKM cosmetic complaint scraper")
     ap.add_argument("--config", default=os.path.join(HERE, "config.yaml"))
     ap.add_argument("--out", default=os.path.join(HERE, "out"))
-    ap.add_argument("--brand", help="only this brand")
-    ap.add_argument("--platform", help="only this platform")
+    # nargs="+": the workflow builds `eval python main.py $ARGS` and quotes --brand but not --platform,
+    # so a platform with a space in it ('Watsons MY') arrived as two words and the run died on
+    # "unrecognized arguments: MY" in 36 seconds (run 92, 5 Oct 2026). Words are joined back here.
+    ap.add_argument("--brand", nargs="+", help="only this brand")
+    ap.add_argument("--platform", nargs="+", help="only this platform")
     ap.add_argument("--dry-run", action="store_true", help="do not POST to the webhook")
     ap.add_argument("--no-llm", action="store_true", help="rules-only review")
     ap.add_argument("--only-type", choices=["brand", "person", "web"],
@@ -233,6 +236,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--review-only", metavar="TEXTFILE", help="skip scraping; review this caption file")
     ap.add_argument("--url", default="manual://review", help="URL for --review-only")
     args = ap.parse_args(argv)
+    if args.brand:
+        args.brand = " ".join(args.brand)
+    if args.platform:
+        args.platform = " ".join(args.platform)
 
     started = datetime.now(MYT)
     cfg = load_config(args.config)
