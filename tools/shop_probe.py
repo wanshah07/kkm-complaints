@@ -89,7 +89,86 @@ def probe(pw, url, i, state=None):
     return r
 
 
+TT_CANDIDATES = [
+    "[data-e2e='browse-video']", "[data-e2e='browse-video-container']", "[data-e2e='video-detail']",
+    "#main-content-video_detail", "[class*='DivVideoDetailContainer']", "[class*='DivBrowserModeContainer']",
+    "[data-e2e='browse-video-desc']", "[data-e2e='video-desc']", "h1[data-e2e='browse-video-desc']",
+    "[data-e2e='browse-username']", "[data-e2e='browser-nickname']", "[data-e2e='browse-like-count']",
+    "[data-e2e='user-post-item']", "[data-e2e='user-post-item-list']", "main", "time[datetime]",
+]
+
+
+def tiktok_structure(pw, spec, state):
+    """spec = '@handle'. Prints STRUCTURE only (counts, selectors, the public caption of public posts),
+    never the page body: a logged-in TikTok page carries the account's own notifications."""
+    handle = spec.lstrip("@")
+    browser = pw.chromium.launch(headless=True)
+    ctx = browser.new_context(storage_state=state, locale="en-MY", timezone_id="Asia/Kuala_Lumpur",
+                              viewport={"width": 1280, "height": 1600},
+                              user_agent=("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                                          "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"))
+    page = ctx.new_page()
+    out = {"handle": handle}
+    page.goto(f"https://www.tiktok.com/@{handle}", wait_until="domcontentloaded", timeout=45000)
+    page.wait_for_timeout(6000)
+    out["profile_final_url"] = page.url
+    out["profile_title"] = page.title()[:80]
+    hrefs = page.locator("a[href]").evaluate_all("els => els.map(e => e.getAttribute('href'))")
+    vids = [h for h in dict.fromkeys(hrefs) if h and re.search(r"/(video|photo)/\d+", h)]
+    out["video_links"] = len(vids)
+    out["sample"] = vids[:4]
+    out["own_links"] = len([h for h in vids if h.lower().startswith(f"https://www.tiktok.com/@{handle.lower()}/") or h.lower().startswith(f"/@{handle.lower()}/")])
+    out["profile_selectors"] = {c: page.locator(c).count() for c in TT_CANDIDATES if page.locator(c).count()}
+    out["captcha_words"] = sorted({m.group(0).lower() for m in WALL.finditer(page.inner_text("body")[:3000])})
+    print("TIKTOK PROFILE", json.dumps(out, indent=1))
+    for v in vids[:2]:
+        url = v if v.startswith("http") else "https://www.tiktok.com" + v
+        page.goto(url, wait_until="domcontentloaded", timeout=45000)
+        page.wait_for_timeout(5000)
+        vid = re.search(r"/(?:video|photo)/(\d+)", url).group(1)
+        import datetime
+        rec = {"url": url, "final": page.url, "id_date": datetime.datetime.utcfromtimestamp(int(vid) >> 32).date().isoformat()}
+        for prop in ("og:description", "og:title", "description", "twitter:title"):
+            for sel in (f"meta[property='{prop}']", f"meta[name='{prop}']"):
+                try:
+                    v2 = page.locator(sel).first.get_attribute("content", timeout=500)
+                except Exception:
+                    v2 = None
+                if v2:
+                    rec["meta:" + prop] = v2[:300]
+                    break
+        rec["selectors"] = {c: page.locator(c).count() for c in TT_CANDIDATES if page.locator(c).count()}
+        for c in ("[data-e2e='browse-video-desc']", "[data-e2e='video-desc']", "h1[data-e2e='browse-video-desc']", "[data-e2e='browse-username']", "[data-e2e='browser-nickname']"):
+            try:
+                if page.locator(c).count():
+                    rec["text:" + c] = page.locator(c).first.inner_text(timeout=800)[:300]
+            except Exception:
+                pass
+        for c in ("[data-e2e='browse-video']", "[data-e2e='browse-video-container']", "[class*='DivVideoDetailContainer']", "main"):
+            try:
+                if page.locator(c).count():
+                    bb = page.locator(c).first.bounding_box()
+                    if bb:
+                        rec["box:" + c] = {k: int(bb[k]) for k in ("x", "y", "width", "height")}
+            except Exception:
+                pass
+        rec["time_datetime"] = page.locator("time[datetime]").first.get_attribute("datetime") if page.locator("time[datetime]").count() else None
+        print("TIKTOK VIDEO", json.dumps(rec, indent=1, ensure_ascii=False))
+        time.sleep(4)
+    browser.close()
+
+
 def main(argv):
+    tt = [a for a in argv if a.startswith("tiktok:")]
+    if tt:
+        state = session_path()
+        print("session:", "recorded session loaded" if state else "anonymous")
+        with sync_playwright() as pw:
+            for a in tt:
+                tiktok_structure(pw, a[len("tiktok:"):], state)
+        if state:
+            os.unlink(state)
+        return 0
     urls = argv or DEFAULTS
     rows = []
     state = session_path()
