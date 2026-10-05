@@ -109,8 +109,38 @@ def tiktok_structure(pw, spec, state):
                                           "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"))
     page = ctx.new_page()
     out = {"handle": handle}
+    api = []
+
+    def on_resp(r):
+        if re.search(r"/api/(post/item_list|user/detail|challenge/item_list)", r.url):
+            try:
+                api.append((r.url.split("?")[0], r.status, r.text()[:400000]))
+            except Exception as e:
+                api.append((r.url.split("?")[0], r.status, "ERR " + str(e)[:80]))
+    page.on("response", on_resp)
     page.goto(f"https://www.tiktok.com/@{handle}", wait_until="domcontentloaded", timeout=45000)
-    page.wait_for_timeout(6000)
+    page.wait_for_timeout(9000)
+    for _ in range(3):
+        page.mouse.wheel(0, 1500)
+        page.wait_for_timeout(3000)
+    body = page.inner_text("body") if page.query_selector("body") else ""
+    out["body_chars"] = len(body)
+    out["anchors"] = page.locator("a[href]").count()
+    out["flags"] = {k: (k in body.lower()) for k in ("something went wrong", "verify", "log in", "no content", "this account is private", "couldn't find this account", "try again")}
+    out["has_rehydration_json"] = page.locator("script#__UNIVERSAL_DATA_FOR_REHYDRATION__").count()
+    out["api_calls"] = []
+    for u, st, txt in api:
+        rec = {"url": u, "status": st, "len": len(txt)}
+        try:
+            d = json.loads(txt)
+            items = d.get("itemList") or []
+            rec["items"] = len(items)
+            rec["hasMore"] = d.get("hasMore")
+            rec["sample"] = [{"id": i.get("id"), "createTime": i.get("createTime"), "author": (i.get("author") or {}).get("uniqueId") if isinstance(i.get("author"), dict) else i.get("author"), "desc": (i.get("desc") or "")[:80]} for i in items[:3]]
+            rec["keys"] = list(d)[:10]
+        except Exception:
+            rec["body_start"] = txt[:80]
+        out["api_calls"].append(rec)
     out["profile_final_url"] = page.url
     out["profile_title"] = page.title()[:80]
     hrefs = page.locator("a[href]").evaluate_all("els => els.map(e => e.getAttribute('href'))")
