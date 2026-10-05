@@ -397,7 +397,10 @@ def _post_element(page: Page, platform: str, url: str = ""):
     #    available guess. With an id, an unanchored guess is worse than useless: it can frame a
     #    different account's post and file the verdict under this URL. In that case skip to the
     #    wide container, which at least contains the right post.
-    if not post_id:
+    # A TikTok video page is one post and its container holds no link back to itself, so there is nothing to
+    # anchor to: the first narrow container is the right one (measured 5 Oct 2026: anchoring found nothing and
+    # the shot fell back to the viewport, which carries the logged-in account's own navigation rail).
+    if not post_id or platform == "TikTok":
         for i, sel in enumerate(narrow):
             try:
                 loc = page.locator(sel).first
