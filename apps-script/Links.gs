@@ -13,17 +13,28 @@
  * Columns (the layout already live in the sheet since 5 Oct):
  *   A Link   B Added / note   C Status   D Run   E Result   F How to use (text, never touched)
  *
+ * Findings are HELD, not filed (Wan, 5 Oct 2026). An Unacceptable or Risky verdict waits here as 'to decide' with the
+ * complete record in column H, and the dashboard's "Add to database" button files it (links_file) or "Dismiss"
+ * removes it (links_dismiss). An Acceptable verdict is cleared from the tab a few minutes after it lands. Nothing is
+ * forgotten by that: every judged post is in the Reviewed ledger, and linksAdd_ checks it, so the same video pasted
+ * again answers "already reviewed" instead of being read (and paid for) twice.
+ *
+ * Extra columns: G Updated (ISO time of the last write), H Held record (JSON, system use).
+ *
  * Status is the whole state machine:
  *   ''                        waiting to be picked up (TikTok video links only)
  *   'queued <UTC ISO>'        claimed by a run that has not started reading yet
  *   'running'                 a run is reading it (D carries the run number)
- *   'done' | 'error'          finished (E carries the one-line result)
+ *   'done' | 'error'          finished (E carries the one-line result); acceptable 'done' rows are cleared after 10 min
+ *   'to decide'               Unacceptable / Risky held for Wan: Add to database (-> 'filed') or Dismiss (row removed)
+ *   'filed'                   added to Complaints by Wan's click (cleared after 10 min)
  *   'not readable: …' | 'skipped: …' | 'not a TikTok video link'   decided on arrival, never queued
  */
 var LINKS_SHEET_NAME = 'Links';
-var LINKS_HEADERS = ['Link (paste one per row)', 'Added / note', 'Status (filled by the system)', 'Run', 'Result', 'How to use'];
+var LINKS_HEADERS = ['Link (paste one per row)', 'Added / note', 'Status (filled by the system)', 'Run', 'Result', 'How to use', 'Updated', 'Held record (system)'];
 var LINKS_MAX_PER_RUN = 10;
 var LINKS_STALE_MIN = 90;
+var LINKS_CLEAR_MIN = 10;
 
 function linksSheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -32,7 +43,7 @@ function linksSheet_() {
     sh = ss.insertSheet(LINKS_SHEET_NAME);
     sh.getRange(1, 1, 1, LINKS_HEADERS.length).setValues([LINKS_HEADERS]).setFontWeight('bold');
     sh.setFrozenRows(1);
-    [420, 200, 220, 90, 420, 360].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
+    [420, 200, 220, 90, 420, 360, 170, 120].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
   }
   return sh;
 }
@@ -64,15 +75,34 @@ var LINK_DECISIONS_ = {
 function linksRows_(sh) {
   var last = sh.getLastRow();
   if (last < 2) return [];
-  return sh.getRange(2, 1, last - 1, 5).getValues().map(function (r, i) {
+  return sh.getRange(2, 1, last - 1, 8).getValues().map(function (r, i) {
     return { row: i + 2, link: String(r[0] || '').trim(), note: String(r[1] || ''), status: String(r[2] || ''),
-             run: String(r[3] || ''), result: String(r[4] || '') };
+             run: String(r[3] || ''), result: String(r[4] || ''), updated: r[6] ? new Date(r[6]).getTime() : NaN,
+             held: String(r[7] || '') };
   }).filter(function (o) { return o.link; });
+}
+
+function nowIso_() { return new Date().toISOString().replace(/\.\d+Z$/, 'Z'); }
+
+// Rows that have served their purpose leave the tab. Their history stays: the Reviewed ledger holds every judged
+// post, Complaints holds every filed one, and a repeat paste is answered from those two.
+function linksSweep_(sh) {
+  var now = Date.now(), gone = [];
+  linksRows_(sh).forEach(function (o) {
+    var clearable = (o.status === 'done' && /^(reviewed: acceptable|already reviewed)/.test(o.result)) || o.status === 'filed';
+    if (!clearable) return;
+    if (isNaN(o.updated)) { sh.getRange(o.row, 7).setValue(nowIso_()); return; }   // a row older than column G: start its clock now
+    if (now - o.updated > LINKS_CLEAR_MIN * 60000) gone.push(o.row);
+  });
+  gone.sort(function (a, b) { return b - a; }).forEach(function (r) { sh.deleteRow(r); });
+  return gone.length;
 }
 
 function linksList_() {
   return withLock_(function () {
-    var rows = linksRows_(linksSheet_());
+    var sh = linksSheet_();
+    linksSweep_(sh);
+    var rows = linksRows_(sh).map(function (o) { o.canFile = !!o.held; delete o.held; delete o.updated; return o; });
     rows.reverse();                                  // newest first
     return { ok: true, links: rows.slice(0, 200), total: rows.length };
   });
@@ -89,19 +119,27 @@ function linksAdd_(urls, note) {
     var sh = linksSheet_();
     var have = {};
     linksRows_(sh).forEach(function (o) { have[linkKey_(o.link)] = o; });
+    var seen = {}, known = {};
+    try { seen = seenUrlSet_(); } catch (e) { /* ledger not deployed: carry on without it */ }
+    try { known = knownUrlSet_(sheet_()); } catch (e) {}
     var add = [], out = { ok: true, added: [], duplicates: [], rejected: [] };
     urls.forEach(function (u) {
       var k = linkKey_(u);
       if (have[k]) { out.duplicates.push({ link: u, status: have[k].status || 'waiting' }); return; }
       have[k] = { status: '' };
       var kind = classifyLink_(u);
+      var ck = canonicalUrl_(u);
+      if (kind === 'tiktok' && (seen[ck] || known[ck])) {
+        out.rejected.push({ link: u, status: 'already reviewed' });   // history, not queue: nothing to add
+        return;
+      }
       var status = kind === 'tiktok' ? '' : LINK_DECISIONS_[kind];
-      add.push([u, String(note || 'Added in dashboard'), status, '', '']);
+      add.push([u, String(note || 'Added in dashboard'), status, '', '', '', nowIso_()]);
       (kind === 'tiktok' ? out.added : out.rejected).push({ link: u, status: status || 'waiting' });
     });
     if (add.length) {
       var start = Math.max(sh.getLastRow(), 1) + 1;
-      sh.getRange(start, 1, add.length, 5).setValues(add);
+      sh.getRange(start, 1, add.length, 7).setValues(add);
     }
     return out;
   });
@@ -116,6 +154,7 @@ function linksRetry_(link) {
     if (!hit) return { ok: false, error: 'Link not found' };
     if (classifyLink_(hit.link) !== 'tiktok') return { ok: false, error: 'Only TikTok video links can be retried' };
     sh.getRange(hit.row, 3, 1, 3).setValues([['', '', '']]);
+    sh.getRange(hit.row, 7, 1, 2).setValues([[nowIso_(), '']]);
     return { ok: true };
   });
 }
@@ -130,6 +169,7 @@ function parseClaimTime_(status) {
 function linksPending_() {
   return withLock_(function () {
     var sh = linksSheet_();
+    linksSweep_(sh);
     var now = Date.now(), stamp = new Date(now).toISOString().replace(/\.\d+Z$/, 'Z');
     var rows = linksRows_(sh), claimed = [], released = 0;
     rows.forEach(function (o) {
@@ -170,8 +210,47 @@ function linksUpdate_(updates) {
         status = 'running ' + new Date().toISOString().replace(/\.\d+Z$/, 'Z');
       }
       sh.getRange(o.row, 3, 1, 3).setValues([[status, run, result]]);
+      sh.getRange(o.row, 7).setValue(nowIso_());
+      if (u.held != null) sh.getRange(o.row, 8).setValue(String(u.held));
       n++;
     });
     return { ok: true, updated: n, missing: missing };
+  });
+}
+
+// Wan pressed "Add to database" on a held finding. The insert takes the script lock itself, so it runs OUTSIDE ours.
+function linksFile_(link) {
+  var hit = withLock_(function () {
+    var k = linkKey_(link);
+    return linksRows_(linksSheet_()).filter(function (o) { return linkKey_(o.link) === k; })[0] || null;
+  });
+  if (!hit) return { ok: false, error: 'Link not found' };
+  if (hit.status !== 'to decide' || !hit.held) return { ok: false, error: 'Nothing held for this link' };
+  var rec = JSON.parse(hit.held);
+  var res = apiInsertRecords_([rec], 'scraper');
+  var note;
+  if (res.inserted) note = 'added to Complaints (' + (res.ids && res.ids[0] || '') + ')';
+  else if (res.duplicates && res.duplicates.length) note = 'already in Complaints (' + res.duplicates[0] + ')';
+  else return { ok: false, error: (res.errors && res.errors[0]) || res.error || 'The insert did not go through' };
+  return withLock_(function () {
+    var sh = linksSheet_(), k2 = linkKey_(link);
+    var row = linksRows_(sh).filter(function (o) { return linkKey_(o.link) === k2; })[0];
+    if (row) {
+      sh.getRange(row.row, 3, 1, 3).setValues([['filed', row.run, note]]);
+      sh.getRange(row.row, 7, 1, 2).setValues([[nowIso_(), '']]);
+    }
+    return { ok: true, result: note };
+  });
+}
+
+// Wan dismissed a held finding: the row goes, the Reviewed ledger keeps the post so it is not read again.
+function linksDismiss_(link) {
+  return withLock_(function () {
+    var sh = linksSheet_(), k = linkKey_(link);
+    var row = linksRows_(sh).filter(function (o) { return linkKey_(o.link) === k; })[0];
+    if (!row) return { ok: false, error: 'Link not found' };
+    if (row.status !== 'to decide' && row.status !== 'error') return { ok: false, error: 'Only a held or errored link can be dismissed' };
+    sh.deleteRow(row.row);
+    return { ok: true };
   });
 }

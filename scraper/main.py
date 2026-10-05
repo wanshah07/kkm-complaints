@@ -210,7 +210,20 @@ def _run_label() -> str:
     return f"#{num}" if num else (rid or "local")
 
 
-def link_outcomes(report: dict, link_map: Dict[str, str], links: List[str]) -> List[dict]:
+def _detach_screenshot(rec: dict, client, post) -> None:
+    """A held record has to fit in one sheet cell, so its screenshot is stored in Drive now and carried as a link."""
+    b64 = rec.pop("screenshot_base64", "")
+    mime = rec.pop("screenshot_mime", "image/jpeg")
+    if not b64 or rec.get("screenshot_link"):
+        return
+    fname = f"{post.brand}_TikTok_{datetime.now(MYT).strftime('%Y%m%d')}_{abs(hash(post.url)) % 10_000_000}.jpg"
+    link = client.upload_screenshot(b64, mime, fname.replace(" ", "_"))
+    if link:
+        rec["screenshot_link"] = link
+
+
+def link_outcomes(report: dict, link_map: Dict[str, str], links: List[str],
+                  held: Optional[Dict[str, dict]] = None) -> List[dict]:
     """
     One Links-tab update per pasted link: what became of it. Read from the run's own report, matched on
     the post URL the link resolved to, so a short link and its canonical form are the same row.
@@ -227,6 +240,19 @@ def link_outcomes(report: dict, link_map: Dict[str, str], links: List[str]) -> L
             flagged = [e for e in report.get("flagged", []) if e.get("url") == u]
             failed = [e for e in report.get("reviewer_failed", []) if e.get("url") == u]
             skipped = [e for e in report.get("skipped", []) if e.get("url") == u]
+            if held and u in held:
+                e = [x for x in report.get("held", []) if x.get("url") == u][0]
+                rec = held[u]
+                what = e.get("product") or e.get("type") or ""
+                status, result = "to decide", "%s (%s)%s: not filed. Add to the database, or dismiss." % (
+                    e.get("verdict"), e.get("confidence"), (" - " + what) if what else "")
+                blob = json.dumps(rec, ensure_ascii=False)
+                if len(blob) > 45000:      # one sheet cell holds 50,000 characters; cut the longest text, never the JSON
+                    rec = dict(rec, extracted_text=str(rec.get("extracted_text", ""))[:6000],
+                               violation_reason=str(rec.get("violation_reason", ""))[:6000])
+                    blob = json.dumps(rec, ensure_ascii=False)
+                out.append({"link": link, "status": status, "run": run, "result": result[:300], "held": blob})
+                continue
             if pushed:
                 e = pushed[0]
                 status, result = "done", "filed in Complaints: %s (%s)%s" % (
@@ -374,6 +400,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     web_mode = args.only_type == "web"
     tt_mode = bool(args.tiktok_links)
     tt_links: List[str] = []
+    # Links-tab runs HOLD what they find instead of filing it (Wan, 5 Oct 2026): an Unacceptable or Risky verdict
+    # waits in the panel with an "Add to database" button, and only his click files it.
+    tt_hold = tt_mode and os.environ.get("LINKS_REPORT") == "1" and not args.dry_run and client is not None
+    held_records: Dict[str, dict] = {}
     if tt_mode:
         tt_links, tt_bad = parse_links(os.environ.get("TIKTOK_LINKS", ""))
         for text, why in tt_bad:
@@ -671,6 +701,16 @@ def main(argv: Optional[List[str]] = None) -> int:
                 reviewed.append({"url": post.url, "brand": post.brand, "platform": post.platform,
                                  "verdict": v["verdict"], "confidence": v.get("confidence"),
                                  "reviewer": v.get("reviewer", "")})
+                if tt_hold and v["verdict"] in ("Unacceptable", "Risky"):
+                    rec = build_record(post, v, run_cfg, drive)
+                    _detach_screenshot(rec, client, post)
+                    held_records[post.url] = rec
+                    entry["why"] = "held for the decision in the Links panel"
+                    report.setdefault("held", []).append(entry)
+                    log.info("%s: %s (%s) held for the Links panel, not filed", post.url, v["verdict"],
+                             v.get("confidence"))
+                    known.add(cu)
+                    continue
                 would_push = ((v["verdict"] == "Unacceptable" and v.get("confidence", 0) >= min_conf)
                               or (v["verdict"] == "Risky" and push_risky))
                 if would_push and v.get("needs_visual_verification"):
@@ -713,7 +753,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if tt_mode and os.environ.get("LINKS_REPORT") == "1" and client is not None and not args.dry_run:
         try:
-            client.links_update(link_outcomes(report, getattr(scraper, "link_map", {}), tt_links))
+            client.links_update(link_outcomes(report, getattr(scraper, "link_map", {}), tt_links, held_records))
         except Exception as e:
             log.warning("could not build the Links outcomes: %s", e)
 

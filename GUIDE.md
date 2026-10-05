@@ -220,8 +220,12 @@ Two things that are *not* handle problems, and that no amount of editing will fi
 TikTok cannot be swept by account: a runner is shown an empty post list (measured 5 Oct, and nothing here tries to get round it). A single video page does load, so TikTok works **by link**.
 
 1. Open the dashboard and press **TikTok links**. Paste video links, one per line (`tiktok.com/@handle/video/…`, or a `vm.tiktok.com` / `vt.tiktok.com` short link) and press **Add links**.
-2. Within about 15 minutes the scheduled *TikTok link review* workflow claims what is waiting (up to ten at a time), reads each video, screenshots it, reviews it and files the findings in the main table as a **KOL** row with the account's handle as Brand.
-3. The panel shows each link as *Waiting → Queued → Reading now → Done / Error*, with a one-line result. **Retry** puts an errored link back in the queue.
+2. Within about 15 minutes the scheduled *TikTok link review* workflow claims what is waiting (up to ten at a time), reads each video, screenshots it and reviews it.
+3. **Nothing is filed by itself.** The panel shows each link as *Waiting → Queued → Reading now* and then:
+   - **Unacceptable or Risky** → *Your decision*, with the verdict and product. **Add to database** files it in the main table as a KOL row (Brand = the account's handle, the screenshot included); **Dismiss** drops it.
+   - **Acceptable** (or already reviewed) → *Done*, and the row clears itself after 10 minutes.
+   - **Error** → **Retry** puts it back in the queue.
+4. **History is kept, so nothing is read twice.** Every judged post is in the *Reviewed* tab and every filed one is in Complaints. Pasting a video that is already in either answers "already reviewed" straight away.
 
 A Shopee link, an own-brand link (Valorith / Facerinna) or anything that is not a TikTok video is recorded with its reason and never queued. The sheet's `Links` tab is only the queue's storage; nobody has to open it.
 

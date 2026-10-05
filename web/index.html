@@ -232,7 +232,7 @@
     <div class="px-5 py-4 border-b border-slate-200 flex items-center">
       <div>
         <h2 class="font-semibold">TikTok links</h2>
-        <p class="text-xs text-slate-500">Paste video links, one per line. They are read within about 15 minutes and anything found lands in the table as a KOL row.</p>
+        <p class="text-xs text-slate-500">Paste video links, one per line. They are read within about 15 minutes. A breach (Unacceptable or Risky) waits here for your decision; an acceptable link is cleared and stays in the reviewed history, so it is never read twice.</p>
       </div>
       <button data-lclose class="ml-auto rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm hover:bg-slate-50">✕</button>
     </div>
@@ -1119,12 +1119,14 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') { showDrawer
 // TikTok links (Links.gs): paste here, a scheduled run reads them, the outcome comes back here.
 // ---------------------------------------------------------------------------
 const LINK_BADGE = { waiting: 'bg-slate-100 text-slate-700', working: 'bg-amber-100 text-amber-900',
-                     done: 'bg-emerald-100 text-emerald-800', error: 'bg-red-100 text-red-800', skip: 'bg-slate-200 text-slate-600' };
+                     done: 'bg-emerald-100 text-emerald-800', decide: 'bg-violet-100 text-violet-800', error: 'bg-red-100 text-red-800', skip: 'bg-slate-200 text-slate-600' };
 function linkState(st) {
   st = String(st || '');
   if (!st) return ['waiting', 'Waiting for the next run'];
   if (/^queued/.test(st)) return ['working', 'Queued'];
   if (/^running/.test(st)) return ['working', 'Reading now'];
+  if (st === 'to decide') return ['decide', 'Your decision'];
+  if (st === 'filed') return ['done', 'Added to database'];
   if (st === 'done') return ['done', 'Done'];
   if (st === 'error') return ['error', 'Error'];
   return ['skip', st];
@@ -1144,16 +1146,27 @@ async function loadLinks() {
     $('lRows').innerHTML = rows.map(o => {
       const [k, label] = linkState(o.status);
       const short = o.link.replace(/^https?:\/\/(www\.)?/, '');
-      const retry = (k === 'error' && /tiktok\.com/.test(o.link)) ? `<button class="lRetry text-xs rounded border border-slate-300 px-2 py-1 hover:bg-slate-50" data-link="${esc(o.link)}">Retry</button>` : '';
+      const decide = (k === 'decide' && o.canFile) ? `<div class="flex gap-1 justify-end"><button class="lFile text-xs rounded bg-slate-900 text-white px-2 py-1 hover:bg-slate-800" data-link="${esc(o.link)}">Add to database</button><button class="lDismiss text-xs rounded border border-slate-300 px-2 py-1 hover:bg-slate-50" data-link="${esc(o.link)}">Dismiss</button></div>` : '';
+      const retry = decide || ((k === 'error' && /tiktok\.com/.test(o.link)) ? `<button class="lRetry text-xs rounded border border-slate-300 px-2 py-1 hover:bg-slate-50" data-link="${esc(o.link)}">Retry</button>` : '');
       return `<tr><td class="px-3 py-2 max-w-[260px]"><a class="text-blue-700 hover:underline break-all" href="${esc(o.link)}" target="_blank" rel="noopener">${esc(short.length > 60 ? short.slice(0, 58) + '…' : short)}</a></td>
         <td class="px-3 py-2"><span class="badge ${LINK_BADGE[k]}">${esc(label)}</span>${o.run ? `<div class="text-[11px] text-slate-400 mt-0.5">run ${trimRun(o.run)}</div>` : ''}</td>
         <td class="px-3 py-2 text-slate-700">${esc(o.result)}</td><td class="px-3 py-2 text-right">${retry}</td></tr>`;
     }).join('');
+    document.querySelectorAll('.lFile').forEach(b => b.onclick = async () => {
+      b.disabled = true; b.textContent = 'Adding…';
+      try { const d = await api('links_file', { link: b.dataset.link }); toast(d.result || 'Added'); refresh(true); loadLinks(); }
+      catch (e) { toast(e.message); b.disabled = false; b.textContent = 'Add to database'; }
+    });
+    document.querySelectorAll('.lDismiss').forEach(b => b.onclick = async () => {
+      b.disabled = true;
+      try { await api('links_dismiss', { link: b.dataset.link }); toast('Dismissed. It stays in the reviewed history.'); loadLinks(); }
+      catch (e) { toast(e.message); b.disabled = false; }
+    });
     document.querySelectorAll('.lRetry').forEach(b => b.onclick = async () => {
       b.disabled = true;
       try { await api('links_retry', { link: b.dataset.link }); toast('Back in the queue'); loadLinks(); } catch (e) { toast(e.message); b.disabled = false; }
     });
-    const open = rows.filter(o => { const k = linkState(o.status)[0]; return k === 'waiting' || k === 'working'; }).length;
+    const open = rows.filter(o => { const k = linkState(o.status)[0]; return k === 'waiting' || k === 'working' || k === 'decide'; }).length;
     $('linksBadge').textContent = open; $('linksBadge').classList.toggle('hidden', !open);
   } catch (e) {
     $('lMsg').textContent = /Unknown action/.test(e.message)
@@ -1168,7 +1181,7 @@ async function addLinks() {
     const d = await api('links_add', { links: text });
     const bits = [];
     if (d.added.length) bits.push(d.added.length + ' queued');
-    if (d.rejected.length) bits.push(d.rejected.length + ' cannot be read (see the table)');
+    if (d.rejected.length) bits.push(d.rejected.length + ' not queued (already reviewed, or cannot be read: see the table)');
     if (d.duplicates.length) bits.push(d.duplicates.length + ' already listed');
     $('lMsg').textContent = bits.join(' · ') || 'Nothing added.';
     $('lText').value = '';

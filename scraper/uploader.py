@@ -217,6 +217,15 @@ class AppsScriptClient:
         """Claim up to ten waiting TikTok links. {"links": [...], "released": n}"""
         return self._post({"action": "links_pending"}, retries=3)
 
+    def upload_screenshot(self, b64: str, mime: str, filename: str) -> str:
+        """Store one screenshot in Drive through Apps Script and return its viewer link ('' on failure)."""
+        try:
+            return self._post({"action": "upload_screenshot", "base64": b64, "mime": mime or "image/jpeg",
+                               "filename": filename}, retries=2).get("link", "")
+        except Exception as e:
+            log.warning("could not store the screenshot (%s)", e)
+            return ""
+
     def links_update(self, updates: List[Dict]) -> dict:
         """Write Status / Run / Result for the named links. A failure here must never fail a run."""
         if not updates:
