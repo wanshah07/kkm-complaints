@@ -204,6 +204,58 @@ def sweep_order(brands: List[dict], known_urls, offset: int = 0,
     return ordered[:judged_from] + tail, fresh
 
 
+def _run_label() -> str:
+    """'#12 (id 37255…)' for the Links tab's Run column, from the Actions environment."""
+    num, rid = os.environ.get("GITHUB_RUN_NUMBER", ""), os.environ.get("GITHUB_RUN_ID", "")
+    return f"#{num}" if num else (rid or "local")
+
+
+def link_outcomes(report: dict, link_map: Dict[str, str], links: List[str]) -> List[dict]:
+    """
+    One Links-tab update per pasted link: what became of it. Read from the run's own report, matched on
+    the post URL the link resolved to, so a short link and its canonical form are the same row.
+    Status is 'done' when the run read the post and reached a verdict (or knew it already) and 'error'
+    when it could not, because an error row is the one Wan can retry from the dashboard.
+    """
+    out: List[dict] = []
+    run = _run_label()
+    for link in links:
+        u = link_map.get(link)
+        status, result = "error", "not reached: the run stopped before this link"
+        if u:
+            pushed = [e for e in report.get("pushed", []) if e.get("url") == u]
+            flagged = [e for e in report.get("flagged", []) if e.get("url") == u]
+            failed = [e for e in report.get("reviewer_failed", []) if e.get("url") == u]
+            skipped = [e for e in report.get("skipped", []) if e.get("url") == u]
+            if pushed:
+                e = pushed[0]
+                status, result = "done", "filed in Complaints: %s (%s)%s" % (
+                    e.get("verdict"), e.get("confidence"), (", " + e["type"]) if e.get("type") else "")
+            elif flagged:
+                status, result = "done", "possible breach held back for a visual check, not filed"
+            elif failed:
+                status, result = "error", "the reviewer gave no verdict; press Retry"
+            elif skipped:
+                why = str(skipped[0].get("why") or "")
+                low = why.lower()
+                if "already in sheet" in low:
+                    status, result = "done", "already reviewed earlier"
+                elif low == "acceptable":
+                    status, result = "done", "reviewed: acceptable, nothing to file"
+                elif "outside" in low:
+                    status, result = "done", why[:200]
+                elif "below threshold" in low:
+                    status, result = "done", "reviewed: " + why[:200]
+                elif any(w in low for w in ("login", "wall", "verif", "blocked", "session")):
+                    status, result = "error", "TikTok login wall: the saved session may have expired"
+                else:
+                    status, result = "error", why[:200] or "not read"
+            else:
+                status, result = "error", "read, but no result recorded"
+        out.append({"link": link, "status": status, "run": run, "result": result})
+    return out
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(description="KKM cosmetic complaint scraper")
     ap.add_argument("--config", default=os.path.join(HERE, "config.yaml"))
@@ -333,6 +385,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             _write_report(run_dir, report)
             return 1
         log.info("TikTok link review: %d link(s)", len(tt_links))
+        if os.environ.get("LINKS_REPORT") == "1" and client is not None and not args.dry_run:
+            client.links_update([{"link": l, "status": "running", "run": _run_label()} for l in tt_links])
         brands = []
     web_source = ""
     if web_mode:
@@ -656,6 +710,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         report["not_reached"] = missed
         log.warning("%d of %d target(s) not reached this run; the next run picks them up",
                     len(missed), len(planned))
+
+    if tt_mode and os.environ.get("LINKS_REPORT") == "1" and client is not None and not args.dry_run:
+        try:
+            client.links_update(link_outcomes(report, getattr(scraper, "link_map", {}), tt_links))
+        except Exception as e:
+            log.warning("could not build the Links outcomes: %s", e)
 
     spend["usd"] = round(spend["usd"], 4)
     rate = float(run_cfg.get("usd_to_myr") or 0)

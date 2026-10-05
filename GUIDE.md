@@ -215,6 +215,20 @@ Two things that are *not* handle problems, and that no amount of editing will fi
 - **"profile is private to this account"** — the handle is right; the account has not accepted us. Nothing to change in the sheet.
 - **"page shows a login prompt"** (Facebook) — the platform is blocking the runner's IP, not rejecting the handle.
 
+### TikTok: paste video links in the dashboard (5 Oct 2026)
+
+TikTok cannot be swept by account: a runner is shown an empty post list (measured 5 Oct, and nothing here tries to get round it). A single video page does load, so TikTok works **by link**.
+
+1. Open the dashboard and press **TikTok links**. Paste video links, one per line (`tiktok.com/@handle/video/…`, or a `vm.tiktok.com` / `vt.tiktok.com` short link) and press **Add links**.
+2. Within about 15 minutes the scheduled *TikTok link review* workflow claims what is waiting (up to ten at a time), reads each video, screenshots it, reviews it and files the findings in the main table as a **KOL** row with the account's handle as Brand.
+3. The panel shows each link as *Waiting → Queued → Reading now → Done / Error*, with a one-line result. **Retry** puts an errored link back in the queue.
+
+A Shopee link, an own-brand link (Valorith / Facerinna) or anything that is not a TikTok video is recorded with its reason and never queued. The sheet's `Links` tab is only the queue's storage; nobody has to open it.
+
+**One-time deploy:** add `apps-script/Links.gs` as a new file in the Apps Script editor, re-paste `Code.gs` (it carries the new `links_*` actions), then Deploy → Manage deployments → New version. Until then the panel says the backend has no Links update yet and the scheduled run stands by quietly.
+
+**If every link errors with "login wall"**, the TikTok cookies in the `PW_STORAGE_STATE_SHOP_B64` secret have expired; they have to be exported again. A link that was claimed by a run that then died is freed automatically after 90 minutes.
+
 ### Watching a doctor or KOL account
 
 A cosmetic advertisement carried by a doctor is a Part 10 s.4.1 problem in itself, so these accounts are worth watching — but the row has to say what it is.

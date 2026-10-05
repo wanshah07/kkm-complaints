@@ -9,15 +9,26 @@
 # Secrets used: APPS_SCRIPT_WEBHOOK_URL, APPS_SCRIPT_API_TOKEN, the reviewer keys, and PW_STORAGE_STATE_SHOP_B64
 # (the TikTok login, consumer cookies only). No artifacts are uploaded: a logged-in TikTok page is not for a
 # public repo.
+#
+# Scheduled too (Wan, 5 Oct 2026: "I want links tab in the system, so no need for me to open sheet"). Links are
+# pasted in the dashboard, land in the sheet's Links tab through Links.gs, and every 15 minutes the `gather` job
+# claims whatever is waiting (nothing waiting = a ten-second run, no browser). The review writes each link's
+# outcome back, so the dashboard shows queued -> running -> done / error. A manual dispatch with links still works
+# and claims nothing. The concurrency group is on the WORKFLOW, so a tick that has to wait is cancelled before
+# `gather` has run and never holds a claim.
+
 name: TikTok link review
 
 on:
+  schedule:
+    - cron: '*/15 * * * *'
   workflow_dispatch:
     inputs:
       links:
-        description: 'TikTok video links, one per line (https://www.tiktok.com/@handle/video/123...; vm.tiktok.com short links work too).'
+        description: 'Optional: TikTok video links, one per line. Leave empty to take what is waiting in the Links tab.'
         type: string
-        required: true
+        required: false
+        default: ''
       dry_run:
         description: 'Read and review, but do not push to the sheet'
         type: boolean
@@ -31,7 +42,25 @@ permissions:
   contents: read
 
 jobs:
+  gather:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      count: ${{ steps.g.outputs.count }}
+      links: ${{ steps.g.outputs.links }}
+      claimed: ${{ steps.g.outputs.claimed }}
+    env:
+      APPS_SCRIPT_WEBHOOK_URL: ${{ secrets.APPS_SCRIPT_WEBHOOK_URL }}
+      APPS_SCRIPT_API_TOKEN: ${{ secrets.APPS_SCRIPT_API_TOKEN }}
+      INPUT_LINKS: ${{ github.event.inputs.links }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: g
+        run: python3 tools/links_poll.py gather
+
   review:
+    needs: gather
+    if: needs.gather.outputs.count != '' && needs.gather.outputs.count != '0'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -49,7 +78,8 @@ jobs:
       SCREENSHOT_MODE: ${{ vars.SCREENSHOT_MODE || 'apps_script' }}
       PW_STORAGE_STATE_SHOP_B64: ${{ secrets.PW_STORAGE_STATE_SHOP_B64 }}
       # Links travel as an environment variable, never spliced into the shell line.
-      TIKTOK_LINKS: ${{ github.event.inputs.links }}
+      TIKTOK_LINKS: ${{ needs.gather.outputs.links }}
+      LINKS_REPORT: ${{ needs.gather.outputs.claimed == 'true' && '1' || '' }}
       DRY_RUN: ${{ github.event.inputs.dry_run }}
 
     steps:
@@ -73,3 +103,8 @@ jobs:
           ARGS="--tiktok-links"
           if [ "$DRY_RUN" = "true" ]; then ARGS="$ARGS --dry-run"; fi
           python main.py $ARGS
+      - name: Mark the links as failed if the review died
+        if: failure()
+        env:
+          LINKS: ${{ needs.gather.outputs.links }}
+        run: python3 tools/links_poll.py fail

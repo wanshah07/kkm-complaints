@@ -447,6 +447,17 @@ function handleApi_(action, body, p) {
                             PROPS.setProperty('KKM_FORM_URL', String(body.url || '')); return { ok: true };
       case 'draft_review':  if (!viewer) return deny;
                             return draftReview_(body);
+      // --- Links tab (Links.gs): dashboard adds and watches, the scheduled workflow claims and reports ---
+      case 'links_list':    if (!viewer) return deny;
+                            return linksList_();
+      case 'links_add':     if (!viewer) return deny;
+                            return linksAdd_(body.links, body.note);
+      case 'links_retry':   if (!viewer) return deny;
+                            return linksRetry_(body.link);
+      case 'links_pending': if (!machine) return deny;
+                            return linksPending_();
+      case 'links_update':  if (!machine) return deny;
+                            return linksUpdate_(body.updates);
       default:              return { ok: false, error: 'Unknown action: ' + action };
     }
   } catch (err) {

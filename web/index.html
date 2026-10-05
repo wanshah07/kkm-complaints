@@ -38,6 +38,7 @@
         <span class="hidden sm:inline">Open KKM form ↗</span><span class="sm:hidden">KKM ↗</span>
       </button>
       <button id="btnRefresh" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">⟳ Refresh</button>
+      <button id="btnLinks" title="Paste TikTok video links to be reviewed" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">TikTok links<span id="linksBadge" class="hidden ml-1 rounded-full bg-amber-100 text-amber-900 px-1.5 text-xs font-semibold"></span></button>
       <button id="btnNew" class="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">+ Manual entry</button>
       <button id="btnSettings" title="Backend connection" class="hidden inline-flex items-center rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm hover:bg-slate-50">⚙</button>
     </div>
@@ -223,6 +224,39 @@
     </div>
   </div>
 </aside>
+
+<!-- TikTok links modal (Links.gs) -->
+<div id="linksModal" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-slate-900/40" data-lclose></div>
+  <div class="absolute inset-x-0 top-6 mx-auto max-w-3xl bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+    <div class="px-5 py-4 border-b border-slate-200 flex items-center">
+      <div>
+        <h2 class="font-semibold">TikTok links</h2>
+        <p class="text-xs text-slate-500">Paste video links, one per line. They are read within about 15 minutes and anything found lands in the table as a KOL row.</p>
+      </div>
+      <button data-lclose class="ml-auto rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm hover:bg-slate-50">✕</button>
+    </div>
+    <div class="p-5 space-y-4">
+      <textarea id="lText" rows="4" placeholder="https://www.tiktok.com/@handle/video/7123456789012345678&#10;https://vt.tiktok.com/ZSxxxxxxx/" class="w-full rounded-lg border border-slate-300 text-sm py-2 px-3 font-mono"></textarea>
+      <div class="flex flex-wrap items-center gap-3">
+        <button id="lAdd" class="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">Add links</button>
+        <span id="lMsg" class="text-xs text-slate-600"></span>
+        <span class="ml-auto text-xs text-slate-500">Video links only. A profile link cannot be read, and Shopee cannot be read from a runner.</span>
+      </div>
+      <div class="overflow-x-auto rounded-xl border border-slate-200">
+        <table class="min-w-full text-sm">
+          <thead class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide"><tr>
+            <th class="text-left px-3 py-2 font-semibold">Link</th>
+            <th class="text-left px-3 py-2 font-semibold">Status</th>
+            <th class="text-left px-3 py-2 font-semibold">Result</th>
+            <th class="px-3 py-2"></th></tr></thead>
+          <tbody id="lRows" class="divide-y divide-slate-100"></tbody>
+        </table>
+        <div id="lEmpty" class="hidden p-6 text-center text-slate-500 text-sm">No links yet.</div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- Manual entry modal -->
 <div id="modal" class="fixed inset-0 z-50 hidden">
@@ -1080,8 +1114,75 @@ $('mDraft').onclick = draftManual;
 $('fBrand').onchange = e => { state.filter.brand = e.target.value; renderTable(); };
 $('fPlatform').onchange = e => { state.filter.platform = e.target.value; renderTable(); };
 $('fSearch').oninput = e => { state.filter.q = e.target.value; renderTable(); };
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { showDrawer(false); showModal(false); if (cfg.key) showConnect(false); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { showDrawer(false); showModal(false); showLinks(false); if (cfg.key) showConnect(false); } });
+// ---------------------------------------------------------------------------
+// TikTok links (Links.gs): paste here, a scheduled run reads them, the outcome comes back here.
+// ---------------------------------------------------------------------------
+const LINK_BADGE = { waiting: 'bg-slate-100 text-slate-700', working: 'bg-amber-100 text-amber-900',
+                     done: 'bg-emerald-100 text-emerald-800', error: 'bg-red-100 text-red-800', skip: 'bg-slate-200 text-slate-600' };
+function linkState(st) {
+  st = String(st || '');
+  if (!st) return ['waiting', 'Waiting for the next run'];
+  if (/^queued/.test(st)) return ['working', 'Queued'];
+  if (/^running/.test(st)) return ['working', 'Reading now'];
+  if (st === 'done') return ['done', 'Done'];
+  if (st === 'error') return ['error', 'Error'];
+  return ['skip', st];
+}
+let linksTimer = null;
+function showLinks(open) {
+  $('linksModal').classList.toggle('hidden', !open);
+  clearInterval(linksTimer);
+  if (open) { loadLinks(); $('lText').focus(); linksTimer = setInterval(loadLinks, 20000); }
+}
+function trimRun(s) { return s ? esc(s) : ''; }
+async function loadLinks() {
+  try {
+    const d = await api('links_list');
+    const rows = d.links || [];
+    $('lEmpty').classList.toggle('hidden', rows.length > 0);
+    $('lRows').innerHTML = rows.map(o => {
+      const [k, label] = linkState(o.status);
+      const short = o.link.replace(/^https?:\/\/(www\.)?/, '');
+      const retry = (k === 'error' && /tiktok\.com/.test(o.link)) ? `<button class="lRetry text-xs rounded border border-slate-300 px-2 py-1 hover:bg-slate-50" data-link="${esc(o.link)}">Retry</button>` : '';
+      return `<tr><td class="px-3 py-2 max-w-[260px]"><a class="text-blue-700 hover:underline break-all" href="${esc(o.link)}" target="_blank" rel="noopener">${esc(short.length > 60 ? short.slice(0, 58) + '…' : short)}</a></td>
+        <td class="px-3 py-2"><span class="badge ${LINK_BADGE[k]}">${esc(label)}</span>${o.run ? `<div class="text-[11px] text-slate-400 mt-0.5">run ${trimRun(o.run)}</div>` : ''}</td>
+        <td class="px-3 py-2 text-slate-700">${esc(o.result)}</td><td class="px-3 py-2 text-right">${retry}</td></tr>`;
+    }).join('');
+    document.querySelectorAll('.lRetry').forEach(b => b.onclick = async () => {
+      b.disabled = true;
+      try { await api('links_retry', { link: b.dataset.link }); toast('Back in the queue'); loadLinks(); } catch (e) { toast(e.message); b.disabled = false; }
+    });
+    const open = rows.filter(o => { const k = linkState(o.status)[0]; return k === 'waiting' || k === 'working'; }).length;
+    $('linksBadge').textContent = open; $('linksBadge').classList.toggle('hidden', !open);
+  } catch (e) {
+    $('lMsg').textContent = /Unknown action/.test(e.message)
+      ? 'The backend does not have the Links update yet (Apps Script needs the new Links.gs and a new version).' : e.message;
+  }
+}
+async function addLinks() {
+  const text = $('lText').value.trim();
+  if (!text) { $('lMsg').textContent = 'Paste at least one link.'; return; }
+  $('lAdd').disabled = true; $('lMsg').textContent = 'Adding…';
+  try {
+    const d = await api('links_add', { links: text });
+    const bits = [];
+    if (d.added.length) bits.push(d.added.length + ' queued');
+    if (d.rejected.length) bits.push(d.rejected.length + ' cannot be read (see the table)');
+    if (d.duplicates.length) bits.push(d.duplicates.length + ' already listed');
+    $('lMsg').textContent = bits.join(' · ') || 'Nothing added.';
+    $('lText').value = '';
+    loadLinks();
+  } catch (e) { $('lMsg').textContent = e.message; }
+  finally { $('lAdd').disabled = false; }
+}
+$('btnLinks').onclick = () => showLinks(true);
+$('lAdd').onclick = addLinks;
+document.querySelectorAll('[data-lclose]').forEach(b => b.onclick = () => showLinks(false));
+$('lText').addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') addLinks(); });
+
 setInterval(() => { if (cfg.key && $('drawer').classList.contains('translate-x-full') && $('modal').classList.contains('hidden') && $('connect').classList.contains('hidden')) refresh(true); }, 180000);
+if (cfg.key) loadLinks();
 boot();
 </script>
 </body>

@@ -66,6 +66,7 @@ class TikTokLinks(Scraper):
     def __init__(self, cfg: dict, out_dir: str, links: List[str]):
         super().__init__(cfg, out_dir, tiktok_session=True)
         self.links = links
+        self.link_map: Dict[str, str] = {}   # the link as pasted -> the post URL it became (for the Links tab)
 
     def plan(self, brands=None, platform_filter=None, brand_filter=None) -> List[Tuple[str, str, str]]:
         return [("TikTok link", "TikTok", u) for u in self.links]
@@ -89,11 +90,13 @@ class TikTokLinks(Scraper):
                     url = clean_post_url(link) if "/video/" in link or "/photo/" in link else link
                     if canonical_url(url) in self.known_urls:
                         posts.append(Post(brand="", platform="TikTok", url=url, known=True))
+                        self.link_map[link] = url
                         continue
                     if i:
                         _pace(self.run_cfg.get("pause_between_posts"), "the next TikTok link")
                     p = self._scrape_post(ctx, "tiktok_link", "TikTok", link, handle="")
                     posts.append(p)
+                    self.link_map[link] = p.url
                 ctx.close()
             finally:
                 browser.close()

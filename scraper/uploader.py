@@ -212,6 +212,21 @@ class AppsScriptClient:
                 break
         return total
 
+    # --- Links tab (apps-script/Links.gs) -------------------------------------------------------
+    def links_pending(self) -> dict:
+        """Claim up to ten waiting TikTok links. {"links": [...], "released": n}"""
+        return self._post({"action": "links_pending"}, retries=3)
+
+    def links_update(self, updates: List[Dict]) -> dict:
+        """Write Status / Run / Result for the named links. A failure here must never fail a run."""
+        if not updates:
+            return {"ok": True, "updated": 0}
+        try:
+            return self._post({"action": "links_update", "updates": updates}, retries=2)
+        except Exception as e:
+            log.warning("could not write the Links tab (%s); the findings themselves are unaffected", e)
+            return {"ok": False, "error": str(e)}
+
     def insert(self, records: List[Dict], batch_size: int = 10) -> dict:
         """Insert in small batches so one oversized payload cannot sink the whole run."""
         totals = {"inserted": 0, "duplicates": [], "errors": [], "ids": []}
