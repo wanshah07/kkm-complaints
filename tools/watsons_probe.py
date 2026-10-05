@@ -52,6 +52,14 @@ def probe(browser, url):
         text = page.inner_text("body")[:200000] if page.query_selector("body") else ""
         out["rm_prices"] = len(RM.findall(text))
         out["excerpt"] = re.sub(r"\s+", " ", text)[:700]
+        if "/p/BP_" in url:
+            i = text.find("HOME /")
+            body = text[i:] if i >= 0 else text
+            print("  PRODUCT TEXT total", len(text), "from HOME:", len(body))
+            lines = [l.strip() for l in body.split("\n") if l.strip()]
+            print("  PRODUCT LINES", len(lines))
+            for n, l in enumerate(lines[:120]):
+                print(f"   {n:3d} {l[:160]}")
         m = re.search(r"/all-brands/list/(\d+)/", url)
         if m:
             test = ("https://api.watsons.com.my/api/v2/wtcmy/products/search?fields=FULL&query=%3AbestSeller%3AproductBrandCode%3A"
