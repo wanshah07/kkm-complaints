@@ -125,7 +125,7 @@ class AppsScriptClient:
         _check_url_shape(self.url)
         self.session = requests.Session()
 
-    def _post(self, payload: dict, retries: int = 4) -> dict:
+    def _post(self, payload: dict, retries: int = 6) -> dict:
         payload = dict(payload, token=self.token)
         delay = 2
         last_err: Optional[Exception] = None
@@ -203,8 +203,11 @@ class AppsScriptClient:
         total = 0
         for i in range(0, len(entries), batch_size):
             try:
+                # Apps Script answered with a Google error page (404 / HTML) for 1-2 minutes at a time on
+                # 5 Oct 2026, twice in one run; two attempts a few seconds apart lost two targets' ledger
+                # entries and those posts were paid for again. Wait it out: 2+4+8+16+32 seconds.
                 data = self._post({"action": "mark_seen", "entries": entries[i:i + batch_size]},
-                                  retries=2)
+                                  retries=6)
                 total += data.get("added", 0)
             except Exception as e:
                 # The run's real work is already done and pushed; a ledger failure must not fail it.
@@ -231,7 +234,7 @@ class AppsScriptClient:
         if not updates:
             return {"ok": True, "updated": 0}
         try:
-            return self._post({"action": "links_update", "updates": updates}, retries=2)
+            return self._post({"action": "links_update", "updates": updates}, retries=5)
         except Exception as e:
             log.warning("could not write the Links tab (%s); the findings themselves are unaffected", e)
             return {"ok": False, "error": str(e)}
