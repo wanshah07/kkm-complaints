@@ -228,7 +228,43 @@ def tiktok_search_structure(pw, query, owner, state, open_n=8):
     browser.close()
 
 
+def shopee_structure(pw, url, state):
+    """'shopee:<url>': structure only (final path without its query, title, counts, meta). No snippet, no screenshot:
+    a logged-in Shopee page carries the account's own name."""
+    from urllib.parse import urlsplit
+    browser = pw.chromium.launch(headless=True)
+    ctx = browser.new_context(storage_state=state, locale="ms-MY", timezone_id="Asia/Kuala_Lumpur",
+                              viewport={"width": 1280, "height": 1600},
+                              user_agent=("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                                          "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"))
+    page = ctx.new_page()
+    resp = page.goto(url, wait_until="domcontentloaded", timeout=45000)
+    page.wait_for_timeout(9000)
+    fin = urlsplit(page.url)
+    body = page.inner_text("body") if page.query_selector("body") else ""
+    rec = {"asked": url, "http": resp.status if resp else None, "final_path": fin.path,
+           "verify_page": bool(re.search(r"verify|captcha", fin.path, re.I)),
+           "title": page.title()[:80], "body_chars": len(body),
+           "item_links": len(page.query_selector_all("a[href*='-i.']")),
+           "rm_prices": len(re.findall(r"RM\s?\d", body)),
+           "says_try_again": "try again" in body.lower(),
+           "meta_og_title": (page.locator("meta[property='og:title']").first.get_attribute("content", timeout=800) if page.locator("meta[property='og:title']").count() else None),
+           "meta_og_desc_len": len((page.locator("meta[property='og:description']").first.get_attribute("content", timeout=800) or "")) if page.locator("meta[property='og:description']").count() else 0}
+    print("SHOPEE", json.dumps(rec, indent=1, ensure_ascii=False))
+    browser.close()
+
+
 def main(argv):
+    sh = [a for a in argv if a.startswith("shopee:")]
+    if sh:
+        state = session_path()
+        print("session:", "recorded session loaded" if state else "anonymous")
+        with sync_playwright() as pw:
+            for a in sh:
+                shopee_structure(pw, a[len("shopee:"):], state)
+        if state:
+            os.unlink(state)
+        return 0
     ts = [a for a in argv if a.startswith("tiktok-search:")]
     if ts:
         state = session_path()
