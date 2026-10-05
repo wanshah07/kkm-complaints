@@ -12,12 +12,21 @@ Output : a gzip+base64 string for the GitHub secret PW_STORAGE_STATE_SHOP_B64, c
 It also says, per site, whether the cookie that proves a logged-in session is present, so a logged-out
 export is caught here and not after a runner has spent an attempt on it.
 """
-import base64, gzip, json, subprocess, sys
+import base64, gzip, json, re, subprocess, sys
 
 KEEP = ("shopee.", "tiktok.")
+# Least privilege: a probe that reads PUBLIC listings does not need a shop owner's or an advertiser's
+# login. These cookies belong to TikTok Shop seller / TikTok Ads sessions and the device-bound
+# "ticket guard" (its client_data cookie carries a PRIVATE KEY). They are dropped before anything
+# is stored. Only the ordinary consumer login travels.
+DROP = re.compile(r"(seller|_ads$|ticket_guard|^SHOP_ID$)", re.I)
 PROOF = {"shopee": ("SPC_EC", "SPC_ST"), "tiktok": ("sessionid", "sid_tt", "sessionid_ss")}
+LOGGED_OUT_VALUES = {"", "-", "deleted"}      # Shopee writes SPC_EC="-" for a logged-out browser
 SAMESITE = {"no_restriction": "None", "none": "None", "lax": "Lax", "strict": "Strict",
             "unspecified": "Lax", "": "Lax"}
+
+
+DROPPED = []
 
 
 def convert(exports):
@@ -26,6 +35,9 @@ def convert(exports):
         for c in items:
             dom = (c.get("domain") or "").lower()
             if not any(k in dom for k in KEEP) or not c.get("name"):
+                continue
+            if DROP.search(c["name"]):
+                DROPPED.append(c["name"])
                 continue
             key = (c["name"], dom, c.get("path") or "/")
             if key in seen:
@@ -45,9 +57,10 @@ def convert(exports):
 def proof(state):
     out = {}
     for site, names in PROOF.items():
-        have = {c["name"] for c in state["cookies"] if site in (c["domain"] or "").lower()}
-        out[site] = {"cookies": sum(1 for c in state["cookies"] if site in (c["domain"] or "").lower()),
-                     "login_cookie": bool(have & set(names))}
+        mine = [c for c in state["cookies"] if site in (c["domain"] or "").lower()]
+        have = {c["name"] for c in mine if c["value"] not in LOGGED_OUT_VALUES}
+        out[site] = {"cookies": len(mine), "login_cookie": bool(have & set(names)),
+                     "logged_out_marker": [c["name"] for c in mine if c["name"] in names and c["value"] in LOGGED_OUT_VALUES]}
     return out
 
 
@@ -67,7 +80,10 @@ def main(paths):
     state = convert(exports)
     for site, r in proof(state).items():
         flag = "logged in" if r["login_cookie"] else "NO LOGIN COOKIE - this export looks logged out"
+        if r["logged_out_marker"]:
+            flag += f"  (WARNING: {', '.join(r['logged_out_marker'])} holds the logged-out marker)"
         print(f"{site:7s} {r['cookies']:3d} cookies  {flag}")
+    print(f"dropped {len(DROPPED)} seller / ads / ticket-guard cookies: {', '.join(sorted(set(DROPPED)))}" if DROPPED else "dropped 0 cookies")
     b64 = encode(state)
     print(f"secret length {len(b64)} characters (GitHub's limit is 48000)")
     if len(b64) > 48000:
