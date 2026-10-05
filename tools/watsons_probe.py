@@ -58,8 +58,36 @@ def probe(browser, url):
             print("  PRODUCT TEXT total", len(text), "from HOME:", len(body))
             lines = [l.strip() for l in body.split("\n") if l.strip()]
             print("  PRODUCT LINES", len(lines))
-            for n, l in enumerate(lines[:120]):
-                print(f"   {n:3d} {l[:160]}")
+            for n, l in enumerate(lines):
+                if len(l) > 70:
+                    print(f"   LONG {n:3d} {l[:400]}")
+            code = re.search(r"/p/BP_(\d+)", url).group(1)
+
+            def longstrings(o, acc, path=""):
+                if isinstance(o, str):
+                    if len(o) > 120:
+                        acc.append((path, o))
+                elif isinstance(o, dict):
+                    for k, v in o.items():
+                        longstrings(v, acc, path + "/" + k)
+                elif isinstance(o, list):
+                    for i, v in enumerate(o):
+                        longstrings(v, acc, f"{path}[{i}]")
+            for label, api in (("PRODUCT FULL", f"https://api.watsons.com.my/api/v2/wtcmy/products/{code}?fields=FULL&lang=en&curr=MYR"),
+                               ("CMS PRODUCTPAGE", f"https://api.watsons.com.my/api/v2/wtcmy/users/anonymous/cms/pages?pageType=ProductPage&code=BP_{code}&lang=en&curr=MYR")):
+                try:
+                    txt = page.evaluate("async (u) => { const r = await fetch(u, {credentials: 'include'}); return r.status + '|' + await r.text(); }", api)
+                    st, body = txt.split("|", 1)
+                    print(f"  {label} status={st} len={len(body)}")
+                    acc = []
+                    try:
+                        longstrings(json.loads(body), acc)
+                    except Exception:
+                        print("   not json:", body[:200])
+                    for pth, v in acc[:14]:
+                        print(f"   {label} {pth[:90]} :: {re.sub(chr(10), ' ', v)[:300]}")
+                except Exception as e:
+                    print(f"  {label} failed {type(e).__name__} {str(e)[:150]}")
         m = re.search(r"/all-brands/list/(\d+)/", url)
         if m:
             test = ("https://api.watsons.com.my/api/v2/wtcmy/products/search?fields=FULL&query=%3AbestSeller%3AproductBrandCode%3A"
