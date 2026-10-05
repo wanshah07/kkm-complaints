@@ -25,7 +25,7 @@ RM = re.compile(r"RM\s?\d")
 
 def probe(browser, url):
     out = {"url": url, "status": None, "title": "", "outcome": "", "detail": "", "rm_prices": 0,
-           "json_calls": []}
+           "json_calls": [], "api": [], "links": [], "excerpt": ""}
     ctx = browser.new_context(locale="en-MY", timezone_id="Asia/Kuala_Lumpur",
                               viewport={"width": 1366, "height": 900})
     page = ctx.new_page()
@@ -35,6 +35,8 @@ def probe(browser, url):
             ct = r.headers.get("content-type", "")
             if "json" in ct and "watsons" in r.url:
                 out["json_calls"].append(f"{r.status} {r.url[:150]}")
+                if "/products/search" in r.url or re.search(r"/products/\d+\?", r.url):
+                    out["api"].append((r.url, r.text()[:60000]))
         except Exception:
             pass
     page.on("response", on_resp)
@@ -49,6 +51,9 @@ def probe(browser, url):
         out["title"] = (page.title() or "")[:100]
         text = page.inner_text("body")[:200000] if page.query_selector("body") else ""
         out["rm_prices"] = len(RM.findall(text))
+        out["excerpt"] = re.sub(r"\s+", " ", text)[:700]
+        hrefs = page.eval_on_selector_all('a[href*="/p/BP_"]', "els => els.map(e => e.href)")
+        out["links"] = list(dict.fromkeys(hrefs))
         if (out["status"] and out["status"] >= 400) or WALL.search(out["title"] + " " + text[:600]):
             out["outcome"], out["detail"] = "blocked", f"HTTP {out['status']} {text[:140]!r}"
         elif out["rm_prices"] >= 3:
@@ -77,6 +82,18 @@ def main():
             print("  " + r["detail"])
         for j in r["json_calls"][:12]:
             print("  json:", j)
+        print(f"  product links on page: {len(r['links'])}", r["links"][:6])
+        print("  excerpt:", r["excerpt"])
+        for u, body in r["api"][:3]:
+            print("  API", u[:500])
+            try:
+                d = json.loads(body)
+                print("   keys:", list(d)[:12], "pagination:", d.get("pagination"))
+                pr = (d.get("products") or [d])[0]
+                print("   product keys:", list(pr)[:40])
+                print("   sample:", json.dumps(pr)[:900])
+            except Exception as e:
+                print("   (not parsed)", type(e).__name__, body[:300])
     print("\nSUMMARY", json.dumps({r["url"]: r["outcome"] for r in results}))
 
 
