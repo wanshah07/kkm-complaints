@@ -12,7 +12,10 @@ Measured from a GitHub runner on 4 Oct 2026 (tools/web_probe.py, run 37196229407
   Magento GraphQL                          Guardian                   200 JSON (the catalogsearch HTML page is an empty JS shell)
   OpenCart HTML search                     Health Lane                200 HTML, product links in the page
   Brand homepages                          Eucerin, Cetaphil, SAFI, SimplySiti, Nuuha   200 HTML
-  Watsons                                  Akamai "Access Denied" on plain HTTP (403)
+  Watsons                                  Akamai "Access Denied" on plain HTTP AND on headless Chromium (403);
+                                           a HEADED Chromium under Xvfb gets 200 and the page's own JSON API
+                                           answers (tools/watsons_probe.py, 5 Oct 2026, runs 37249483780 and
+                                           37251088889..): see _WatsonsBrowser below
   Shopee                                   login wall, not attempted (Wan: after the sweep, one login attempt)
 
 A wall is a gap, never a pass: a host that answers 403/429/captcha is recorded as an error on that
@@ -25,6 +28,7 @@ import json
 import logging
 import os
 import re
+import subprocess
 import time
 import unicodedata
 from typing import Callable, Dict, Iterator, List, Optional, Tuple
@@ -141,6 +145,140 @@ def load_web_rows(web_rows: List[dict], sheet_id: str = "") -> Tuple[List[dict],
     return rows, "sheet-csv"
 
 
+# --- Watsons: a real browser, because Akamai refuses everything else ------------------------------
+
+WATSONS_HOST = "www.watsons.com.my"
+WATSONS_BASE = "https://www.watsons.com.my"
+WATSONS_API = "https://api.watsons.com.my/api/v2/wtcmy"
+_WATSONS_FETCH_JS = ("async (u) => { const r = await fetch(u, {credentials: 'include'}); "
+                     "return {status: r.status, text: await r.text()}; }")
+
+
+class _WatsonsBrowser:
+    """
+    Stock Playwright Chromium, HEADED, on a virtual display. Measured 5 Oct 2026 on a GitHub runner:
+    plain HTTP and headless Chromium both get Akamai "Access Denied" (403) on every Watsons page,
+    headed Chromium gets 200 on the homepage, a brand list and a product page. No stealth plugin, no
+    spoofed header or fingerprint: nothing here pretends to be anything but the browser it is. If
+    Akamai starts refusing this too, that is an answer, not something to engineer around.
+
+    The page's own JSON API (api.watsons.com.my) is read from inside the loaded page with fetch(), so
+    it travels on the same session and cookies the page itself uses:
+      products/search?fields=FULL&query=:bestSeller:productBrandCode:<code>&pageSize=100   brand list
+      products/<code>?fields=FULL                                                          one product
+    The brand list carries names and ingredients only; the claim copy (`description`, directions,
+    keywords) is on the single-product call.
+    """
+
+    def __init__(self, delay: float = 1.2):
+        self.delay = delay
+        self._pw = self._browser = self._ctx = self._page = self._xvfb = None
+        self._last_at = 0.0
+
+    def _display(self) -> dict:
+        env = dict(os.environ)
+        if env.get("DISPLAY"):
+            return env
+        self._xvfb = subprocess.Popen(["Xvfb", ":99", "-screen", "0", "1366x900x24", "-nolisten", "tcp"],
+                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for _ in range(50):
+            if os.path.exists("/tmp/.X11-unix/X99"):
+                break
+            time.sleep(0.1)
+        else:
+            raise RuntimeError("Xvfb did not start (no virtual display for a headed browser)")
+        env["DISPLAY"] = ":99"
+        return env
+
+    def start(self):
+        from playwright.sync_api import sync_playwright   # only a Watsons run needs it
+        env = self._display()
+        self._pw = sync_playwright().start()
+        self._browser = self._pw.chromium.launch(headless=False, env=env)
+        self._ctx = self._browser.new_context(locale="en-MY", timezone_id="Asia/Kuala_Lumpur",
+                                              viewport={"width": 1366, "height": 900})
+        self._page = self._ctx.new_page()
+        self.goto(WATSONS_BASE + "/")
+
+    def goto(self, url: str):
+        resp = self._page.goto(url, wait_until="domcontentloaded", timeout=45000)
+        try:
+            self._page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
+        status = resp.status if resp else None
+        title = self._page.title() or ""
+        if (status and status >= 400) or WALL_WORDS.search(title):
+            raise RuntimeError(f"HTTP {status} from {WATSONS_HOST} (headed browser; {title[:40]!r})")
+
+    def api(self, path_and_query: str):
+        wait = self.delay - (time.time() - self._last_at)
+        if wait > 0:
+            time.sleep(wait)
+        try:
+            res = self._page.evaluate(_WATSONS_FETCH_JS, WATSONS_API + path_and_query)
+        finally:
+            self._last_at = time.time()
+        if res["status"] in WALL_STATUS:
+            raise RuntimeError(f"HTTP {res['status']} from api.watsons.com.my (headed browser)")
+        if res["status"] != 200:
+            raise RuntimeError(f"HTTP {res['status']} from api.watsons.com.my")
+        return json.loads(res["text"])
+
+    def brand_products(self, list_url: str, brand_code: str) -> List[dict]:
+        self.goto(list_url)        # the way a visitor gets there; also refreshes the session
+        out: List[dict] = []
+        for page_no in range(3):
+            d = self.api("/products/search?fields=FULL&query=" + quote(f":bestSeller:productBrandCode:{brand_code}")
+                         + f"&pageSize=100&currentPage={page_no}&sort=bestSeller&lang=en&curr=MYR")
+            out.extend(d.get("products") or [])
+            if page_no + 1 >= int((d.get("pagination") or {}).get("totalPages") or 1):
+                break
+        return out
+
+    def product(self, code: str) -> dict:
+        return self.api(f"/products/{code}?fields=FULL&lang=en&curr=MYR")
+
+    def close(self):
+        for obj, fn in ((self._ctx, "close"), (self._browser, "close"), (self._pw, "stop"), (self._xvfb, "terminate")):
+            try:
+                if obj:
+                    getattr(obj, fn)()
+            except Exception:
+                pass
+        self._pw = self._browser = self._ctx = self._page = self._xvfb = None
+
+
+def watsons_text(p: dict) -> str:
+    """Listing copy for the reviewer, from one `products/<code>?fields=FULL` answer: the name, the
+    description, the directions and other feature rows, the keyword line, the ingredients. Prices,
+    promotions, delivery terms and customer reviews are not the brand's claims and stay out."""
+    name = p.get("elabProductName") or p.get("name") or ""
+    brand = ((p.get("masterBrand") or {}).get("name")) or ""
+    parts = [f"{brand} {name}".strip()]
+    desc = html_to_text(p.get("description") or "")
+    if desc:
+        parts.append(desc)
+    ingredients = (p.get("elabIngredients") or "").strip()
+    for c in p.get("classifications") or []:
+        for f in c.get("features") or []:
+            code = (f.get("code") or "").lower()
+            vals = " ".join(html_to_text(v.get("value") or "") for v in f.get("featureValues") or []).strip()
+            if not vals:
+                continue
+            if "ingredient" in code:
+                ingredients = ingredients or vals
+            else:
+                label = (f.get("name") or code.rsplit(".", 1)[-1]).strip()
+                parts.append(f"{label}: {vals}")
+    kw = (p.get("shortDescription") or "").strip()
+    if "," in kw:
+        parts.append("Keywords: " + kw)
+    if ingredients:
+        parts.append("Ingredients: " + ingredients[:600])
+    return "\n".join(x for x in parts if x)
+
+
 # --- the collector --------------------------------------------------------------------------------
 
 class WebCollector:
@@ -154,6 +292,7 @@ class WebCollector:
         self.walled: Dict[str, str] = {}       # host -> why; every later row on it is skipped
         self.skipped_rows: List[dict] = []
         self._last_at = 0.0
+        self._wb_browser: Optional[_WatsonsBrowser] = None
         self.session = requests.Session()
         self.session.headers.update(HEADERS)
 
@@ -323,8 +462,61 @@ class WebCollector:
             if len(text) >= 80:
                 yield url, row["name"], row["name"], (title + "\n" + text) if title else text
 
+    def _watsons(self, row, term):
+        """Watsons MY: a brand list page (every product of the brand code) or one product page."""
+        feed = row.get("product_feed") or row.get("website_feed") or ""
+        if WATSONS_HOST in self.walled:
+            raise RuntimeError(self.walled[WATSONS_HOST])
+        try:
+            if self._wb_browser is None:
+                wb = _WatsonsBrowser(self.delay)
+                try:
+                    wb.start()
+                except RuntimeError:
+                    wb.close()
+                    raise
+                except Exception as e:
+                    wb.close()
+                    raise RuntimeError(f"browser could not start: {type(e).__name__}: {str(e)[:120]}")
+                self._wb_browser = wb
+            b = self._wb_browser
+            m = re.search(r"/all-brands/(?:list|b)/(\d+)/", feed)
+            pm = re.search(r"/p/BP_(\d+)", feed)
+            if m:
+                found = [(str(x.get("code", "")).replace("BP_", ""), urljoin(WATSONS_BASE, x.get("url", "")))
+                         for x in b.brand_products(feed, m.group(1)) if x.get("code")]
+            elif pm:
+                found = [(pm.group(1), _clean_url(feed))]
+            else:
+                raise RuntimeError("unrecognised Watsons feed URL")
+            kept = 0
+            for code, url in found:
+                if kept >= self.max_products:
+                    return
+                if canonical_url(url) in self.known_urls:
+                    continue
+                full = b.product(code)
+                kept += 1
+                yield (url, full.get("elabProductName") or full.get("name") or "",
+                       ((full.get("masterBrand") or {}).get("name")) or "", watsons_text(full)[:MAX_TEXT])
+        except RuntimeError as e:
+            if re.search(r"HTTP [45]\d\d|could not start|did not start", str(e)):
+                self.walled[WATSONS_HOST] = str(e)
+            raise
+
+    def close(self):
+        if self._wb_browser is not None:
+            self._wb_browser.close()
+            self._wb_browser = None
+
     # -- the run ---------------------------------------------------------------------------------
     def iter_run(self, rows: List[dict], should_stop: Optional[Callable[[], bool]] = None) -> Iterator[TargetResult]:
+        try:
+            yield from self._iter_rows(rows, should_stop)
+        finally:
+            self.close()        # the Watsons browser, if one was started
+
+    def _iter_rows(self, rows: List[dict], should_stop: Optional[Callable[[], bool]] = None) -> Iterator[TargetResult]:
         self.should_stop = should_stop
         for row in rows:
             kind, term = self.classify(row)
@@ -337,8 +529,6 @@ class WebCollector:
                 log.warning("run budget reached; stopping before %s on %s", name, channel)
                 return
             host = urlsplit(feed).netloc
-            if kind == "watsons":
-                kind = "site"          # try the brand page; Akamai will say if it is walled
             if host in self.walled:
                 yield TargetResult(brand=name, platform=channel, profile_url=feed,
                                    error=f"skipped: {self.walled[host]} earlier this run")

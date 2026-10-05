@@ -116,7 +116,37 @@ def probe(browser, url):
     return out
 
 
+def collect(spec):
+    """Run the REAL collector class (scraper/webfeeds.py) against one brand list, no sheet, no review:
+    start the browser (its own Xvfb when there is no DISPLAY), list the brand, read two products."""
+    import os
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scraper"))
+    import webfeeds as wf
+    url = spec[len("collect:"):]
+    code = re.search(r"/all-brands/(?:list|b)/(\d+)/", url).group(1)
+    t0 = time.time()
+    b = wf._WatsonsBrowser(1.2)
+    try:
+        b.start()
+        print(f"[collector] started in {time.time()-t0:.1f}s, DISPLAY={os.environ.get('DISPLAY')!r}")
+        prods = b.brand_products(url, code)
+        print(f"[collector] brand {code}: {len(prods)} products listed in {time.time()-t0:.1f}s")
+        for x in prods[:2]:
+            c = str(x["code"]).replace("BP_", "")
+            full = b.product(c)
+            print(f"[collector] product {c} {x.get('url')}")
+            print("   " + wf.watsons_text(full).replace(chr(10), chr(10) + "   ")[:1500])
+        print(f"[collector] done in {time.time()-t0:.1f}s")
+    finally:
+        b.close()
+
+
 def main():
+    specs = [a for a in sys.argv[1:] if a.startswith("collect:")]
+    if specs:
+        for sp in specs:
+            collect(sp)
+        return
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     headed = "--headed" in sys.argv
     urls = args or SAMPLE
