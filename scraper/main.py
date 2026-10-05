@@ -39,6 +39,7 @@ except ImportError:
 from evaluator import ReviewInput, review
 from scraper import Scraper, canonical_url, date_allowed
 from webfeeds import WEB_TYPE_LABEL, WebCollector, load_web_rows
+from tiktok_links import TikTokLinks, parse_links
 from uploader import AppsScriptClient, DriveUploader, attach_screenshot
 
 def _myt():
@@ -233,6 +234,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                          "on every run and are mostly rows that cannot produce one (private, "
                          "wrong handle, nothing in the date window). Do NOT pass this on a run "
                          "after handles have been added: a new handle is unjudged too")
+    ap.add_argument("--tiktok-links", action="store_true",
+                    help="review the TikTok videos named in the TIKTOK_LINKS environment variable (one link per "
+                         "line or space separated). A TikTok account's post list is not readable by a runner, "
+                         "so the posts are named by link; each is read, reviewed and filed like any other.")
     ap.add_argument("--review-only", metavar="TEXTFILE", help="skip scraping; review this caption file")
     ap.add_argument("--url", default="manual://review", help="URL for --review-only")
     args = ap.parse_args(argv)
@@ -315,6 +320,20 @@ def main(argv: Optional[List[str]] = None) -> int:
         log.info("%d website target row(s) set aside; the social sweep walks %d", len(web_rows), len(brands))
         report["web_rows_set_aside"] = len(web_rows)
     web_mode = args.only_type == "web"
+    tt_mode = bool(args.tiktok_links)
+    tt_links: List[str] = []
+    if tt_mode:
+        tt_links, tt_bad = parse_links(os.environ.get("TIKTOK_LINKS", ""))
+        for text, why in tt_bad:
+            log.warning("TikTok link ignored (%s): %s", why, text)
+            report["errors"].append(f"TikTok link ignored ({why}): {text}")
+        if not tt_links:
+            log.error("--tiktok-links needs at least one TikTok video link in TIKTOK_LINKS")
+            report["errors"].append("no usable TikTok link")
+            _write_report(run_dir, report)
+            return 1
+        log.info("TikTok link review: %d link(s)", len(tt_links))
+        brands = []
     web_source = ""
     if web_mode:
         # Websites are a different collector: no browser, no handle, a product page is the "post".
@@ -365,7 +384,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Streamed, one target at a time, and each is reviewed and filed before the next is
     # scraped. The alternative cost a three-hour run: everything was scraped first, the job
     # timeout cut in with one target left, and not a single post had been reviewed or filed.
-    if known and not web_mode:
+    if known and not web_mode and not tt_mode:
         total_rows = len(brands)
         brands_before = brands
         brands, fresh = sweep_order(brands, known, offset=args.offset,
@@ -390,7 +409,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         report["offset"] = args.offset
         report["skip_unjudged"] = bool(args.skip_unjudged)
 
-    if web_mode:
+    if tt_mode:
+        scraper = TikTokLinks(cfg, os.path.join(run_dir, "screenshots"), tt_links)
+        scraper.known_urls = known
+        planned = scraper.plan(brands)
+    elif web_mode:
         scraper = _wc
         scraper.known_urls = known
         planned = scraper.plan(brands)
@@ -405,7 +428,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                  len(planned), budget_min,
                  datetime.fromtimestamp(deadline, MYT).strftime("%H:%M"))
     _stop = (lambda: deadline is not None and time.time() >= deadline)
-    if web_mode:
+    if tt_mode:
+        results = scraper.iter_run(None, should_stop=_stop)
+    elif web_mode:
         results = scraper.iter_run(brands, should_stop=_stop)
     else:
         results = scraper.iter_run(brands, platform_filter=args.platform, brand_filter=args.brand,
@@ -414,6 +439,13 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     hints = {b["name"]: b.get("product_hints", []) for b in brands}
     types = {b["name"]: (WEB_TYPE_LABEL if web_mode else b.get("type", "")) for b in brands}
+    if tt_mode:
+        class _AllKOL(dict):
+            # A linked video is somebody's post, not a brand's own page: the person-promoting test applies
+            # (endorsement, partnership, product shown). The account is only known once the page is read.
+            def get(self, k, d=None):
+                return "KOL"
+        types = _AllKOL()
     spend = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0,
              "cache_creation_input_tokens": 0, "usd": 0.0, "models": {}}
     lookback = int(run_cfg.get("lookback_days", 0) or 0)
@@ -619,7 +651,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                          "rows_skipped": len(report.get("web_rows_skipped", []))}
         if scraper.walled:
             log.warning("walled website host(s): %s", "; ".join(f"{h} ({w})" for h, w in scraper.walled.items()))
-    missed = [{"brand": b, "platform": p} for b, p, _ in planned if (b, p) not in reached]
+    missed = [] if tt_mode else [{"brand": b, "platform": p} for b, p, _ in planned if (b, p) not in reached]
     if missed:
         report["not_reached"] = missed
         log.warning("%d of %d target(s) not reached this run; the next run picks them up",

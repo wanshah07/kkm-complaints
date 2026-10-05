@@ -60,6 +60,7 @@ class Post:
     not_owned: bool = False  # confirmed to be a different account's post; never sent for review
     blocked: bool = False    # the platform served a login wall, not the post; never sent for review
     known: bool = False      # already in the sheet or the Reviewed ledger: never opened, main.py skips it
+    owner: Optional[str] = None   # the account the post turned out to belong to (read off the page), when known
 
 
 @dataclass
@@ -154,9 +155,28 @@ _NOT_A_HANDLE = {"explore", "accounts", "reels", "p", "login", "directory", "pag
                  "profile.php", "people", "search", "home.php", "watch"}
 
 
+_TT_PATH_OWNER = re.compile(r"^/@([A-Za-z0-9_.]+)/(?:video|photo)/\d+", re.I)
+
+
+def _tiktok_date(url: str) -> Optional[str]:
+    """A TikTok video id carries its own creation time: the top 32 bits are unix seconds. A video page has
+    no <time> element, so this is the date, and it needs no selector that TikTok can rename."""
+    m = re.search(r"/(?:video|photo)/(\d{15,20})", url or "")
+    if not m:
+        return None
+    try:
+        return datetime.fromtimestamp(int(m.group(1)) >> 32, timezone.utc).date().isoformat()
+    except (ValueError, OverflowError, OSError):
+        return None
+
+
 def _owner_from_url(url: str, platform: str) -> Optional[str]:
     """Instagram serves a post under its own account's path — /<handle>/p/<id>/ — whenever the link
     came off a grid, so a link to another account's post names that account."""
+    if platform == "TikTok":
+        m = _TT_PATH_OWNER.match(urlsplit(url).path)
+        # A numeric segment is the account's id, not its handle: TikTok redirects it, or not.
+        return m.group(1).lower() if m and not m.group(1).isdigit() else None
     if platform != "Instagram":
         return None
     m = _IG_PATH_OWNER.match(urlsplit(url).path)
@@ -176,9 +196,11 @@ def _extract_owner(page: Page, platform: str) -> Tuple[Optional[str], bool]:
     (@eucerin_my displays as "Eucerin Malaysia"), so it comes back with is_handle False and must
     never be used to reject a post.
     """
-    if platform not in ("Instagram", "Threads"):
+    if platform not in ("Instagram", "Threads", "TikTok"):
         return None, False
-    for prop in ("og:title", "twitter:title", "og:description"):
+    # TikTok's og:* carry the display name and the caption; the account's @handle sits in the plain
+    # description: 'TikTok video from NAME (@handle): "caption"'.
+    for prop in ("og:title", "twitter:title", "og:description") + (("description",) if platform == "TikTok" else ()):
         v = _meta(page, prop) or ""
         m = _OWNER_AT.search(v)
         if m:
@@ -274,6 +296,8 @@ _WALL_MARKERS = (
     "log in or sign up to view",
     "see more on facebook",
     "log in to continue",
+    "log in to tiktok",
+    "verify to continue",
 )
 
 # A gate page carries almost nothing. A profile or post page carries captions, comments and
@@ -296,6 +320,9 @@ _POST_ELEMENT_SELECTORS = {
     "Instagram": ("article", "main article", "[role='dialog'] article"),
     "Facebook": ("[role='article']", "div[data-ad-preview='message']"),
     "Threads": ("div[data-pressable-container='true']", "[role='article']", "article"),
+    # Measured on a runner, 5 Oct 2026: a video page has #main-content-video_detail, 1016x1600 at x=264,
+    # which leaves out the left rail (the logged-in account's own navigation).
+    "TikTok": ("#main-content-video_detail", "[class*='DivVideoDetailContainer']"),
 }
 # Wide: the page's main column. Not the post, but it excludes the site header, the sidebar and
 # the suggested rail, so it beats the viewport when nothing narrower can be identified.
@@ -303,6 +330,7 @@ _CONTAINER_FALLBACKS = {
     "Instagram": ("main[role='main']", "main"),
     "Facebook": ("[role='main']",),
     "Threads": ("[role='main']",),
+    "TikTok": ("main",),
 }
 # The post's own id, read off the URL we asked for. A Threads page renders the whole thread as
 # pressable containers and .first is whichever rendered first, not necessarily the post we came
@@ -310,6 +338,7 @@ _CONTAINER_FALLBACKS = {
 _POST_ID_PATTERNS = (
     re.compile(r"/post/([A-Za-z0-9_-]{5,})"),              # Threads
     re.compile(r"/(?:p|reel|reels|tv)/([A-Za-z0-9_-]{5,})"),  # Instagram
+    re.compile(r"/(?:video|photo)/(\d{10,})"),              # TikTok
     re.compile(r"/posts/(pfbid[A-Za-z0-9]+)"),             # Facebook
     re.compile(r"[?&]story_fbid=(\d+)"),                   # Facebook, older permalinks
 )
@@ -426,7 +455,8 @@ def _save_screenshot(page: Page, post: "Post", brand: str, platform: str, url: s
 
 def _has_post_content(page: Page) -> bool:
     try:
-        return page.locator("article, [role='article'], div[data-pressable-container]").count() > 0
+        return page.locator("article, [role='article'], div[data-pressable-container], "
+                            "[data-e2e='video-desc'], #main-content-video_detail").count() > 0
     except Exception:
         return False
 
@@ -475,6 +505,10 @@ def _clean_caption(s: str) -> str:
     m = re.match(r"^[^:]{0,80}\son\s(?:Instagram|Threads):\s*[\"“](.*)[\"”]\s*$", s, re.S)
     if m:
         return m.group(1).strip()
+    # TikTok: '74 Likes,20 Comments.TikTok video from NAME (@handle): "caption".sound name'
+    m = re.match(r"^(?:[\d,.KM\s]*Likes?,[\d,.KM\s]*Comments?\.)?TikTok video from [^:]{0,160}:\s*[\"“](.*)[\"”]\.[^\"”]*$", s, re.S)
+    if m:
+        return m.group(1).strip()
     return s
 
 
@@ -489,6 +523,7 @@ def _extract_text(page: Page, platform: str) -> str:
         "Instagram": ["article h1", "article div[role='button'] span", "article ul li span", "h1"],
         "Facebook": ["div[data-ad-preview='message']", "div[data-ad-comet-preview='message']", "div[dir='auto']", "[role='article'] div[dir='auto']"],
         "Threads": ["div[data-pressable-container] span", "article span", "div[dir='auto']"],
+        "TikTok": ["[data-e2e='video-desc']", "[data-e2e='browse-video-desc']", "h1"],
     }.get(platform, ["article", "main"])
     for sel in selectors:
         try:
@@ -641,13 +676,15 @@ def _collect_links(page: Page, patterns: List[str], base: str, limit: int,
 # main entry
 # ---------------------------------------------------------------------------
 class Scraper:
-    def __init__(self, cfg: dict, out_dir: str):
+    def __init__(self, cfg: dict, out_dir: str, tiktok_session: bool = False):
         self.cfg = cfg
         self.run_cfg = cfg.get("run", {})
         self.platforms: Dict[str, dict] = cfg.get("platforms", {})
         self.out_dir = out_dir
         os.makedirs(out_dir, exist_ok=True)
         self._storage_state_path = self._materialise_storage_state()
+        if tiktok_session:
+            self._storage_state_path = self._with_tiktok_cookies(self._storage_state_path)
         # Canonical URLs main.py already has in the sheet / Reviewed ledger. main.py replaces this
         # with its live set, which grows as the run files posts.
         self.known_urls: set = set()
@@ -671,7 +708,7 @@ class Scraper:
         for c in state.get("cookies", []) or []:
             exp = c.get("expires")
             domain = str(c.get("domain", "")).lstrip(".").replace("www.", "")
-            site = next((s for s in ("facebook.com", "instagram.com", "threads.net") if s in domain), None)
+            site = next((s for s in ("facebook.com", "instagram.com", "threads.net", "tiktok.com") if s in domain), None)
             # -1 is a session cookie: it has no expiry to check, so it is not evidence either way.
             if exp is None or exp <= 0:
                 continue
@@ -728,6 +765,38 @@ class Scraper:
                 log.warning("PW_STORAGE_STATE_B64 invalid, ignoring: %s", e)
         log.info("no browser session found; logged-out browsing (expect login walls)")
         return None
+
+    @staticmethod
+    def _with_tiktok_cookies(path: Optional[str]) -> Optional[str]:
+        """
+        TikTok link review only: add the TikTok cookies of PW_STORAGE_STATE_SHOP_B64 to the browser
+        state. They are kept out of every other run on purpose, so an Instagram sweep never carries a
+        TikTok login. Only tiktok.* cookies are taken; the secret was already stripped of seller / ads
+        cookies when it was built (tools/cookies_to_state.py).
+        """
+        b64 = env_str("PW_STORAGE_STATE_SHOP_B64")
+        if not b64:
+            log.warning("TikTok link review has no PW_STORAGE_STATE_SHOP_B64; TikTok will be read logged out")
+            return path
+        try:
+            raw = base64.b64decode(b64)
+            if raw[:2] == b"\x1f\x8b":
+                raw = gzip.decompress(raw)
+            shop = json.loads(raw)
+            cookies = [c for c in (shop.get("cookies") or []) if "tiktok" in str(c.get("domain", "")).lower()]
+            state = {"cookies": [], "origins": []}
+            if path:
+                with open(path, "rb") as f:
+                    state = json.load(f)
+            state["cookies"] = list(state.get("cookies") or []) + cookies
+            fd, out = tempfile.mkstemp(prefix="pw_state_tt_", suffix=".json")
+            with os.fdopen(fd, "w") as f:
+                json.dump(state, f)
+            log.info("TikTok session: %d tiktok cookie(s) added to the browser state", len(cookies))
+            return out
+        except Exception as e:
+            log.warning("PW_STORAGE_STATE_SHOP_B64 unusable (%s); TikTok will be read logged out", type(e).__name__)
+            return path
 
     def _context(self, browser: Browser, use_storage: bool = True) -> BrowserContext:
         kwargs = dict(
@@ -978,8 +1047,25 @@ class Scraper:
                              brand, platform, owner)
                 elif not owner:
                     log.info("[%s/%s] could not read the post owner off the page; reviewing anyway", brand, platform)
+            if platform == "TikTok":
+                owner = _owner_from_url(page.url, platform) or _owner_from_url(url, platform)
+                if not owner:
+                    owner, _ = _extract_owner(page, platform)
+                post.owner = owner
+                # The address that is stored is the video's own page with the account's handle in it, so
+                # a short link or a numeric-id link and the plain link dedupe to one row.
+                vid = re.search(r"/(?:video|photo)/(\d{10,})", page.url or url)
+                if owner and vid:
+                    kind = "photo" if "/photo/" in (page.url or url) else "video"
+                    post.url = f"https://www.tiktok.com/@{owner}/{kind}/{vid.group(1)}"
+                if owner and handle and not _handles_match(owner, handle):
+                    post.errors.append(f"different account: post is by @{owner}, not @{handle} — not reviewed")
+                    post.not_owned = True
+                    return post
             post.text = _extract_text(page, platform)
             post.posted_at = _extract_date(page)
+            if platform == "TikTok":
+                post.posted_at = _tiktok_date(page.url) or _tiktok_date(url) or post.posted_at
             _save_screenshot(page, post, brand, platform, url, self.out_dir)
             if not post.text:
                 post.errors.append("no text extracted")
