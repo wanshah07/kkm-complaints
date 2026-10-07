@@ -17,9 +17,11 @@ run:
   # 145, not 160 (6 Oct 2026): run 107 started its last target 8 minutes inside the old budget, the
   # reviewer gateway was slow that day (one target's review took 24 minutes), and the 180-minute kill
   # landed mid-review. The budget only gates the START of a target, so it needs room for the longest tail.
-  # 130, not 145 (7 Oct 2026): run 111 (60 posts per profile) was still going at 169 minutes; deeper
-  # profiles make the last target's tail longer, so the budget has to leave more room before the kill.
-  max_run_minutes: 130
+  # 110, not 145 (7 Oct 2026): run 111 (60 posts per profile) was cancelled at 180 minutes. Its last
+  # target, nazirinskinclinic, started 124 minutes in, scraped 20 posts, and the reviewer gateway then
+  # slowed to 2-5 minutes a call with 502s, so those 20 could not be reviewed before the kill. A tail of
+  # 70 minutes covers a healthy 40 and a slow gateway; 130 would still have let that target start.
+  max_run_minutes: 110
   screenshot_max_width: 1200      # px, before JPEG compression
   screenshot_jpeg_quality: 80
   headless: true

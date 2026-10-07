@@ -280,7 +280,7 @@ The order within a target is still insert first, ledger second: a post is not ma
 **This is how every sweep runs, and how any new routine should be built.** Settled 18 Sep 2026 after four failed attempts taught each piece.
 
 1. **Batch by target type.** `only_type=brand` first — the brands are the commercial priority and sit at the end of the Targets tab, so an unbatched run reaches them last and the time budget cuts them first. Then `only_type=person` for the doctors and KOLs, as many runs as it takes.
-2. **Let each run stop itself.** `max_run_minutes: 130` ends it between targets, clear of GitHub's 180-minute kill. A killed run loses the target in flight and prints nothing.
+2. **Let each run stop itself.** `max_run_minutes: 110` ends it between targets, clear of GitHub's 180-minute kill. A killed run loses the target in flight and prints nothing.
 3. **File per target, never at the end.** Each target is scraped, reviewed and pushed before the next begins, so a run that stops early keeps everything it finished.
 4. **Let the ledger carry the state.** The Reviewed tab records every post judged, so the next run resumes rather than repeating. It also sets the running order: a target we have never judged a post from goes to the front of the list. No manual bookkeeping about who was covered.
 5. **Read the not-reached list, then run again.** Repeat until it comes back empty. That is the definition of a completed sweep.
@@ -329,7 +329,7 @@ Run the brands first if they are the commercial priority: they are a short batch
 | Limit | Where | What happens |
 |---|---|---|
 | `timeout-minutes: 180` | `.github/workflows/scraper.yml` | GitHub **kills** the job. Mid-post, no summary, no report, the target in flight wasted. |
-| `max_run_minutes: 130` | `run:` in `config.yaml` | The run **stops itself** between targets, files everything, prints the summary and lists what it did not reach. |
+| `max_run_minutes: 110` | `run:` in `config.yaml` | The run **stops itself** between targets, files everything, prints the summary and lists what it did not reach. |
 
 The soft budget exists so the hard ceiling is never the thing that ends a run. It is checked **before a target starts**, never inside one, so a target is either done properly or not begun. The 20-minute gap is deliberate: enough for the target in flight to finish and file.
 
