@@ -539,6 +539,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     date_rule = f"on/after {min_date}" if min_date else (f"within {lookback} days" if lookback else "any date")
     push_risky = bool(run_cfg.get("push_risky", False))
     min_conf = float(run_cfg.get("min_confidence", 0.6))
+    flush_every = int(run_cfg.get("flush_every_reviews", 10) or 0)
     records: List[dict] = []      # this target's findings, filed before the next target starts
     reviewed: List[dict] = []     # this target's judged posts, for the ledger
     all_records: List[dict] = []  # the whole run, for the dry-run preview and the final count
@@ -609,6 +610,12 @@ def main(argv: Optional[List[str]] = None) -> int:
                     {"brand": tr.brand, "platform": tr.platform, "kind": "drift",
                      "suggest": None, "note": tr.drift_note})
             for post in tr.posts:
+                # File and ledger what this target has judged so far, every few reviews. A pair is 60
+                # posts and a slow reviewer can need hours for it; run 119 (8 Oct 2026) was cancelled at
+                # the 180-minute job limit mid-pair with 13 posts judged and none filed or ledgered, so
+                # the next run would have paid for all of them again. The insert still goes first.
+                if flush_every and not tt_hold and len(reviewed) >= flush_every:
+                    _file_target()
                 cu = canonical_url(post.url)
                 if getattr(post, "not_owned", False):
                     report["skipped"].append({"url": post.url, "why": (post.errors[-1] if post.errors else "different account")})

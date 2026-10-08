@@ -24,7 +24,14 @@ run:
   # 95, not 110 (7 Oct 2026): run 114 ended at 2h48m, 12 minutes inside the kill. Its last target, drangelinetay
   # Instagram, started 91 minutes in and took 78 minutes (10 to scrape, 68 to review on a slow gateway), so a
   # target started at 109 minutes could have run to 189. The tail has to cover that: 180 - 95 = 85 minutes.
-  max_run_minutes: 95
+  # 80, not 95 (8 Oct 2026): run 119 was cancelled at 180 minutes with the 95-minute budget. klinikdrbazilah
+  # Instagram started 51 minutes in, and the reviewer gateway needed 3-5 minutes a call (502 after 300 s), so 13
+  # of its 60 posts were judged in 2 hours. The budget cannot fix a gateway that slow; it only shortens the
+  # time before a new pair may start. See flush_every_reviews below for what keeps the judged posts.
+  max_run_minutes: 80
+  # File and ledger a pair's judged posts every N reviews instead of only when the whole pair is done, so a
+  # run killed mid-pair keeps what it paid for (8 Oct 2026). 0 turns it off.
+  flush_every_reviews: 10
   screenshot_max_width: 1200      # px, before JPEG compression
   screenshot_jpeg_quality: 80
   headless: true
