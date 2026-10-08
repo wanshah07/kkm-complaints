@@ -32,6 +32,9 @@ run:
   # File and ledger a pair's judged posts every N reviews instead of only when the whole pair is done, so a
   # run killed mid-pair keeps what it paid for (8 Oct 2026). 0 turns it off.
   flush_every_reviews: 10
+  # Reviews of one target's posts run this many at a time (1 = one call at a time, the old behaviour). Needs the gateway
+  # to take parallel requests; raise it only after checking one run's 502 count does not go up. Proposed 8 Oct 2026.
+  review_concurrency: 1
   screenshot_max_width: 1200      # px, before JPEG compression
   screenshot_jpeg_quality: 80
   headless: true

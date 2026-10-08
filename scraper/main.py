@@ -24,6 +24,7 @@ import os
 import re
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -585,6 +586,41 @@ def main(argv: Optional[List[str]] = None) -> int:
         records.clear()
         reviewed.clear()
 
+    # Review the next few posts of a target at the same time (run.review_concurrency, default 1 = off). On a
+    # gateway that needs 3-5 minutes a call (rootsys.cloud, 8 Oct 2026) one call at a time judged about 7
+    # posts an hour. The calls are independent; only the ORDER of the loop below matters, so results are
+    # collected in post order and everything after the review (spend, ledger, filing, flush) is unchanged.
+    review_workers = max(1, int(run_cfg.get("review_concurrency", 1) or 1))
+    review_pool = ThreadPoolExecutor(max_workers=review_workers) if review_workers > 1 and not args.compare else None
+    review_futs: Dict[str, object] = {}
+
+    def _review_input(post) -> ReviewInput:
+        return ReviewInput(brand=post.brand, platform=post.platform, url=post.url, text=post.text,
+                           screenshot_path=post.screenshot_path, product_hints=hints.get(post.brand),
+                           target_type=types.get(post.brand, ""))
+
+    def _will_review(post) -> bool:
+        """The same filters the loop applies before it asks the reviewer, so a prefetched call is one the
+        loop would have made anyway."""
+        if getattr(post, "not_owned", False) or getattr(post, "blocked", False):
+            return False
+        if canonical_url(post.url) in known:
+            return False
+        if not date_allowed(post.posted_at, lookback, min_date):
+            return False
+        return bool(post.text or post.screenshot_path)
+
+    def _prefetch(posts, i: int) -> None:
+        """Keep up to review_workers reviews in flight, starting at posts[i], in post order."""
+        if review_pool is None:
+            return
+        for post in posts[i:]:
+            if len(review_futs) >= review_workers:   # submitted and not yet consumed, so a kill loses at most this many
+                return
+            if post.url in review_futs or not _will_review(post):
+                continue
+            review_futs[post.url] = review_pool.submit(review, _review_input(post), use_llm=not args.no_llm)
+
     try:
         for tr in results:
             # A target cut short by the run budget is NOT reached: it stays on the not-reached list so
@@ -609,13 +645,14 @@ def main(argv: Optional[List[str]] = None) -> int:
                 report["handle_checks"].append(
                     {"brand": tr.brand, "platform": tr.platform, "kind": "drift",
                      "suggest": None, "note": tr.drift_note})
-            for post in tr.posts:
+            for _pi, post in enumerate(tr.posts):
                 # File and ledger what this target has judged so far, every few reviews. A pair is 60
                 # posts and a slow reviewer can need hours for it; run 119 (8 Oct 2026) was cancelled at
                 # the 180-minute job limit mid-pair with 13 posts judged and none filed or ledgered, so
                 # the next run would have paid for all of them again. The insert still goes first.
                 if flush_every and not tt_hold and len(reviewed) >= flush_every:
                     _file_target()
+                _prefetch(tr.posts, _pi)
                 cu = canonical_url(post.url)
                 if getattr(post, "not_owned", False):
                     report["skipped"].append({"url": post.url, "why": (post.errors[-1] if post.errors else "different account")})
@@ -674,7 +711,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                     })
                     continue
 
-                v = review(ri, use_llm=not args.no_llm)
+                fut = review_futs.pop(post.url, None)
+                v = fut.result() if fut is not None else review(ri, use_llm=not args.no_llm)
                 _spend(v)
                 if v.get("llm_failed"):
                     # A reviewer was configured and gave no answer, so the rulebook verdict is not a
@@ -748,6 +786,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         log.exception("sweep stopped early")
         report["errors"].append(f"sweep stopped early: {e}")
         _file_target()
+
+    if review_pool is not None:
+        review_pool.shutdown(wait=False, cancel_futures=True)
 
     if web_mode:
         report["web"] = {"source": web_source, "rows": len(brands), "walled_hosts": dict(scraper.walled),
