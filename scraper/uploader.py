@@ -188,13 +188,29 @@ class AppsScriptClient:
         and a complaint Wan had already actioned could come back around. Older deployments have no
         such action; treat that as an empty ledger rather than a failed run.
         """
-        try:
-            data = self._post({"action": "seen_urls"}, retries=1)
-        except Exception as e:
-            log.warning("no reviewed-post ledger on this deployment (%s); "
-                        "compliant posts will be reviewed again next run", e)
-            return []
-        return data.get("urls", [])
+        # Only a deployment that really lacks the action may degrade to an empty ledger. A Google error page
+        # (the Apps Script blips of 5 and 8 Oct 2026) is NOT that: run 120 took it for one, loaded 0 ledger
+        # URLs, and so (a) judged 10 fewer targets than the chain's count of 97 (the rotation modulus moved,
+        # offset 89 landed on say_shazril instead of klinikdrbazilah) and (b) paid to review every post again.
+        # Wait the blip out; if it does not clear, raise so the run stops at start-up and is re-dispatched
+        # instead of spending two hours on a distorted sweep.
+        delay = 5
+        last: Optional[Exception] = None
+        for attempt in range(1, 7):
+            try:
+                data = self._post({"action": "seen_urls"}, retries=1)
+                return data.get("urls", [])
+            except Exception as e:
+                last = e
+                if "unknown action" in str(e).lower():
+                    log.warning("no reviewed-post ledger on this deployment (%s); "
+                                "compliant posts will be reviewed again next run", e)
+                    return []
+                log.warning("reviewed-post ledger not readable yet (%d/6): %s", attempt, e)
+                if attempt < 6:
+                    time.sleep(delay)
+                    delay = min(delay * 2, 60)
+        raise RuntimeError(f"reviewed-post ledger unreadable after 6 attempts: {last}")
 
     def mark_seen(self, entries: List[Dict], batch_size: int = 200) -> int:
         """Record what this run judged, so the next run does not judge it again."""
