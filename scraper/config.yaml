@@ -36,8 +36,8 @@ run:
   # to take parallel requests. Set to 3 on 9 Oct 2026 (Wan: "push concurrency") because rootsys.cloud needed 3-5 minutes a call.
   # Set BACK TO 1 on 9 Oct 2026 16:05 UTC: run #131 (98 answers, 0 x 502, 0 x 429) lost 3 posts of drbengee when ONE gateway stall
   # timed out all three in-flight calls together through all three request shapes (REVIEWER FAILED x3, the trip-wire's rule b).
-  # Raise it to 3 again only on Wan's word.
-  review_concurrency: 1
+  # Set to 3 AGAIN on 9 Oct 2026 16:10 UTC on Wan's word ("back to 3"), knowing a stall costs 3 posts, which a one-account retry fixes.
+  review_concurrency: 3
   screenshot_max_width: 1200      # px, before JPEG compression
   screenshot_jpeg_quality: 80
   headless: true
