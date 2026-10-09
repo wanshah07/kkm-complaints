@@ -2,9 +2,20 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KKM Cosmetic Complaints</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KKM Complaints</title>
 <meta name="robots" content="noindex, nofollow">
+<!-- color-scheme tells Samsung Internet and Chrome's auto-dark that this page carries its own dark
+     styles, so neither inverts it on its own; the overrides live under prefers-color-scheme below. -->
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="KKM Complaints">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
@@ -12,97 +23,269 @@
   tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] } } } };
 </script>
 <style>
-  body { font-family: Inter, ui-sans-serif, system-ui; }
+  :root {
+    --surface:#ffffff; --ink:#0f172a; --muted:#64748b; --accent:#2a78d6; --accent-soft:#e8f1fc;
+    --warn:#b45309; --warn-bg:#fef3c7; --crit:#b91c1c; --crit-bg:#fee2e2;
+    --series-1:#2a78d6; --st-new:#2a78d6; --st-prog:#eda100; --st-done:#1baf7a; --st-replied:#008300; --st-dismissed:#94a3b8;
+    --lane-sweep:#2a78d6; --lane-dash:#1baf7a; --lane-file:#eb6834;
+    --sa-top: env(safe-area-inset-top, 0px); --sa-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  html { -webkit-text-size-adjust: 100%; }
+  body { font-family: Inter, ui-sans-serif, system-ui; -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; }
   .badge { display: inline-flex; align-items: center; border-radius: 9999px; padding: 2px 10px; font-size: 12px; font-weight: 600; white-space: nowrap; }
   .row-hover:hover { background: #f8fafc; }
-  .drawer { transition: transform .25s ease; }
+  .drawer { transition: transform .25s ease; height: 100vh; height: 100dvh; }
   .clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
   .spinner { border: 3px solid #e2e8f0; border-top-color: #0f172a; border-radius: 50%; width: 22px; height: 22px; animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  button, [role=button], a.btn { touch-action: manipulation; }
+  .tap { min-height: 44px; }
+  /* Views */
+  .view { display: none; } .view.on { display: block; }
+  .tab { border-bottom: 2px solid transparent; }
+  .tab.on { border-bottom-color: #0f172a; color: #0f172a; }
+  /* Bottom navigation (phones) */
+  .bnav { padding-bottom: var(--sa-bottom); }
+  .bnav button.on { color: #0f172a; font-weight: 700; }
+  .bnav button.on svg { stroke-width: 2.4; }
+  @media (max-width: 639px) { main { padding-bottom: calc(76px + var(--sa-bottom)); } }
+  /* Modals: sheets on phones, cards on larger screens */
+  .sheet { max-height: 100vh; max-height: 100dvh; }
+  @media (min-width: 640px) { .sheet { max-height: 90vh; } }
+  /* Charts */
+  .barlist .bar { height: 10px; border-radius: 4px; background: var(--series-1); min-width: 2px; }
+  .barlist .row:hover .bar { filter: brightness(.92); }
+  #chartMonths svg { display: block; max-width: none; }
+  main, main > section { min-width: 0; }
+  .vbars rect.bar { fill: var(--series-1); }
+  .vbars rect.bar:hover { fill: #1f5fae; }
+  .vbars text { font-size: 10px; fill: var(--muted); }
+  .vbars text.v { fill: var(--ink); font-weight: 600; }
+  .vbars line { stroke: #e2e8f0; }
+  .cmap { overflow-x: auto; }
+  .cmap .t-main { font: 600 12px ui-monospace, Menlo, monospace; fill: var(--ink); }
+  .cmap .t-sub { font: 11px system-ui, sans-serif; fill: var(--muted); }
+  .cmap .t-off { font: 700 10px system-ui, sans-serif; fill: var(--crit); }
+  .cmap .t-lane { font: 700 10.5px system-ui, sans-serif; letter-spacing: .08em; fill: var(--muted); }
+  .cmap .t-arrow { font: 10.5px system-ui, sans-serif; fill: var(--muted); }
+  .chip-case { display:inline-block; border:1px solid #e2e8f0; border-radius:8px; padding:2px 8px; font-size:12px; margin:2px 4px 2px 0; background:#f8fafc; }
+  /* Dark mode: the page carries its own, so Samsung Internet's and Chrome's forced darkening stand down. */
+  @media (prefers-color-scheme: dark) {
+    :root { --surface:#111a2e; --ink:#e2e8f0; --muted:#94a3b8; --accent:#3987e5; --accent-soft:#16294a; --warn:#fbbf24; --warn-bg:#3b2a07; --crit:#f87171; --crit-bg:#3f1414;
+            --series-1:#3987e5; --st-new:#3987e5; --st-prog:#c98500; --st-done:#199e70; --st-replied:#2f9e44; --st-dismissed:#64748b; --lane-sweep:#3987e5; --lane-dash:#199e70; --lane-file:#d95926; }
+    body, .bg-slate-50 { background-color: #0b1220 !important; color: #e2e8f0; }
+    .bg-white, .bg-white\/90 { background-color: #111a2e !important; }
+    .bg-slate-100 { background-color: #1e293b !important; } .bg-slate-200 { background-color: #334155 !important; color: #e2e8f0 !important; }
+    .bg-amber-50\/60 { background-color: rgba(120, 53, 15, .22) !important; }
+    .border-slate-200, .border-slate-300, .border-amber-200, .border-amber-300, .border-sky-300 { border-color: #263247 !important; }
+    .divide-slate-100 > * + * { border-color: #1e293b !important; }
+    .text-slate-900, .text-slate-800 { color: #e2e8f0 !important; } .text-slate-700, .text-slate-600 { color: #cbd5e1 !important; }
+    .text-slate-500 { color: #94a3b8 !important; } .text-slate-400 { color: #64748b !important; }
+    .text-blue-700 { color: #93c5fd !important; } .text-emerald-700 { color: #6ee7b7 !important; } .text-amber-700 { color: #fcd34d !important; } .text-rose-700 { color: #fda4af !important; }
+    .row-hover:hover, .hover\:bg-slate-50:hover { background-color: #162036 !important; }
+    .hover\:border-slate-400:hover { border-color: #475569 !important; }
+    input, select, textarea { background-color: #0f172a !important; color: #e2e8f0 !important; border-color: #334155 !important; }
+    input::placeholder, textarea::placeholder { color: #64748b; }
+    .tab.on { border-bottom-color: #e2e8f0; color: #e2e8f0; } .bnav button.on { color: #e2e8f0; }
+    .spinner { border-color: #334155; border-top-color: #e2e8f0; }
+    .chip-case { background: #0f172a; border-color: #334155; }
+    .vbars line { stroke: #263247; } .vbars rect.bar:hover { fill: #5aa0f0; }
+    ::-webkit-scrollbar-thumb { background: #334155; }
+    .bg-blue-100 { background-color: #1e3a5f !important; } .text-blue-800 { color: #bfdbfe !important; }
+    .bg-amber-100 { background-color: #4a3306 !important; } .text-amber-900 { color: #fde68a !important; }
+    .bg-emerald-100 { background-color: #064e3b !important; } .text-emerald-800 { color: #a7f3d0 !important; }
+    .bg-violet-100 { background-color: #3b2a6b !important; } .text-violet-800 { color: #ddd6fe !important; }
+    .bg-red-100 { background-color: #5b1a1a !important; } .text-red-800 { color: #fecaca !important; }
+  }
+  /* Print = "Save as PDF" from any browser, Samsung Internet included. Only the active view prints. */
+  @media print {
+    header, .bnav, #overlay, #drawer, #toast, .no-print, #linksModal, #ldModal, #modal, #connect, #exportMenu, #moreMenu { display: none !important; }
+    body { background: #fff !important; color: #000 !important; }
+    main { max-width: none !important; padding: 0 !important; }
+    .view { display: none !important; } .view.on { display: block !important; }
+    .bg-white { border-color: #ccc !important; }
+    table { font-size: 10px; } .clamp-2 { -webkit-line-clamp: unset; }
+    .print-only { display: block !important; }
+  }
+  .print-only { display: none; }
 </style>
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen">
 
 <!-- Header -->
-<header class="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-slate-200">
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center gap-3">
-    <div class="h-9 w-9 rounded-xl bg-slate-900 text-white grid place-items-center font-bold">K</div>
+<header class="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-slate-200" style="padding-top:var(--sa-top)">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 sm:py-3 flex flex-wrap items-center gap-3">
+    <div class="h-9 w-9 shrink-0 rounded-xl bg-slate-900 text-white grid place-items-center font-bold">K</div>
     <div class="min-w-0">
-      <h1 class="text-base sm:text-lg font-semibold leading-tight">KKM Cosmetic Complaints</h1>
-      <p class="text-xs text-slate-500 truncate">NPRA Annex I Part 8 / Part 10 monitoring · Pelaporan Aduan Kosmetik Bernotifikasi</p>
+      <h1 class="text-base sm:text-lg font-semibold leading-tight">KKM Complaints</h1>
+      <p class="text-xs text-slate-500 truncate hidden lg:block">Advertising and product complaints · NPRA, BPF, MDA, CKAPS, BKKM, JAKIM, KPDN, MCMC</p>
     </div>
-    <div class="ml-auto flex items-center gap-2">
-      <a id="faqLink" href="#" target="_blank" title="Operating guide (admin Google account only)" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">FAQ</a>
-      <button id="kkmFormLink" title="Open the KKM complaint form (asks for the URL the first time)" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">
-        <span class="hidden sm:inline">Open KKM form ↗</span><span class="sm:hidden">KKM ↗</span>
-      </button>
+    <!-- Desktop / tablet actions -->
+    <div class="ml-auto hidden sm:flex flex-wrap items-center gap-2 whitespace-nowrap">
+      <a id="faqLink" href="#" target="_blank" title="Operating guide" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">FAQ</a>
+      <button id="kkmFormLink" title="Open the KKM complaint form (asks for the URL the first time)" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">KKM form ↗</button>
+      <div class="relative">
+        <button id="btnExport" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">Export ▾</button>
+        <div id="exportMenu" class="hidden absolute right-0 mt-1 w-72 rounded-xl border border-slate-200 bg-white shadow-xl p-1 text-sm z-40"></div>
+      </div>
       <button id="btnRefresh" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">⟳ Refresh</button>
       <button id="btnLinks" title="Paste TikTok video links to be reviewed" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">TikTok links<span id="linksBadge" class="hidden ml-1 rounded-full bg-amber-100 text-amber-900 px-1.5 text-xs font-semibold"></span></button>
       <button id="btnNew" class="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">+ Manual entry</button>
       <button id="btnSettings" title="Backend connection" class="hidden inline-flex items-center rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm hover:bg-slate-50">⚙</button>
     </div>
+    <!-- Phone actions: one menu -->
+    <div class="ml-auto relative sm:hidden">
+      <button id="btnMore" aria-label="More actions" class="tap inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 text-base font-semibold">⋯</button>
+      <div id="moreMenu" class="hidden absolute right-0 mt-1 w-64 rounded-xl border border-slate-200 bg-white shadow-xl p-1 text-sm z-40"></div>
+    </div>
   </div>
+  <!-- View tabs (tablet / desktop) -->
+  <nav class="max-w-7xl mx-auto px-4 sm:px-6 hidden sm:flex gap-5 text-sm font-medium text-slate-500" aria-label="Views">
+    <button data-nav="home" class="tab py-2">Overview</button>
+    <button data-nav="list" class="tab py-2">Complaints <span id="navListCount" class="text-xs text-slate-400"></span></button>
+    <button data-nav="routes" class="tab py-2">Routes</button>
+  </nav>
 </header>
 
-<main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+<main class="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-5 sm:space-y-6">
 
-  <!-- Stats -->
-  <section id="stats" class="grid grid-cols-2 lg:grid-cols-5 gap-3"></section>
+  <!-- ===================== OVERVIEW ===================== -->
+  <section id="viewHome" class="view space-y-5">
+    <div class="flex items-end justify-between gap-3 flex-wrap">
+      <div>
+        <h2 class="text-lg font-semibold">Overview</h2>
+        <p id="homeSub" class="text-xs text-slate-500">—</p>
+      </div>
+      <div class="flex gap-2 no-print">
+        <button data-nav="list" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">Open the queue →</button>
+      </div>
+    </div>
+    <div id="homeTiles" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"></div>
+    <div id="homeKpis" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
 
-  <!-- Filters -->
-  <section class="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap items-center gap-3">
-    <div id="statusChips" class="flex flex-wrap gap-2"></div>
-    <select id="fBrand" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white"><option value="">All brands</option></select>
-    <select id="fPlatform" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white"><option value="">All platforms</option></select>
-    <input id="fSearch" type="search" placeholder="Search text, product, reason, URL…" class="flex-1 min-w-[200px] rounded-lg border border-slate-300 text-sm py-2 px-3">
-    <span id="count" class="text-xs text-slate-500"></span>
+    <div class="grid lg:grid-cols-3 gap-4 min-w-0">
+      <div class="lg:col-span-2 min-w-0 bg-white rounded-2xl border border-slate-200 p-4">
+        <div class="flex items-baseline justify-between gap-2"><h3 class="font-semibold text-sm">Complaints detected per month</h3><span id="monthNote" class="text-xs text-slate-500"></span></div>
+        <div id="chartMonths" class="mt-3 overflow-x-auto max-w-full"></div>
+      </div>
+      <div class="min-w-0 bg-white rounded-2xl border border-slate-200 p-4">
+        <h3 class="font-semibold text-sm">From detection to filing</h3>
+        <div id="funnel" class="mt-3 space-y-2"></div>
+      </div>
+    </div>
+
+    <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4 min-w-0">
+      <div class="min-w-0 bg-white rounded-2xl border border-slate-200 p-4"><h3 class="font-semibold text-sm mb-3">By status</h3><div id="chartStatus" class="barlist"></div></div>
+      <div class="min-w-0 bg-white rounded-2xl border border-slate-200 p-4"><h3 class="font-semibold text-sm mb-3">By route (Jenis Aduan)</h3><div id="chartRoute" class="barlist"></div></div>
+      <div class="min-w-0 bg-white rounded-2xl border border-slate-200 p-4"><h3 class="font-semibold text-sm mb-3">By platform</h3><div id="chartPlatform" class="barlist"></div></div>
+      <div class="min-w-0 bg-white rounded-2xl border border-slate-200 p-4"><h3 class="font-semibold text-sm mb-3">Top accounts and brands</h3><div id="chartBrand" class="barlist"></div></div>
+      <div class="min-w-0 bg-white rounded-2xl border border-slate-200 p-4"><h3 class="font-semibold text-sm mb-3">Violation types</h3><div id="chartType" class="barlist"></div></div>
+      <div class="min-w-0 bg-white rounded-2xl border border-slate-200 p-4"><h3 class="font-semibold text-sm mb-3">Source</h3><div id="chartSource" class="barlist"></div><p class="text-xs text-slate-500 mt-3">scraper = the sweep; manual = typed in here; tiktok-links = filed from the TikTok panel.</p></div>
+    </div>
+
+    <div class="min-w-0 bg-white rounded-2xl border border-slate-200 p-4">
+      <h3 class="font-semibold text-sm">How they connect</h3>
+      <p class="text-xs text-slate-500 mt-1">Read left to right: where the code or data lives, what runs it and when, and where the result lands. One row per runner.</p>
+      <div class="flex flex-wrap gap-3 text-[11px] text-slate-500 mt-2">
+        <span><i class="inline-block w-3 h-3 rounded align-middle mr-1" style="background:var(--accent-soft);border:1.5px solid var(--accent)"></i>scheduled (Claude Routine)</span>
+        <span><i class="inline-block w-3 h-3 rounded align-middle mr-1" style="background:var(--warn-bg);border:1.5px dashed var(--warn)"></i>timed in another system</span>
+        <span><i class="inline-block w-3 h-3 rounded align-middle mr-1" style="background:var(--surface);border:1.5px dashed var(--muted)"></i>on push / on request / manual</span>
+        <span><i class="inline-block w-3 h-3 rounded align-middle mr-1" style="background:var(--crit-bg);border:1.5px dashed var(--crit)"></i>off or not firing</span>
+      </div>
+      <div id="cmap" class="cmap mt-3"></div>
+    </div>
   </section>
 
-  <!-- Table -->
-  <section class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-sm">
-        <thead class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide">
-          <tr>
-            <th class="text-left px-4 py-3 font-semibold">Date</th>
-            <th class="text-left px-4 py-3 font-semibold">Brand</th>
-            <th class="text-left px-4 py-3 font-semibold">Platform</th>
-            <th class="text-left px-4 py-3 font-semibold">Product</th>
-            <th class="text-left px-4 py-3 font-semibold">Violation</th>
-            <th class="text-left px-4 py-3 font-semibold">Status</th>
-            <th class="text-left px-4 py-3 font-semibold">Links</th>
-          </tr>
-        </thead>
-        <tbody id="rows" class="divide-y divide-slate-100"></tbody>
-      </table>
+  <!-- ===================== COMPLAINTS ===================== -->
+  <section id="viewList" class="view space-y-5">
+    <!-- Stats -->
+    <section id="stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"></section>
+
+    <!-- Filters -->
+    <section class="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 flex flex-wrap items-center gap-2 sm:gap-3 no-print">
+      <div id="statusChips" class="flex flex-wrap gap-2 w-full sm:w-auto"></div>
+      <select id="fBrand" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white max-w-[48%] sm:max-w-none"><option value="">All brands</option></select>
+      <select id="fPlatform" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white max-w-[48%] sm:max-w-none"><option value="">All platforms</option></select>
+      <select id="fRoute" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white max-w-full"><option value="">All routes</option></select>
+      <input id="fSearch" type="search" placeholder="Search text, product, reason, URL…" class="flex-1 min-w-[160px] rounded-lg border border-slate-300 text-sm py-2 px-3">
+      <span id="count" class="text-xs text-slate-500"></span>
+    </section>
+
+    <!-- Table (tablet / desktop) -->
+    <section class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+      <div class="overflow-x-auto hidden sm:block">
+        <table class="min-w-full text-sm">
+          <thead class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide">
+            <tr>
+              <th class="text-left px-4 py-3 font-semibold">Date</th>
+              <th class="text-left px-4 py-3 font-semibold">Brand</th>
+              <th class="text-left px-4 py-3 font-semibold">Platform</th>
+              <th class="text-left px-4 py-3 font-semibold">Product · route</th>
+              <th class="text-left px-4 py-3 font-semibold">Violation</th>
+              <th class="text-left px-4 py-3 font-semibold">Status</th>
+              <th class="text-left px-4 py-3 font-semibold">Links</th>
+            </tr>
+          </thead>
+          <tbody id="rows" class="divide-y divide-slate-100"></tbody>
+        </table>
+      </div>
+      <!-- Cards (phones) -->
+      <div id="cards" class="sm:hidden divide-y divide-slate-100"></div>
+      <div id="empty" class="hidden p-10 text-center text-slate-500 text-sm">No complaints match these filters.</div>
+      <div id="loading" class="p-10 grid place-items-center"><div class="spinner"></div></div>
+    </section>
+  </section>
+
+  <!-- ===================== ROUTES ===================== -->
+  <section id="viewRoutes" class="view space-y-5">
+    <div>
+      <h2 class="text-lg font-semibold">Complaint routes</h2>
+      <p class="text-xs text-slate-500 mt-1">Where a complaint goes, the cases that belong there, the instrument it rests on, the number the agency asks for, and its channel. Pick the route in a complaint's <b>Jenis Aduan</b>; the drawer then shows this route's checklist and form. To set up a form like the KKM one, paste the agency's form or portal link under <b>Form for this route</b>. A Google Form pre-fill template with <code>{Column}</code> placeholders (built with the form helper) fills itself; any other link just opens.</p>
     </div>
-    <div id="empty" class="hidden p-10 text-center text-slate-500 text-sm">No complaints match these filters.</div>
-    <div id="loading" class="p-10 grid place-items-center"><div class="spinner"></div></div>
+    <div id="routesNote" class="hidden rounded-xl border border-amber-300 bg-amber-50/60 p-3 text-sm"></div>
+    <div id="routeCards" class="grid md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
   </section>
 </main>
 
+<!-- Bottom navigation (phones) -->
+<nav class="bnav sm:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-slate-200 grid grid-cols-4 text-[11px] text-slate-500" aria-label="Views">
+  <button data-nav="home" class="tap py-2 flex flex-col items-center gap-0.5"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Overview</button>
+  <button data-nav="list" class="tap py-2 flex flex-col items-center gap-0.5"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Complaints</button>
+  <button data-nav="routes" class="tap py-2 flex flex-col items-center gap-0.5"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h7l3 3h6M4 12h5l3 3h8M4 17h9"/></svg>Routes</button>
+  <button id="bnavLinks" class="tap py-2 flex flex-col items-center gap-0.5 relative"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 14a4 4 0 0 1 0-5.7l2.3-2.3a4 4 0 0 1 5.7 5.7l-1 1M14 10a4 4 0 0 1 0 5.7L11.7 18a4 4 0 0 1-5.7-5.7l1-1"/></svg>TikTok<span id="linksBadge2" class="hidden absolute top-1 right-5 rounded-full bg-amber-500 text-white px-1.5 text-[10px] font-bold"></span></button>
+</nav>
+
 <!-- Drawer -->
 <div id="overlay" class="fixed inset-0 bg-slate-900/40 z-40 hidden"></div>
-<aside id="drawer" class="drawer fixed top-0 right-0 h-full w-full sm:w-[640px] bg-white z-50 shadow-2xl translate-x-full overflow-y-auto">
-  <div class="sticky top-0 bg-white border-b border-slate-200 px-5 py-3 flex items-center gap-3 z-10">
+<aside id="drawer" class="drawer fixed top-0 right-0 w-full sm:w-[640px] bg-white z-50 shadow-2xl translate-x-full overflow-y-auto">
+  <div class="sticky top-0 bg-white border-b border-slate-200 px-4 sm:px-5 py-3 flex items-center gap-3 z-10" style="padding-top:calc(.75rem + var(--sa-top))">
     <div class="min-w-0">
       <div id="dTitle" class="font-semibold truncate">—</div>
       <div id="dSub" class="text-xs text-slate-500 truncate">—</div>
     </div>
     <div class="ml-auto flex items-center gap-2">
       <span id="dStatus" class="badge"></span>
-      <button id="btnClose" class="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm hover:bg-slate-50">✕</button>
+      <button id="btnClose" aria-label="Close" class="tap rounded-lg border border-slate-300 px-3 text-sm hover:bg-slate-50">✕</button>
     </div>
   </div>
 
-  <div class="p-5 space-y-5">
+  <div class="p-4 sm:p-5 space-y-5" style="padding-bottom:calc(2rem + var(--sa-bottom))">
     <!-- Status actions -->
     <div class="flex flex-wrap gap-2">
-      <button data-status="In-Progress" class="stBtn rounded-lg bg-amber-100 text-amber-900 px-3 py-1.5 text-sm font-medium hover:bg-amber-200">Mark In-Progress</button>
-      <button data-status="Complete" class="stBtn rounded-lg bg-emerald-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-emerald-700">Mark Complete (submitted to KKM)</button>
-      <button data-status="Dismissed" class="stBtn rounded-lg bg-slate-200 text-slate-800 px-3 py-1.5 text-sm font-medium hover:bg-slate-300">Dismiss (false positive)</button>
-      <button data-status="New" class="stBtn rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">Reset to New</button>
+      <button data-status="In-Progress" class="stBtn rounded-lg bg-amber-100 text-amber-900 px-3 py-2 text-sm font-medium hover:bg-amber-200">Mark In-Progress</button>
+      <button data-status="Complete" class="stBtn rounded-lg bg-emerald-600 text-white px-3 py-2 text-sm font-medium hover:bg-emerald-700">Mark Complete (submitted)</button>
+      <button data-status="Dismissed" class="stBtn rounded-lg bg-slate-200 text-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-300">Dismiss (false positive)</button>
+      <button data-status="New" class="stBtn rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50">Reset to New</button>
+    </div>
+
+    <!-- Export this complaint -->
+    <div class="flex flex-wrap items-center gap-2 text-sm no-print">
+      <span class="text-xs font-semibold uppercase tracking-wide text-slate-500 mr-1">Dossier</span>
+      <button data-dossier="pdf" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50">PDF</button>
+      <button data-dossier="docx" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50">Word</button>
+      <button data-dossier="gdoc" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50">Google Doc ↗</button>
+      <span id="dossierHint" class="text-xs text-slate-500"></span>
     </div>
 
     <!-- Screenshot -->
@@ -139,54 +322,62 @@
       </label>
     </div>
 
-    <!-- KKM form fields -->
+    <!-- Complaint fields -->
     <div class="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
-      <div class="flex items-center justify-between">
-        <div class="font-semibold text-sm">Borang KKM — Pelaporan Aduan Kosmetik Bernotifikasi</div>
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <div class="font-semibold text-sm" id="formTitle">Borang aduan</div>
         <a id="questLink" target="_blank" rel="noopener" class="text-xs text-blue-700 underline">Semak QUEST3+ ↗</a>
       </div>
       <div class="grid sm:grid-cols-2 gap-3">
+        <label class="block sm:col-span-2">
+          <span class="text-xs font-medium text-slate-600">Jenis Aduan (route)</span>
+          <select id="eJenis" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white"></select>
+        </label>
         <label class="block">
-          <span class="text-xs font-medium text-slate-600">Nama kosmetik</span>
+          <span class="text-xs font-medium text-slate-600">Nama produk</span>
           <input id="eNama" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3">
         </label>
         <label class="block">
-          <span class="text-xs font-medium text-slate-600">Nombor Notifikasi (NOT)</span>
+          <span class="text-xs font-medium text-slate-600" id="eNotLabel">Nombor Notifikasi (NOT)</span>
           <input id="eNot" placeholder="NOTxxxxxxxxK — verify on QUEST3+" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3">
-        </label>
-        <label class="block">
-          <span class="text-xs font-medium text-slate-600">Jenis Aduan</span>
-          <select id="eJenis" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white"></select>
         </label>
         <div class="block">
           <span class="text-xs font-medium text-slate-600">Tarikh Melapor</span>
           <div id="dTarikh" class="mt-1 text-sm py-2">—</div>
         </div>
+        <div class="block">
+          <span class="text-xs font-medium text-slate-600">Agency</span>
+          <div id="dAgency" class="mt-1 text-sm py-2 text-slate-700">—</div>
+        </div>
         <label class="block sm:col-span-2">
-          <span class="text-xs font-medium text-slate-600">Maklum Balas KKM / NPRA (paste the reply here after submitting)</span>
-          <textarea id="eFeedback" rows="4" placeholder="Paste NPRA's acknowledgement or reply, with its reference number and date." class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3"></textarea>
+          <span class="text-xs font-medium text-slate-600">Maklum balas agensi (paste the reply here after submitting)</span>
+          <textarea id="eFeedback" rows="3" placeholder="Paste the acknowledgement or reply, with its reference number and date." class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3"></textarea>
         </label>
         <label class="block sm:col-span-2">
-          <span class="text-xs font-medium text-slate-600">Deskripsi Aduan (paste into the form)</span>
+          <span class="text-xs font-medium text-slate-600 flex items-center justify-between">Deskripsi Aduan (paste into the form)<button id="btnRewrite" type="button" class="no-print text-xs underline text-blue-700">Rewrite for this route</button></span>
           <textarea id="eDeskripsi" rows="8" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 font-mono text-[13px]"></textarea>
         </label>
       </div>
       <div class="flex flex-wrap gap-2">
         <button id="btnCopyDesc" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50">Copy Deskripsi</button>
         <button id="btnCopyUrl" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50">Copy Sumber iklan (URL)</button>
+        <button id="btnCopyPack" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50">Copy complaint pack</button>
         <button id="btnOpenForm" class="rounded-lg bg-slate-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-slate-800">Open KKM form ↗</button>
       </div>
-      <!-- A complaint that is not for the KKM cosmetic form: no auto-fill, just that route's own form link. -->
+      <!-- A complaint for another route: that route's cases, checklist and its own form or portal. -->
       <div id="routeFill" class="hidden rounded-xl border border-sky-300 bg-white p-3 space-y-2">
         <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Laluan aduan: <span id="routeName"></span></div>
-        <div id="routeAgency" class="text-xs text-slate-500"></div>
+        <div id="routeAgency" class="text-xs text-slate-600"></div>
+        <div id="routeAct" class="text-xs text-slate-500"></div>
+        <details class="text-xs"><summary class="cursor-pointer text-slate-600">Cases on this route</summary><div id="routeCases" class="mt-1"></div></details>
+        <ul id="routeChecks" class="text-sm space-y-0.5"></ul>
         <label class="block">
-          <span class="text-xs font-medium text-slate-600">Pautan borang aduan untuk laluan ini</span>
+          <span class="text-xs font-medium text-slate-600">Form or portal link for this route <span class="text-slate-400">(a {Column} template fills itself)</span></span>
           <input id="routeFormUrl" placeholder="https://..." class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3">
         </label>
         <div class="flex flex-wrap items-center gap-2">
           <button id="btnRouteSave" type="button" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50">Save link</button>
-          <button id="btnRouteOpen" type="button" disabled class="rounded-lg bg-sky-700 text-white px-3 py-1.5 text-sm font-semibold hover:bg-sky-800 disabled:opacity-40 disabled:cursor-not-allowed">Open complaint form ↗</button>
+          <button id="btnRouteOpen" type="button" disabled class="rounded-lg bg-sky-700 text-white px-3 py-1.5 text-sm font-semibold hover:bg-sky-800 disabled:opacity-40 disabled:cursor-not-allowed">Open ↗</button>
           <span id="routeHint" class="text-xs text-slate-500"></span>
         </div>
       </div>
@@ -199,11 +390,11 @@
           <select id="kkmEmail" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white"></select>
         </label>
         <label class="flex items-start gap-2 text-sm">
-          <input id="kkmConfirm" type="checkbox" class="mt-0.5">
+          <input id="kkmConfirm" type="checkbox" class="mt-0.5 h-5 w-5">
           <span>Saya telah semak semua maklumat di atas dan ia lengkap serta betul.</span>
         </label>
         <div class="flex flex-wrap items-center gap-2">
-          <button id="btnFillForm" disabled class="rounded-lg bg-amber-600 text-white px-3 py-1.5 text-sm font-semibold hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed">Isi borang KKM ↗</button>
+          <button id="btnFillForm" disabled class="rounded-lg bg-amber-600 text-white px-3 py-2 text-sm font-semibold hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed">Isi borang KKM ↗</button>
           <span id="kkmFillHint" class="text-xs text-slate-500"></span>
         </div>
         <div id="kkmLast" class="hidden text-xs text-slate-500 break-all">
@@ -228,15 +419,15 @@
 <!-- TikTok links modal (Links.gs) -->
 <div id="linksModal" class="fixed inset-0 z-50 hidden">
   <div class="absolute inset-0 bg-slate-900/40" data-lclose></div>
-  <div class="absolute inset-x-0 top-6 mx-auto max-w-3xl bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-    <div class="px-5 py-4 border-b border-slate-200 flex items-center">
-      <div>
+  <div class="sheet absolute inset-x-0 top-0 sm:top-6 mx-auto max-w-3xl bg-white rounded-none sm:rounded-2xl shadow-2xl overflow-y-auto">
+    <div class="px-4 sm:px-5 py-4 border-b border-slate-200 flex items-center gap-3" style="padding-top:calc(1rem + var(--sa-top))">
+      <div class="min-w-0">
         <h2 class="font-semibold">TikTok links</h2>
         <p class="text-xs text-slate-500">Paste video links, one per line. They are read within about 15 minutes. A breach (Unacceptable or Risky) waits here for your decision; an acceptable link is cleared and stays in the reviewed history, so it is never read twice.</p>
       </div>
-      <button data-lclose class="ml-auto rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm hover:bg-slate-50">✕</button>
+      <button data-lclose aria-label="Close" class="tap ml-auto shrink-0 rounded-lg border border-slate-300 px-3 text-sm hover:bg-slate-50">✕</button>
     </div>
-    <div class="p-5 space-y-4">
+    <div class="p-4 sm:p-5 space-y-4">
       <textarea id="lText" rows="4" placeholder="https://www.tiktok.com/@handle/video/7123456789012345678&#10;https://vt.tiktok.com/ZSxxxxxxx/" class="w-full rounded-lg border border-slate-300 text-sm py-2 px-3 font-mono"></textarea>
       <div class="flex flex-wrap items-center gap-3">
         <button id="lAdd" class="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">Add links</button>
@@ -261,22 +452,22 @@
 <!-- Held finding: why it was flagged -->
 <div id="ldModal" class="fixed inset-0 z-[60] hidden">
   <div class="absolute inset-0 bg-slate-900/50" data-ldclose></div>
-  <div class="absolute inset-x-0 top-6 mx-auto max-w-2xl bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-    <div class="px-5 py-4 border-b border-slate-200 flex items-start gap-3">
+  <div class="sheet absolute inset-x-0 top-0 sm:top-6 mx-auto max-w-2xl bg-white rounded-none sm:rounded-2xl shadow-2xl overflow-y-auto">
+    <div class="px-4 sm:px-5 py-4 border-b border-slate-200 flex items-start gap-3" style="padding-top:calc(1rem + var(--sa-top))">
       <div class="min-w-0">
         <div class="flex items-center gap-2 flex-wrap"><span id="ldVerdict" class="badge"></span><span id="ldConf" class="text-xs text-slate-500"></span></div>
         <h2 id="ldTitle" class="font-semibold mt-1 break-words"></h2>
         <p id="ldMeta" class="text-xs text-slate-500 mt-0.5"></p>
       </div>
-      <button data-ldclose class="ml-auto rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm hover:bg-slate-50">✕</button>
+      <button data-ldclose aria-label="Close" class="tap ml-auto shrink-0 rounded-lg border border-slate-300 px-3 text-sm hover:bg-slate-50">✕</button>
     </div>
-    <div class="p-5 space-y-4 text-sm">
+    <div class="p-4 sm:p-5 space-y-4 text-sm">
       <section><h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Why it was flagged</h3><div id="ldReason" class="whitespace-pre-wrap text-slate-800"></div></section>
       <section><h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">What the post says</h3><div id="ldText" class="whitespace-pre-wrap text-slate-600 text-[13px] max-h-40 overflow-y-auto rounded-lg bg-slate-50 p-3"></div></section>
       <section id="ldDescWrap"><h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Draft complaint (BM)</h3><div id="ldDesc" class="whitespace-pre-wrap text-slate-600 text-[13px] max-h-40 overflow-y-auto rounded-lg bg-slate-50 p-3"></div></section>
       <div class="flex flex-wrap gap-3 text-sm"><a id="ldVideo" target="_blank" rel="noopener" class="text-blue-700 hover:underline">Open the video ↗</a><a id="ldShot" target="_blank" rel="noopener" class="text-blue-700 hover:underline">Open the screenshot ↗</a></div>
     </div>
-    <div class="px-5 py-4 border-t border-slate-200 flex flex-wrap items-center gap-2">
+    <div class="px-4 sm:px-5 py-4 border-t border-slate-200 flex flex-wrap items-center gap-2" style="padding-bottom:calc(1rem + var(--sa-bottom))">
       <button id="ldFile" class="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">Add to database</button>
       <button id="ldDismiss" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50">Dismiss</button>
       <span id="ldMsg" class="text-xs text-slate-500"></span>
@@ -287,12 +478,12 @@
 <!-- Manual entry modal -->
 <div id="modal" class="fixed inset-0 z-50 hidden">
   <div class="absolute inset-0 bg-slate-900/40" data-close></div>
-  <div class="absolute inset-x-0 top-6 mx-auto max-w-2xl bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-    <div class="px-5 py-4 border-b border-slate-200 flex items-center">
+  <div class="sheet absolute inset-x-0 top-0 sm:top-6 mx-auto max-w-2xl bg-white rounded-none sm:rounded-2xl shadow-2xl overflow-y-auto">
+    <div class="px-4 sm:px-5 py-4 border-b border-slate-200 flex items-center" style="padding-top:calc(1rem + var(--sa-top))">
       <h2 class="font-semibold">Manual entry</h2>
-      <button data-close class="ml-auto rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm hover:bg-slate-50">✕</button>
+      <button data-close aria-label="Close" class="tap ml-auto rounded-lg border border-slate-300 px-3 text-sm hover:bg-slate-50">✕</button>
     </div>
-    <form id="manualForm" class="p-5 grid sm:grid-cols-2 gap-4">
+    <form id="manualForm" class="p-4 sm:p-5 grid sm:grid-cols-2 gap-4" style="padding-bottom:calc(1.25rem + var(--sa-bottom))">
       <label class="block">
         <span class="text-xs font-medium text-slate-600">Brand *</span>
         <input list="brandList" id="mBrand" required class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3">
@@ -326,7 +517,7 @@
         </div>
       </div>
       <label class="block">
-        <span class="text-xs font-medium text-slate-600">Nama kosmetik (product)</span>
+        <span class="text-xs font-medium text-slate-600">Nama produk</span>
         <input id="mNama" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3">
       </label>
       <label class="block">
@@ -334,7 +525,7 @@
         <select id="mType" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white"></select>
       </label>
       <label class="block sm:col-span-2">
-        <span class="text-xs font-medium text-slate-600">Violation reason (quote the claim, cite Annex I Part 8 / Part 10)</span>
+        <span class="text-xs font-medium text-slate-600">Violation reason (quote the claim, cite the instrument)</span>
         <textarea id="mReason" rows="3" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3"></textarea>
       </label>
       <label class="block sm:col-span-2">
@@ -342,11 +533,11 @@
         <textarea id="mText" rows="4" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3"></textarea>
       </label>
       <label class="block sm:col-span-2">
-        <span class="text-xs font-medium text-slate-600">Deskripsi Aduan (BM, for the KKM form)</span>
-        <textarea id="mDeskripsi" rows="5" placeholder="Left blank, it is written from the fields above when you save." class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3"></textarea>
+        <span class="text-xs font-medium text-slate-600">Deskripsi Aduan (BM, for the form)</span>
+        <textarea id="mDeskripsi" rows="5" placeholder="Left blank, it is written from the fields above and the route's legal basis when you save." class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3"></textarea>
       </label>
       <label class="block">
-        <span class="text-xs font-medium text-slate-600">Jenis Aduan</span>
+        <span class="text-xs font-medium text-slate-600">Jenis Aduan (route)</span>
         <select id="mJenis" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white"></select>
       </label>
       <label class="block">
@@ -365,7 +556,7 @@
 <!-- Connect screen -->
 <div id="connect" class="fixed inset-0 z-[55] hidden">
   <div class="absolute inset-0 bg-slate-900/60"></div>
-  <div class="absolute inset-x-0 top-16 mx-auto max-w-md bg-white rounded-2xl shadow-2xl p-6 space-y-4">
+  <div class="absolute inset-x-0 top-10 sm:top-16 mx-4 sm:mx-auto max-w-md bg-white rounded-2xl shadow-2xl p-6 space-y-4">
     <div>
       <h2 class="font-semibold text-lg">Connect to the complaint database</h2>
       <p class="text-sm text-slate-500 mt-1">The key is stored only in this browser. Find it under the sheet's Apps Script → Project Settings → Script properties → <code>DASHBOARD_KEY</code>.</p>
@@ -387,7 +578,7 @@
 </div>
 
 <!-- Toast -->
-<div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] hidden rounded-xl bg-slate-900 text-white text-sm px-4 py-2.5 shadow-lg"></div>
+<div id="toast" class="fixed left-1/2 -translate-x-1/2 z-[70] hidden rounded-xl bg-slate-900 text-white text-sm px-4 py-2.5 shadow-lg max-w-[92vw]" style="bottom:calc(84px + var(--sa-bottom))"></div>
 
 <script>
 // ---------------------------------------------------------------------------
@@ -405,7 +596,8 @@ const STATUS_STYLE = {
   'Complete':    'bg-emerald-100 text-emerald-800',
   'Dismissed':   'bg-slate-200 text-slate-700'
 };
-const state = { rows: [], archived: [], stats: null, lookups: null, statuses: [], filter: { status: '', brand: '', platform: '', q: '' }, current: null, questUrl: '' };
+const state = { rows: [], archived: [], stats: null, summary: null, summaryFrom: '', lookups: null, statuses: [],
+                filter: { status: '', brand: '', platform: '', route: '', q: '' }, current: null, questUrl: '', view: 'home', routesFromBackend: false };
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -417,9 +609,10 @@ function toast(msg, ms = 2600) {
 
 // POST as text/plain: a "simple" request, so the browser sends no CORS preflight
 // (Apps Script cannot answer OPTIONS). Apps Script replies with a 302 that fetch follows.
-async function api(action, payload = {}) {
+// Exports can take minutes (Drive reads for screenshots), so they get a longer timeout.
+async function api(action, payload = {}, timeoutMs = 90000) {
   if (!cfg.backend || !cfg.key) throw new Error('Not connected');
-  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 90000);
+  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeoutMs);
   let r;
   try {
     r = await fetch(cfg.backend, {
@@ -481,8 +674,23 @@ async function connect() {
 }
 function forgetKey() {
   cfg.key = ''; try { localStorage.removeItem('kkm.key'); } catch (e) {}
-  state.rows = []; $('rows').innerHTML = ''; $('stats').innerHTML = ''; showConnect(true, 'Key removed from this browser.');
+  state.rows = []; $('rows').innerHTML = ''; $('cards').innerHTML = ''; $('stats').innerHTML = ''; showConnect(true, 'Key removed from this browser.');
 }
+
+// ---------------------------------------------------------------------------
+// Views (Overview · Complaints · Routes). The hash remembers the view across reloads.
+// ---------------------------------------------------------------------------
+const VIEWS = ['home', 'list', 'routes'];
+function showView(v) {
+  if (!VIEWS.includes(v)) v = 'home';
+  state.view = v;
+  VIEWS.forEach(x => { const el = $('view' + x[0].toUpperCase() + x.slice(1)); if (el) el.classList.toggle('on', x === v); });
+  document.querySelectorAll('[data-nav]').forEach(b => b.classList.toggle('on', b.dataset.nav === v));
+  if (location.hash !== '#' + v && location.hash !== '#settings') history.replaceState(null, '', '#' + v);
+  if (v === 'home') renderHome(); if (v === 'routes') renderRoutes();
+  window.scrollTo({ top: 0 });
+}
+document.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => showView(b.dataset.nav)));
 
 // ---------------------------------------------------------------------------
 // Boot
@@ -494,7 +702,10 @@ async function boot(rethrow) {
     const b = await rpc('apiBootstrap');
     state.rows = b.rows; state.stats = b.stats; state.lookups = b.lookups; state.statuses = b.statuses;
     state.questUrl = b.questUrl; KKM_FORM_URL = b.kkmFormUrl || KKM_FORM_URL;
+    applyRoutes(b.routes);
+    state.summary = b.summary || null; state.summaryFrom = b.summary ? 'server' : '';
     renderLookups(); renderAll(); loadArchived();
+    showView(VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'home');
   } catch (e) {
     $('loading').innerHTML = `<div class="text-sm text-rose-700">${esc(e.message)}</div>`;
     if (rethrow) throw e;
@@ -508,55 +719,133 @@ async function refresh(silent) {
   try {
     const r = await rpc('apiList', {});
     state.rows = r.rows; state.stats = r.stats; renderAll(); loadArchived();
+    if (state.summaryFrom === 'server') { try { state.summary = (await api('summary')).summary; } catch (e) {} }
+    if (state.view === 'home') renderHome(); if (state.view === 'routes') renderRoutes();
     if (!silent) toast('Refreshed');
   } catch (e) { toast('Refresh failed: ' + e.message); }
   finally { btn.disabled = false; btn.innerHTML = was; }
 }
 
 // ---------------------------------------------------------------------------
-// Where a complaint goes (Wan, 3 Oct 2026: "for routing other than iklan kosmetik, make another
-// options like MDA, medical practice etc, so later I can setup to link with relevant complaint form").
-// The value is stored in the sheet's Jenis Aduan column. The first two are the KKM cosmetic form's
-// own options and keep the automatic form fill. Every other route has no form of its own here, so
-// the drawer swaps the KKM panel for a plain "paste the complaint form link" box instead of
-// pre-filling the wrong form. To link one for good, put its URL in `form` below; a link pasted in
-// the drawer is kept in this browser and wins over this file.
+// Routes: where a complaint goes. The catalogue is the backend's (Code.gs ROUTES) and arrives
+// with bootstrap; this file only keeps the seven original values as a fallback so the page still
+// works against an Apps Script that has not been redeployed yet. Each route carries its agency,
+// instrument, cases, the reference number it asks for, its channel and the fields its form
+// needs, so setting up a new form is paste-a-link, not code (Wan, 3 Oct and 9 Oct 2026).
+// A form link saved here goes to Script Properties (every browser); the browser copy is a fallback.
 // ---------------------------------------------------------------------------
-const ROUTES = [
-  { value: 'Iklan Kosmetik', kkm: true },
-  { value: 'Kualiti Kosmetik', kkm: true },
-  { value: 'MDA - Peranti Perubatan', agency: 'Medical Device Authority (MDA)', form: '' },
-  { value: 'Amalan Perubatan (MMC)', agency: 'Medical practice advertising (MMC / KKM medical practice)', form: '' },
-  { value: 'Ubat / Suplemen (Lembaga Iklan Ubat)', agency: 'Medicine and supplement advertising (NPRA / Medicine Advertisements Board)', form: '' },
-  { value: 'Makanan (BKKM)', agency: 'Food advertising (BKKM)', form: '' },
-  { value: 'Lain-lain', agency: 'Other', form: '' }
+const FALLBACK_ROUTES = [
+  { value: 'Iklan Kosmetik', kkm: true, group: 'KKM', agency: 'NPRA', act: '', basis: '', ref: { label: 'Nombor Notifikasi (NOT)', hint: 'NOTxxxxxxxxK — verify on QUEST3+', pattern: '^NOT\\s*\\d' }, cases: [], fields: ['Nama Kosmetik', 'Nombor Notifikasi', 'Post URL', 'Deskripsi Aduan'], channel: { url: '', label: '', status: 'template' } },
+  { value: 'Kualiti Kosmetik', kkm: true, group: 'KKM', agency: 'NPRA', act: '', basis: '', ref: { label: 'Nombor Notifikasi (NOT)', hint: 'NOTxxxxxxxxK — verify on QUEST3+', pattern: '^NOT\\s*\\d' }, cases: [], fields: ['Nama Kosmetik', 'Nombor Notifikasi', 'Post URL', 'Deskripsi Aduan'], channel: { url: '', label: '', status: 'template' } },
+  { value: 'MDA - Peranti Perubatan', group: 'KKM', agency: 'Medical Device Authority (MDA)', act: '', basis: '', ref: { label: 'No. Pendaftaran Peranti MDA', hint: '', pattern: '' }, cases: [], fields: ['Nama Kosmetik', 'Post URL', 'Deskripsi Aduan'], channel: { url: '', label: '', status: 'none' } },
+  { value: 'Amalan Perubatan (MMC)', group: 'KKM', agency: 'CKAPS / MMC', act: '', basis: '', ref: { label: 'No. Pendaftaran MMC / Klinik', hint: '', pattern: '' }, cases: [], fields: ['Brand', 'Post URL', 'Deskripsi Aduan'], channel: { url: '', label: '', status: 'none' } },
+  { value: 'Ubat / Suplemen (Lembaga Iklan Ubat)', group: 'KKM', agency: 'BPF / Lembaga Iklan Ubat', act: '', basis: '', ref: { label: 'No. Kelulusan KKLIU / MAL', hint: '', pattern: '' }, cases: [], fields: ['Nama Kosmetik', 'Post URL', 'Deskripsi Aduan'], channel: { url: '', label: '', status: 'none' } },
+  { value: 'Makanan (BKKM)', group: 'KKM', agency: 'BKKM', act: '', basis: '', ref: { label: 'No. rujukan (jika ada)', hint: '', pattern: '' }, cases: [], fields: ['Nama Kosmetik', 'Post URL', 'Deskripsi Aduan'], channel: { url: '', label: '', status: 'none' } },
+  { value: 'Lain-lain', group: 'Other', agency: 'Other', act: '', basis: '', ref: { label: 'Reference number', hint: '', pattern: '' }, cases: [], fields: ['Post URL', 'Deskripsi Aduan'], channel: { url: '', label: '', status: 'none' } }
 ];
-const ROUTE_VALUES = ROUTES.map(r => r.value);
+let ROUTES = FALLBACK_ROUTES.slice();
+let ROUTE_FORMS = {};
+let ROUTE_VALUES = ROUTES.map(r => r.value);
+function applyRoutes(payload) {
+  if (payload && Array.isArray(payload.routes) && payload.routes.length) {
+    ROUTES = payload.routes; ROUTE_FORMS = payload.forms || {}; state.routesFromBackend = true;
+  } else { ROUTES = FALLBACK_ROUTES.slice(); ROUTE_FORMS = {}; state.routesFromBackend = false; }
+  ROUTE_VALUES = ROUTES.map(r => r.value);
+}
 function routeOf(v) { return ROUTES.find(r => r.value === v) || ROUTES[0]; }
 function isKkmRoute(v) { return !v || !!routeOf(v).kkm || ROUTE_VALUES.indexOf(v) < 0; }
+function routeLocalForms() { try { return JSON.parse(localStorage.getItem('kkm.routeForms') || '{}') || {}; } catch (e) { return {}; } }
+// The form link for a route: Script Properties first (every browser), then this browser, then the catalogue's channel.
 function routeFormUrl(v) {
-  let u = (routeOf(v).form || '').trim();
-  try { const m = JSON.parse(localStorage.getItem('kkm.routeForms') || '{}') || {}; if (m[v]) u = String(m[v]); } catch (e) {}
-  return u;
+  const r = routeOf(v);
+  const shared = (ROUTE_FORMS[v] || '').trim(); if (shared) return shared;
+  const local = routeLocalForms()[v]; if (local) return String(local);
+  return (r.channel && r.channel.url) || '';
 }
-function routeSaveForm(v, url) {
-  let m = {}; try { m = JSON.parse(localStorage.getItem('kkm.routeForms') || '{}') || {}; } catch (e) {}
-  if (url) m[v] = url; else delete m[v];
-  try { localStorage.setItem('kkm.routeForms', JSON.stringify(m)); return true; } catch (e) { return false; }
+async function routeSaveForm(v, url) {
+  let m = routeLocalForms(); if (url) m[v] = url; else delete m[v];
+  try { localStorage.setItem('kkm.routeForms', JSON.stringify(m)); } catch (e) {}
+  if (!state.routesFromBackend) return 'browser';
+  try { const d = await api('set_route_form', { route: v, url }); ROUTE_FORMS = d.forms || ROUTE_FORMS; return 'shared'; }
+  catch (e) { if (/Unknown action/.test(e.message)) return 'browser'; throw e; }
+}
+function routeIsTemplate(u) { return /\{[^{}]+\}/.test(u || ''); }
+const CHANNEL_BADGE = { loads: ['bg-emerald-100 text-emerald-800', 'portal answered'], down: ['bg-red-100 text-red-800', 'portal down at check'], unverified: ['bg-amber-100 text-amber-900', 'unverified'], template: ['bg-blue-100 text-blue-800', 'Google Form template'], none: ['bg-slate-100 text-slate-700', 'no channel yet'] };
+function routeDescription(route, v) {
+  // Mirror of Code.gs buildComplaintDescription_: the BM draft for a route, built from the row.
+  const product = v['Nama Kosmetik'] || '[SAHKAN: nama produk]';
+  const refLabel = (route.ref && route.ref.label) || 'Nombor rujukan';
+  const ref = v['Nombor Notifikasi'] || (route.kkm ? '[SAHKAN: semak QUEST3+]' : (route.ref && route.ref.pattern ? '[SAHKAN: ' + refLabel + ']' : 'tiada'));
+  const heading = route.kkm
+    ? (route.value === 'Kualiti Kosmetik' ? 'Aduan kualiti produk kosmetik bernotifikasi.' : 'Aduan iklan kosmetik bernotifikasi.')
+    : 'Aduan ' + route.value.replace(/\s*\(.*\)\s*$/, '').toLowerCase() + ' — untuk perhatian ' + ((route.agency || '').split(' — ')[0] || route.agency) + '.';
+  const lines = [heading,
+    'Jenama: ' + (v['Brand'] || '-') + '. Produk: ' + product + '. Platform: ' + (v['Platform'] || '-') + '.',
+    'Pautan iklan: ' + (v['Post URL'] || '-'),
+    'Dakwaan yang dikesan: ' + (v['Violation Reason'] || '-'),
+    'Jenis pelanggaran: ' + (v['Violation Type'] || '-') + '.'];
+  if (route.basis) lines.push(route.basis);
+  lines.push('Tangkapan skrin dilampirkan. ' + refLabel + ': ' + ref + '.');
+  return lines.join('\n');
+}
+// Everything an agency's form asks for, as labelled text, in the route's field order.
+function routePack(route, v) {
+  const label = { 'Nama Kosmetik': 'Nama produk', 'Nombor Notifikasi': (route.ref && route.ref.label) || 'Nombor rujukan', 'Jenis Aduan': 'Jenis aduan', 'Platform': 'Platform',
+                  'Post URL': 'Pautan iklan', 'Brand': 'Jenama / akaun', 'Date': 'Tarikh dikesan', 'Deskripsi Aduan': 'Deskripsi aduan', 'Screenshot Link': 'Tangkapan skrin' };
+  const out = ['ADUAN ' + (v['ID'] || '') + ' — ' + route.value, 'Agensi: ' + (route.agency || '-')];
+  if (route.act) out.push('Instrumen: ' + route.act);
+  out.push('');
+  (route.fields || []).forEach(f => { const val = v[f]; out.push((label[f] || f) + ': ' + (val == null || val === '' ? '-' : String(val))); });
+  out.push('', 'Alasan (dengan petikan): ' + (v['Violation Reason'] || '-'));
+  return out.join('\n');
+}
+function routeChecks(route, v) {
+  const open = s => /\[(SAHKAN|VERIFY)\b/i.test(s || '');
+  const st = v['Status'] || '';
+  const refNeeded = !!(route.ref && route.ref.pattern);
+  const checks = [
+    [st !== 'Complete' && st !== 'Dismissed', st === 'Complete' ? 'Status: Complete — already filed. Click "Mark In-Progress" first if not.' : (st === 'Dismissed' ? 'Status: Dismissed. Click "Mark In-Progress" to file it.' : `Status ready to file (${st || '-'})`), true],
+    [!!v['Post URL'], 'Post URL present', true],
+    [!!v['Nama Kosmetik'], 'Product named', true],
+    [!refNeeded || !!v['Nombor Notifikasi'], (route.ref && route.ref.label || 'Reference') + (refNeeded ? ' filled' : ' (optional)'), refNeeded],
+    [!v['Nombor Notifikasi'] || !refNeeded || new RegExp(route.ref.pattern, 'i').test(v['Nombor Notifikasi']), (route.ref && route.ref.hint) || 'Reference format', false],
+    [!!v['Deskripsi Aduan'], 'Deskripsi Aduan written', true],
+    [!open(v['Deskripsi Aduan']) && !open(v['Violation Reason']) && !open(v['Remarks']), 'No [SAHKAN: …] / [VERIFY …] left', true],
+    [!!v['Screenshot Link'], 'Screenshot on the row (attach it yourself)', false]
+  ];
+  return checks;
 }
 function updateRouteUi() {
   const v = $('eJenis').value; const kkm = isKkmRoute(v);
+  const r = routeOf(v);
   const fill = $('kkmFill'), box = $('routeFill'), open = $('btnOpenForm');
   if (!fill || !box) return;
+  $('eNotLabel').textContent = (r.ref && r.ref.label) || 'Nombor Notifikasi (NOT)';
+  $('eNot').placeholder = (r.ref && r.ref.hint) || '';
+  $('dAgency').textContent = r.agency || '—';
+  $('formTitle').textContent = kkm ? 'Borang KKM — Pelaporan Aduan Kosmetik Bernotifikasi' : 'Aduan — ' + r.value;
+  $('questLink').classList.toggle('hidden', !kkm);
   fill.classList.toggle('hidden', !kkm); box.classList.toggle('hidden', kkm);
   if (open) open.classList.toggle('hidden', !kkm);
   if (kkm) return;
-  const r = routeOf(v); const url = routeFormUrl(v);
+  const url = routeFormUrl(v);
   $('routeName').textContent = v;
   $('routeAgency').textContent = r.agency || '';
+  $('routeAct').textContent = r.act ? 'Instrument: ' + r.act : '';
+  $('routeCases').innerHTML = (r.cases || []).map(c => `<span class="chip-case">${esc(c)}</span>`).join('') || '<span class="text-slate-400">—</span>';
+  const vals = kkmValues(); const checks = routeChecks(r, vals);
+  const list = $('routeChecks'); list.textContent = '';
+  checks.forEach(([ok, text, hard]) => { const li = document.createElement('li'); li.className = ok ? 'text-emerald-700' : (hard ? 'text-rose-700' : 'text-amber-700'); li.textContent = (ok ? '✓ ' : (hard ? '✗ ' : '! ')) + text; list.appendChild(li); });
   $('routeFormUrl').value = url;
-  $('btnRouteOpen').disabled = !/^https?:\/\//i.test(url);
-  $('routeHint').textContent = url ? '' : 'No complaint form linked for this route yet. Paste its link above and press Save. Copy Deskripsi and Copy Sumber iklan still work.';
+  const hardOk = checks.every(([ok, , hard]) => ok || !hard);
+  const isTpl = routeIsTemplate(url);
+  $('btnRouteOpen').textContent = isTpl ? 'Isi borang ↗' : 'Open complaint channel ↗';
+  $('btnRouteOpen').disabled = !/^https?:\/\//i.test(url) || (isTpl && !hardOk);
+  const ch = r.channel || {};
+  $('routeHint').textContent = url
+    ? (isTpl ? (hardOk ? 'Template set: opens the form with this complaint filled in. It never submits.' : 'Complete the ✗ items before the form can be filled.')
+             : (ch.label ? ch.label + (ch.status === 'down' ? ' — the portal was down when last checked.' : '') : 'Opens the saved link.'))
+    : 'No form or portal linked yet. Paste its link above and press Save; Copy Deskripsi and Copy complaint pack still work.';
 }
 
 // ---------------------------------------------------------------------------
@@ -570,8 +859,8 @@ function renderLookups() {
   };
   fill('fBrand', L.brands, true); fill('fPlatform', L.platforms, true);
   fill('eViolationType', L.violationTypes); fill('mType', L.violationTypes);
-  const jenis = (L.jenisAduan || []).concat(ROUTE_VALUES.filter(v => (L.jenisAduan || []).indexOf(v) < 0));
-  fill('eJenis', jenis); fill('mJenis', jenis);
+  const jenis = ROUTE_VALUES.concat((L.jenisAduan || []).filter(v => ROUTE_VALUES.indexOf(v) < 0));
+  fill('eJenis', jenis); fill('mJenis', jenis); fill('fRoute', jenis, true);
   $('brandList').innerHTML = L.brands.map(v => `<option value="${esc(v)}">`).join('');
   $('platformList').innerHTML = L.platforms.map(v => `<option value="${esc(v)}">`).join('');
   $('questLink').href = state.questUrl;
@@ -589,7 +878,7 @@ function openKkmForm(ev) {
     .catch(e => toast('Could not save: ' + e.message, 4000));
 }
 
-function renderAll() { renderStats(); renderChips(); renderTable(); }
+function renderAll() { renderStats(); renderChips(); renderTable(); $('navListCount').textContent = state.rows.length ? `(${state.rows.length})` : ''; }
 
 // A complaint KKM has replied to is "archived" by the backend: it leaves the working list and is no
 // longer counted under its Status, so the Complete tile read 0 while the Complete filter still showed
@@ -612,6 +901,7 @@ async function loadArchived() {
   try { state.archived = (await rpc('apiList', { status: 'Archived' })).rows || []; }
   catch (e) { state.archived = []; }
   if (state.filter.status === 'Complete' || state.filter.status === '') renderAll(); else renderStats();
+  if (!state.summary && state.view === 'home') renderHome();
 }
 
 function renderStats() {
@@ -622,7 +912,7 @@ function renderStats() {
     ['Total', c.total || 0, 'text-slate-900']
   ];
   $('stats').innerHTML = tiles.map(([label, n, cls]) => `
-    <button data-tile="${label === 'Total' ? '' : label}" class="text-left bg-white rounded-2xl border ${state.filter.status === label ? 'border-slate-900' : 'border-slate-200'} p-4 hover:border-slate-400">
+    <button data-tile="${label === 'Total' ? '' : label}" class="text-left bg-white rounded-2xl border ${state.filter.status === label ? 'border-slate-900' : 'border-slate-200'} p-3 sm:p-4 hover:border-slate-400">
       <div class="text-xs text-slate-500">${label}</div>
       <div class="text-2xl font-bold ${cls}">${n}</div>
     </button>`).join('');
@@ -643,6 +933,7 @@ function filtered() {
     (!f.status || r['Status'] === f.status) &&
     (!f.brand || r['Brand'] === f.brand) &&
     (!f.platform || r['Platform'] === f.platform) &&
+    (!f.route || (r['Jenis Aduan'] || 'Iklan Kosmetik') === f.route) &&
     (!q || ['Extracted Text','Nama Kosmetik','Violation Reason','Violation Type','Post URL','Remarks','ID','KKM Feedback'].some(k => String(r[k] || '').toLowerCase().includes(q))));
 }
 
@@ -651,21 +942,320 @@ function renderTable() {
   const rows = filtered();
   $('count').textContent = `${rows.length} of ${state.filter.status === 'Complete' ? completeCount() : state.rows.length}`;
   $('empty').classList.toggle('hidden', rows.length > 0);
+  const routeTag = r => (r['Jenis Aduan'] && r['Jenis Aduan'] !== 'Iklan Kosmetik') ? `<div class="text-[11px] text-sky-700 mt-0.5 truncate">${esc(r['Jenis Aduan'])}</div>` : '';
   $('rows').innerHTML = rows.map(r => `
     <tr data-id="${esc(r['ID'])}" class="row-hover cursor-pointer">
       <td class="px-4 py-3 whitespace-nowrap text-slate-600">${esc(r['Date'])}</td>
       <td class="px-4 py-3 font-medium">${esc(r['Brand'])}</td>
       <td class="px-4 py-3">${esc(r['Platform'])}</td>
-      <td class="px-4 py-3 max-w-[200px] truncate">${esc(r['Nama Kosmetik'] || '—')}</td>
+      <td class="px-4 py-3 max-w-[200px]"><div class="truncate">${esc(r['Nama Kosmetik'] || '—')}</div>${routeTag(r)}</td>
       <td class="px-4 py-3 max-w-[340px]"><div class="font-medium">${esc(r['Violation Type'])}</div><div class="text-xs text-slate-500 clamp-2">${esc(r['Violation Reason'])}</div></td>
-      <td class="px-4 py-3"><span class="badge ${STATUS_STYLE[r['Status']] || 'bg-slate-100'}">${esc(r['Status'])}</span>${r['KKM Feedback'] ? '<div class="text-[11px] text-emerald-700 mt-1">KKM replied</div>' : ''}</td>
+      <td class="px-4 py-3"><span class="badge ${STATUS_STYLE[r['Status']] || 'bg-slate-100'}">${esc(r['Status'])}</span>${r['KKM Feedback'] ? '<div class="text-[11px] text-emerald-700 mt-1">Replied</div>' : ''}</td>
       <td class="px-4 py-3 whitespace-nowrap text-xs">
         <a href="${esc(r['Post URL'])}" target="_blank" rel="noopener" class="text-blue-700 underline mr-2" onclick="event.stopPropagation()">post</a>
         ${r['Screenshot Link'] ? `<a href="${esc(r['Screenshot Link'])}" target="_blank" rel="noopener" class="text-blue-700 underline" onclick="event.stopPropagation()">shot</a>` : '<span class="text-slate-400">no shot</span>'}
       </td>
     </tr>`).join('');
   $('rows').querySelectorAll('tr[data-id]').forEach(tr => tr.onclick = () => openRow(tr.dataset.id));
+  // Phone cards: the same rows, one card each, thumb-sized targets.
+  $('cards').innerHTML = rows.map(r => `
+    <button data-id="${esc(r['ID'])}" class="w-full text-left px-4 py-3 active:bg-slate-50">
+      <div class="flex items-center gap-2">
+        <span class="font-medium truncate">${esc(r['Brand'])}</span>
+        <span class="text-xs text-slate-500 shrink-0">· ${esc(r['Platform'])}</span>
+        <span class="badge ml-auto shrink-0 ${STATUS_STYLE[r['Status']] || 'bg-slate-100'}">${esc(r['Status'])}</span>
+      </div>
+      <div class="text-xs text-slate-500 mt-0.5">${esc(r['Date'])} · ${esc(r['Nama Kosmetik'] || 'product not named')}${r['Jenis Aduan'] && r['Jenis Aduan'] !== 'Iklan Kosmetik' ? ' · ' + esc(r['Jenis Aduan']) : ''}${r['KKM Feedback'] ? ' · <span class="text-emerald-700">replied</span>' : ''}</div>
+      <div class="text-sm mt-1 font-medium">${esc(r['Violation Type'])}</div>
+      <div class="text-xs text-slate-500 clamp-2">${esc(r['Violation Reason'])}</div>
+    </button>`).join('');
+  $('cards').querySelectorAll('button[data-id]').forEach(b => b.onclick = () => openRow(b.dataset.id));
 }
+
+// ---------------------------------------------------------------------------
+// Overview (home). Figures come from the backend's `summary` (every row, archive included);
+// on an older backend they are computed from the rows the page holds, and the subtitle says so.
+// Charts are plain HTML and inline SVG: one hue for magnitude, status colours only for status,
+// a legend-free bar list because each row is labelled, and a hover title on every mark.
+// ---------------------------------------------------------------------------
+function clientSummary() {
+  const all = [...state.rows, ...(state.archived || [])]; const seen = new Set();
+  const s = { byStatus: { total: 0 }, byMonth: {}, byRoute: {}, byPlatform: {}, byBrand: {}, byType: {}, bySource: {}, filed: 0, replied: 0, lagMedianDays: null, lagCount: 0, last7: 0, last30: 0, oldestNewDays: null };
+  const now = Date.now(), day = 86400000, lags = []; let oldest = null;
+  for (const r of all) {
+    if (seen.has(r['ID'])) continue; seen.add(r['ID']);
+    const archived = !!r['KKM Feedback']; const st = archived ? 'Archived' : (r['Status'] || 'New');
+    s.byStatus.total++; s.byStatus[st] = (s.byStatus[st] || 0) + 1;
+    const m = String(r['Date'] || '').slice(0, 7) || 'unknown'; const mm = s.byMonth[m] || (s.byMonth[m] = { total: 0 }); mm.total++; mm[st] = (mm[st] || 0) + 1;
+    const route = r['Jenis Aduan'] || 'Iklan Kosmetik'; const rr = s.byRoute[route] || (s.byRoute[route] = { total: 0, filed: 0, replied: 0, open: 0 }); rr.total++;
+    if (r['Tarikh Melapor']) { s.filed++; rr.filed++; const d0 = new Date(r['Date']), d1 = new Date(r['Tarikh Melapor']); if (!isNaN(d0) && !isNaN(d1)) lags.push(Math.max(0, Math.round((d1 - d0) / day))); }
+    if (archived) { s.replied++; rr.replied++; } if (st === 'New' || st === 'In-Progress') rr.open++;
+    s.byPlatform[r['Platform'] || '-'] = (s.byPlatform[r['Platform'] || '-'] || 0) + 1;
+    s.byBrand[r['Brand'] || '-'] = (s.byBrand[r['Brand'] || '-'] || 0) + 1;
+    s.byType[r['Violation Type'] || '-'] = (s.byType[r['Violation Type'] || '-'] || 0) + 1;
+    s.bySource[r['Source'] || '-'] = (s.bySource[r['Source'] || '-'] || 0) + 1;
+    const cd = new Date(r['Created At'] || r['Date']); if (!isNaN(cd)) { const age = (now - cd) / day; if (age <= 7) s.last7++; if (age <= 30) s.last30++; if (st === 'New' && (!oldest || cd < oldest)) oldest = cd; }
+  }
+  lags.sort((a, b) => a - b); s.lagCount = lags.length;
+  s.lagMedianDays = lags.length ? (lags.length % 2 ? lags[(lags.length - 1) / 2] : Math.round((lags[lags.length / 2 - 1] + lags[lags.length / 2]) / 2)) : null;
+  s.oldestNewDays = oldest ? Math.round((now - oldest) / day) : null;
+  return s;
+}
+function barList(el, pairs, opts = {}) {
+  const items = pairs.filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+  const top = opts.top ? items.slice(0, opts.top) : items;
+  const rest = items.length - top.length; const max = Math.max(1, ...top.map(x => x[1]));
+  const total = items.reduce((a, [, n]) => a + n, 0) || 1;
+  el.innerHTML = top.map(([label, n, color, click]) => `
+    <div class="row grid items-center gap-2 py-1 ${click ? 'cursor-pointer' : ''}" style="grid-template-columns:minmax(0,1fr) minmax(0,42%) 3.2rem" title="${esc(label)}: ${n} (${Math.round(n / total * 100)}%)" ${click ? `data-click="${esc(click)}"` : ''}>
+      <div class="text-xs truncate">${esc(label)}</div>
+      <div class="bar" style="width:${Math.max(2, n / max * 100)}%;${color ? 'background:' + color : ''}"></div>
+      <div class="text-xs text-right tabular-nums"><b>${n}</b> <span class="text-slate-400">${Math.round(n / total * 100)}%</span></div>
+    </div>`).join('') + (rest > 0 ? `<div class="text-[11px] text-slate-400 mt-1">+ ${rest} more</div>` : '') || '<div class="text-xs text-slate-400">No data yet.</div>';
+  if (opts.onClick) el.querySelectorAll('[data-click]').forEach(d => d.onclick = () => opts.onClick(d.dataset.click));
+}
+function monthChart(el, byMonth) {
+  const keys = Object.keys(byMonth).filter(k => /^\d{4}-\d{2}$/.test(k)).sort();
+  const last = keys.slice(-12);
+  if (!last.length) { el.innerHTML = '<div class="text-xs text-slate-400">No dated complaints yet.</div>'; return; }
+  const vals = last.map(k => byMonth[k].total || 0); const max = Math.max(1, ...vals);
+  const W = Math.max(420, last.length * 56), H = 190, padL = 8, padB = 28, padT = 18; const bw = (W - padL * 2) / last.length; const plotH = H - padB - padT;
+  const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const iMax = vals.indexOf(max);
+  let s = `<svg class="vbars" viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="min-width:${Math.min(W, 420)}px" role="img" aria-label="Complaints detected per month, last ${last.length} months">`;
+  s += `<line x1="${padL}" y1="${H - padB}" x2="${W - padL}" y2="${H - padB}"/>`;
+  last.forEach((k, i) => {
+    const v = vals[i]; const h = Math.round(v / max * plotH); const x = padL + i * bw + bw * 0.18, w = bw * 0.64, y = H - padB - h;
+    const [yy, mm] = k.split('-'); const lab = names[+mm - 1] + ' ' + yy.slice(2);
+    s += `<rect class="bar" x="${x.toFixed(1)}" y="${y}" width="${w.toFixed(1)}" height="${Math.max(h, v ? 2 : 0)}" rx="4"><title>${esc(lab)}: ${v} complaint${v === 1 ? '' : 's'}</title></rect>`;
+    if (i === iMax || i === last.length - 1) s += `<text class="v" x="${(x + w / 2).toFixed(1)}" y="${y - 5}" text-anchor="middle">${v}</text>`;
+    s += `<text x="${(x + w / 2).toFixed(1)}" y="${H - 10}" text-anchor="middle">${esc(lab)}</text>`;
+  });
+  s += '</svg>';
+  el.innerHTML = s;
+  $('monthNote').textContent = `${last.length} month${last.length === 1 ? '' : 's'} · peak ${max}`;
+}
+function renderHome() {
+  const s = state.summary || clientSummary();
+  const fromRows = !state.summary;
+  const bs = s.byStatus || {};
+  const open = (bs['New'] || 0) + (bs['In-Progress'] || 0);
+  $('homeSub').textContent = (fromRows ? 'Figures from the rows this page holds (redeploy Code.gs for the full sheet). ' : 'Every row in the sheet, archive included. ') + `Updated ${new Date().toLocaleString()}.`;
+  const tile = (label, n, color, sub, view) => `<button data-tile-view="${view || ''}" class="text-left bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 hover:border-slate-400"><div class="text-xs text-slate-500">${label}</div><div class="text-2xl font-bold" style="color:${color}">${n}</div>${sub ? `<div class="text-[11px] text-slate-400 mt-0.5">${sub}</div>` : ''}</button>`;
+  $('homeTiles').innerHTML = [
+    tile('Open', open, 'var(--ink)', 'New + In-Progress', ''), tile('New', bs['New'] || 0, 'var(--st-new)', 'not yet opened', 'New'),
+    tile('In-Progress', bs['In-Progress'] || 0, 'var(--st-prog)', 'being worked', 'In-Progress'), tile('Complete', bs['Complete'] || 0, 'var(--st-done)', 'filed, awaiting reply', 'Complete'),
+    tile('Replied', bs['Archived'] || 0, 'var(--st-replied)', 'agency answered', 'Complete'), tile('Dismissed', bs['Dismissed'] || 0, 'var(--st-dismissed)', 'false positives', 'Dismissed')
+  ].join('');
+  $('homeTiles').querySelectorAll('[data-tile-view]').forEach(b => b.onclick = () => { state.filter.status = b.dataset.tileView; renderAll(); showView('list'); });
+  const kpi = (label, v, sub) => `<div class="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4"><div class="text-xs text-slate-500">${label}</div><div class="text-xl font-bold">${v}</div><div class="text-[11px] text-slate-400 mt-0.5">${sub || ''}</div></div>`;
+  $('homeKpis').innerHTML = [
+    kpi('Total in the database', bs.total || 0, 'all rows, every status'),
+    kpi('Detected in the last 7 days', s.last7 || 0, `${s.last30 || 0} in the last 30 days`),
+    kpi('Median days detection → filing', s.lagMedianDays == null ? '—' : s.lagMedianDays, s.lagCount ? `over ${s.lagCount} filed complaint${s.lagCount === 1 ? '' : 's'}` : 'none filed yet'),
+    kpi('Oldest untouched New', s.oldestNewDays == null ? '—' : s.oldestNewDays + ' d', s.oldestNewDays == null ? 'queue is clear' : 'days waiting')
+  ].join('');
+  monthChart($('chartMonths'), s.byMonth || {});
+  const total = bs.total || 0, filed = s.filed || 0, replied = s.replied || 0;
+  const step = (label, n, pct, color) => `<div><div class="flex justify-between text-xs"><span>${label}</span><span class="tabular-nums"><b>${n}</b>${pct != null ? ` <span class="text-slate-400">${pct}%</span>` : ''}</span></div><div class="h-2.5 rounded bg-slate-100 mt-1 overflow-hidden"><div class="h-full rounded" style="width:${total ? Math.max(1, n / total * 100) : 0}%;background:${color}"></div></div></div>`;
+  $('funnel').innerHTML = step('Detected', total, null, 'var(--series-1)') + step('Filed (Tarikh Melapor)', filed, total ? Math.round(filed / total * 100) : 0, 'var(--st-done)') + step('Replied by the agency', replied, total ? Math.round(replied / total * 100) : 0, 'var(--st-replied)')
+    + `<p class="text-[11px] text-slate-400 pt-1">Dismissed rows count as detected and not filed. A reply moves a complaint to the archive.</p>`;
+  const stColor = { 'New': 'var(--st-new)', 'In-Progress': 'var(--st-prog)', 'Complete': 'var(--st-done)', 'Archived': 'var(--st-replied)', 'Dismissed': 'var(--st-dismissed)' };
+  barList($('chartStatus'), ['New', 'In-Progress', 'Complete', 'Archived', 'Dismissed'].map(k => [k === 'Archived' ? 'Replied (archived)' : k, bs[k] || 0, stColor[k], k === 'Archived' ? 'Complete' : k]), { onClick: v => { state.filter.status = v; renderAll(); showView('list'); } });
+  const routePairs = Object.keys(s.byRoute || {}).map(k => [k, s.byRoute[k].total || 0, null, k]);
+  barList($('chartRoute'), routePairs, { onClick: v => { state.filter.route = v; $('fRoute').value = v; renderAll(); showView('list'); } });
+  barList($('chartPlatform'), Object.entries(s.byPlatform || {}).map(([k, n]) => [k, n, null, k]), { onClick: v => { state.filter.platform = v; $('fPlatform').value = v; renderAll(); showView('list'); } });
+  barList($('chartBrand'), Object.entries(s.byBrand || {}).map(([k, n]) => [k, n, null, k]), { top: 10, onClick: v => { state.filter.brand = v; $('fBrand').value = v; renderAll(); showView('list'); } });
+  barList($('chartType'), Object.entries(s.byType || {}).map(([k, n]) => [k, n]), { top: 12 });
+  barList($('chartSource'), Object.entries(s.bySource || {}).map(([k, n]) => [k, n]));
+  drawConnectionMap($('cmap'), LANES);
+}
+
+// "How they connect": one row per runner, read from the repo's own workflow triggers (9 Oct 2026):
+// scraper.yml has NO schedule (dispatch only; the Claude chain re-arms it run by run), tiktok-links.yml
+// carries a cron GitHub has never fired (manual poll stands in), pages.yml deploys on push to main.
+const LANES = [
+  { lane: 'Sweep (kkm-complaints)', c: '--lane-sweep', rows: [
+    { src: [['scraper.yml', 'wanshah07/kkm-complaints · main'], ['Targets tab', 'Google Sheet · brands and handles']], run: ['Person / web sweep', 'Claude chain · one run after another'], kind: 'routine', a1: 'dispatch',
+      dst: [['Complaints tab', 'Google Sheet · one row per finding'], ['Reviewed ledger', 'never reads a post twice']] },
+    { src: [['tiktok-links.yml', 'links pasted in the dashboard']], run: ['TikTok link review', 'cron set, not fired by GitHub · polled by hand'], kind: 'off', a1: 'claims 10',
+      dst: [['Links tab', 'held findings wait for a decision']] }
+  ] },
+  { lane: 'Dashboard', c: '--lane-dash', rows: [
+    { src: [['web/index.html', 'this page']], run: ['pages.yml', 'on push to main'], kind: 'push', a1: 'deploy', dst: [['aduan.kkmhalalconsultant.com', 'GitHub Pages']], a2: 'publish' },
+    { src: [['Code.gs + Links.gs', 'Apps Script on the sheet']], run: ['Web app /exec', 'on request · DASHBOARD_KEY'], kind: 'push', a1: 'JSON', dst: [['Overview · queue · routes', 'what you are reading']] }
+  ] },
+  { lane: 'Filing', c: '--lane-file', rows: [
+    { src: [['Drawer', 'checked complaint + screenshot']], run: ['You press Submit', 'KKM form · SisPAA · FEMES · MCMC …'], kind: 'push', a1: 'fill / copy',
+      dst: [['Tarikh Melapor', 'Complete'], ['Agency reply', 'KKM Feedback → archived']] }
+  ] }
+];
+function drawConnectionMap(el, LANES, opts = {}) {
+  const cols = opts.cols || ['SOURCE', 'RUNS IT · WHEN', 'LANDS IN'];
+  const KIND = { routine: { stroke: '--accent', fill: '--accent-soft', dash: '' }, cron: { stroke: '--warn', fill: '--warn-bg', dash: '5 3' }, push: { stroke: '--muted', fill: '--surface', dash: '5 3' }, off: { stroke: '--crit', fill: '--crit-bg', dash: '3 3' } };
+  const W = opts.width || 1000, X = [20, 375, 700], BW = [250, 245, 280];
+  const BH = 40, GAP = 8, ROWPAD = 14, LANEHEAD = 26;
+  const e = t => String(t).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  const box = (x, y, w, [main, sub], c, o = {}) =>
+    `<rect x="${x}" y="${y}" width="${w}" height="${BH}" rx="7" fill="var(${o.fill || '--surface'})" stroke="var(${o.stroke || c})" stroke-width="1.5" ${o.dash ? `stroke-dasharray="${o.dash}"` : ''}/>` +
+    `<text class="t-main" x="${x + 11}" y="${y + 17}">${e(main)}</text><text class="${o.subClass || 't-sub'}" x="${x + 11}" y="${y + 32}">${e(sub || '')}</text>`;
+  const arrow = (x1, y1, x2, y2, label) => {
+    const mx = (x1 + x2) / 2;
+    const d = y1 === y2 ? `M${x1} ${y1} L${x2 - 6} ${y2}` : `M${x1} ${y1} C${mx} ${y1} ${mx} ${y2} ${x2 - 6} ${y2}`;
+    return `<path d="${d}" fill="none" stroke="var(--muted)" stroke-width="1.2" marker-end="url(#cmap-ah)"/>` + (label ? `<text class="t-arrow" x="${mx}" y="${Math.min(y1, y2) - 6}" text-anchor="middle">${e(label)}</text>` : '');
+  };
+  const stackY = (n, top, h) => Array.from({ length: n }, (_, i) => top + (h - (n * BH + (n - 1) * GAP)) / 2 + i * (BH + GAP));
+  let y = 24;
+  let s = cols.map((c, i) => `<text class="t-lane" x="${X[i]}" y="14">${e(c)}</text>`).join('');
+  for (const L of LANES) {
+    s += `<text class="t-lane" x="${X[0]}" y="${y + LANEHEAD - 8}" style="fill:var(${L.c})">${e(L.lane.toUpperCase())}</text>`;
+    y += LANEHEAD;
+    for (const r of L.rows) {
+      const n = Math.max(r.src.length, r.dst.length);
+      const h = n * BH + (n - 1) * GAP, mid = y + h / 2, k = KIND[r.kind] || KIND.push;
+      const sy = stackY(r.src.length, y, h), dy = stackY(r.dst.length, y, h);
+      r.src.forEach((b, i) => { s += box(X[0], sy[i], BW[0], b, L.c) + arrow(X[0] + BW[0], sy[i] + BH / 2, X[1], mid, i === 0 ? r.a1 : ''); });
+      s += box(X[1], mid - BH / 2, BW[1], r.run, L.c, { stroke: k.stroke, fill: k.fill, dash: k.dash, subClass: r.kind === 'off' ? 't-off' : 't-sub' });
+      r.dst.forEach((b, i) => { s += arrow(X[1] + BW[1], mid, X[2], dy[i] + BH / 2, r.dst.length === 1 ? r.a2 : '') + box(X[2], dy[i], BW[2], b, L.c); });
+      y += h + ROWPAD;
+    }
+    y += 6;
+  }
+  const H = y + 4;
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${e(opts.label || 'How the parts connect: source, what runs it and when, and where it lands.')}">` +
+    `<defs><marker id="cmap-ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker></defs>` + s + `</svg>`;
+}
+
+// ---------------------------------------------------------------------------
+// Routes view: one card per route, with the live count from the summary and the form link box.
+// ---------------------------------------------------------------------------
+function renderRoutes() {
+  const s = state.summary || clientSummary();
+  $('routesNote').classList.toggle('hidden', state.routesFromBackend);
+  if (!state.routesFromBackend) $('routesNote').textContent = 'The backend does not carry the route catalogue yet: paste the new Code.gs into Apps Script and publish a new version. Until then the seven original routes are shown without their details, and a form link saved here stays in this browser.';
+  $('routeCards').innerHTML = ROUTES.map((r, i) => {
+    const c = (s.byRoute || {})[r.value] || { total: 0, open: 0, filed: 0, replied: 0 };
+    const ch = r.channel || {}; const [bcls, btext] = CHANNEL_BADGE[ch.status] || CHANNEL_BADGE.none;
+    const url = routeFormUrl(r.value); const shared = !!(ROUTE_FORMS[r.value] || '').trim();
+    return `<div class="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col gap-3" data-route-card="${i}">
+      <div class="flex items-start gap-2">
+        <div class="min-w-0"><div class="font-semibold leading-tight">${esc(r.value)}</div><div class="text-xs text-slate-500 mt-0.5">${esc(r.agency || '')}</div></div>
+        <span class="badge ml-auto shrink-0 ${r.group === 'KKM' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700'}">${esc(r.group || '')}</span>
+      </div>
+      <div class="grid grid-cols-4 gap-2 text-center">
+        ${[['total', c.total], ['open', c.open], ['filed', c.filed], ['replied', c.replied]].map(([l, n]) => `<button data-route-filter="${esc(r.value)}" class="rounded-lg bg-slate-50 py-1.5 hover:bg-slate-100"><div class="text-base font-bold tabular-nums">${n || 0}</div><div class="text-[10px] uppercase tracking-wide text-slate-500">${l}</div></button>`).join('')}
+      </div>
+      ${r.act ? `<div class="text-xs"><span class="font-semibold text-slate-600">Instrument</span><div class="text-slate-600 mt-0.5">${esc(r.act)}</div></div>` : ''}
+      <div class="text-xs"><span class="font-semibold text-slate-600">Reference asked for</span><div class="text-slate-600 mt-0.5">${esc(r.ref && r.ref.label || '—')}${r.ref && r.ref.hint ? ` <span class="text-slate-400">· ${esc(r.ref.hint)}</span>` : ''}</div></div>
+      ${(r.cases || []).length ? `<details class="text-xs"><summary class="cursor-pointer font-semibold text-slate-600">Cases on this route (${r.cases.length})</summary><div class="mt-1">${r.cases.map(x => `<span class="chip-case">${esc(x)}</span>`).join('')}</div></details>` : ''}
+      <div class="text-xs"><span class="font-semibold text-slate-600">Fields the form needs</span><div class="mt-0.5 text-slate-500">${(r.fields || []).map(esc).join(' · ') || '—'}</div></div>
+      <div class="text-xs">
+        <div class="flex items-center gap-2 flex-wrap"><span class="font-semibold text-slate-600">Channel</span><span class="badge ${bcls}">${btext}</span>${ch.checked ? `<span class="text-slate-400">checked ${esc(ch.checked)}</span>` : ''}</div>
+        <div class="text-slate-600 mt-0.5">${esc(ch.label || '')}${ch.url ? ` — <a class="text-blue-700 underline break-all" target="_blank" rel="noopener" href="${esc(ch.url)}">${esc(ch.url.replace(/^https?:\/\//, ''))}</a>` : ''}</div>
+        ${ch.note ? `<div class="text-slate-500 mt-0.5">${esc(ch.note)}</div>` : ''}
+        ${(r.email || r.phone) ? `<div class="text-slate-500 mt-0.5">${r.email ? `<a class="underline" href="mailto:${esc(r.email)}">${esc(r.email)}</a>` : ''}${r.email && r.phone ? ' · ' : ''}${r.phone ? `<a class="underline" href="tel:${esc(r.phone.replace(/\s+/g, ''))}">${esc(r.phone)}</a>` : ''}</div>` : ''}
+      </div>
+      <label class="block text-xs mt-auto">
+        <span class="font-semibold text-slate-600">Form for this route ${shared ? '<span class="text-emerald-700">· saved for every browser</span>' : ''}</span>
+        <input data-route-url="${esc(r.value)}" value="${esc(url)}" placeholder="https://… (a Google Form pre-fill template with {Column} fills itself)" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3">
+      </label>
+      <div class="flex flex-wrap gap-2">
+        <button data-route-save="${esc(r.value)}" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-slate-50">Save link</button>
+        <button data-route-open="${esc(r.value)}" ${/^https?:\/\//i.test(url) ? '' : 'disabled'} class="rounded-lg bg-slate-900 text-white px-3 py-1.5 text-xs font-medium hover:bg-slate-800 disabled:opacity-40">Open ↗</button>
+        ${r.kkm ? `<span class="text-[11px] text-slate-500 self-center">Uses the KKM form template (Shift+click “KKM form” to change it).</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  $('routeCards').querySelectorAll('[data-route-filter]').forEach(b => b.onclick = () => { state.filter.route = b.dataset.routeFilter; $('fRoute').value = state.filter.route; state.filter.status = ''; renderAll(); showView('list'); });
+  $('routeCards').querySelectorAll('[data-route-save]').forEach(b => b.onclick = async () => {
+    const v = b.dataset.routeSave; const inp = $('routeCards').querySelector(`[data-route-url="${CSS.escape(v)}"]`); const u = inp.value.trim();
+    if (u && !/^https?:\/\//i.test(u)) { toast('The link must start with https://'); return; }
+    b.disabled = true;
+    try { const where = await routeSaveForm(v, u); toast(u ? (where === 'shared' ? 'Link saved for every browser' : 'Link saved in this browser') : 'Link cleared'); renderRoutes(); if (state.current) updateRouteUi(); }
+    catch (e) { toast('Could not save: ' + e.message, 4000); } finally { b.disabled = false; }
+  });
+  $('routeCards').querySelectorAll('[data-route-open]').forEach(b => b.onclick = () => { const u = routeFormUrl(b.dataset.routeOpen); if (/^https?:\/\//i.test(u)) window.open(routeIsTemplate(u) ? u.split('?')[0] : u, '_blank', 'noopener'); });
+}
+
+// ---------------------------------------------------------------------------
+// Exports (Wan, 9 Oct 2026). CSV is built here from full rows the backend pages out; PDF, Word
+// and Google Doc are built by the backend as a Google Doc (register of the current filter, or one
+// complaint's dossier) and come back as a link or as bytes to save. "Print" is the browser's own
+// Save as PDF for the view on screen.
+// ---------------------------------------------------------------------------
+function exportFilter() { const f = state.filter; return { status: f.status === 'Complete' ? 'Complete' : f.status, brand: f.brand, platform: f.platform, route: f.route, q: f.q.trim(), all: !f.status }; }
+function downloadBlob(blob, filename) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.rel = 'noopener'; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+}
+function b64ToBlob(b64, mime) { const bin = atob(b64); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return new Blob([u8], { type: mime }); }
+function csvLine(cells) { return cells.map(v => { const s = String(v ?? ''); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(','); }
+let exportBusy = false;
+async function exportCsv() {
+  if (exportBusy) return; exportBusy = true; toast('Preparing CSV…', 60000);
+  try {
+    const f = exportFilter(); let offset = 0, headers = null; const lines = [];
+    for (;;) {
+      const d = await api('export', Object.assign({}, f, { offset, limit: 500 }), 180000);
+      headers = headers || d.headers; d.rows.forEach(r => lines.push(csvLine(headers.map(h => r[h]))));
+      offset += d.rows.length; if (!d.rows.length || offset >= d.total) break;
+    }
+    if (!headers) throw new Error('Nothing to export');
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+    downloadBlob(new Blob(['﻿' + csvLine(headers) + '\r\n' + lines.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' }), `kkm-complaints-${stamp}.csv`);
+    toast(`CSV saved: ${lines.length} rows`);
+  } catch (e) {
+    if (/Unknown action/.test(e.message)) { clientCsv(); return; }
+    toast('CSV failed: ' + e.message, 5000);
+  } finally { exportBusy = false; }
+}
+// Older backend: export what the page holds (text fields may be cut at 300 characters).
+function clientCsv() {
+  const rows = filtered(); if (!rows.length) { toast('Nothing to export'); return; }
+  const headers = Object.keys(rows[0]).filter(k => !k.startsWith('_'));
+  downloadBlob(new Blob(['﻿' + csvLine(headers) + '\r\n' + rows.map(r => csvLine(headers.map(h => r[h]))).join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' }), 'kkm-complaints-partial.csv');
+  toast('CSV saved from the loaded rows (long texts cut at 300 characters; redeploy Code.gs for full exports)', 6000);
+}
+async function exportDoc(kind, format, extra = {}, hintEl) {
+  if (exportBusy) return; exportBusy = true;
+  const hint = m => { if (hintEl) hintEl.textContent = m; else toast(m, 60000); };
+  hint(kind === 'dossier' ? 'Building the dossier…' : 'Building the register…');
+  try {
+    const payload = Object.assign(kind === 'dossier' ? {} : exportFilter(), extra, { kind, format });
+    const d = await api('export_doc', payload, 300000);
+    if (d.base64) { downloadBlob(b64ToBlob(d.base64, d.mime), d.filename); hint(`${format === 'pdf' ? 'PDF' : 'Word'} saved · also in Drive: ${d.name}`); toast(`${format === 'pdf' ? 'PDF' : 'Word file'} saved (${d.count} complaint${d.count === 1 ? '' : 's'})`); }
+    else { window.open(d.url, '_blank', 'noopener'); hint('Google Doc created: ' + d.name); toast('Google Doc created in Drive › KKM Complaint Exports'); }
+  } catch (e) {
+    const msg = /Unknown action/.test(e.message) ? 'The backend needs the new Code.gs (export_doc) and a new version.'
+      : (/documents|DocumentApp|authori[sz]/i.test(e.message) ? 'Apps Script needs the Google Docs permission: open the script, run any function once and accept the new scope, then publish a new version. ' + e.message : e.message);
+    hint(msg); toast('Export failed: ' + msg, 7000);
+  } finally { exportBusy = false; }
+}
+function exportMenuHtml() {
+  const f = state.filter; const scope = [f.status || 'all statuses (replied ones included)', f.brand, f.platform, f.route, f.q && `"${f.q}"`].filter(Boolean).join(' · ');
+  const item = (act, label, sub) => `<button data-export="${act}" class="w-full text-left rounded-lg px-3 py-2 hover:bg-slate-50"><div class="font-medium">${label}</div>${sub ? `<div class="text-[11px] text-slate-500">${sub}</div>` : ''}</button>`;
+  return `<div class="px-3 py-1.5 text-[11px] text-slate-500">Register of the current filter: ${esc(scope)}</div>` +
+    item('csv', 'CSV', 'every column, full text · opens in Excel / Sheets') + item('pdf', 'PDF register', 'table of the filtered complaints') + item('docx', 'Word register', '.docx, editable') + item('gdoc', 'Google Doc register', 'created in Drive › KKM Complaint Exports') +
+    `<div class="border-t border-slate-200 my-1"></div>` + item('print', 'Print / Save as PDF', 'the view on screen, from the browser');
+}
+function runExport(act) {
+  if (act === 'csv') exportCsv(); else if (act === 'print') window.print(); else exportDoc('register', act);
+}
+function toggleMenu(id, open) { const m = $(id); m.classList.toggle('hidden', open === undefined ? !m.classList.contains('hidden') : !open); }
+$('btnExport').onclick = e => { e.stopPropagation(); $('exportMenu').innerHTML = exportMenuHtml(); toggleMenu('exportMenu'); $('exportMenu').querySelectorAll('[data-export]').forEach(b => b.onclick = () => { toggleMenu('exportMenu', false); runExport(b.dataset.export); }); };
+$('btnMore').onclick = e => {
+  e.stopPropagation();
+  const item = (act, label) => `<button data-more="${act}" class="w-full text-left rounded-lg px-3 py-2.5 hover:bg-slate-50">${label}</button>`;
+  $('moreMenu').innerHTML = item('refresh', '⟳ Refresh') + item('new', '+ Manual entry') + item('kkm', 'Open KKM form ↗') + `<div class="border-t border-slate-200 my-1"></div><div class="px-3 pt-1 text-[11px] text-slate-500">Export the current filter</div>` +
+    item('csv', 'CSV') + item('pdf', 'PDF register') + item('docx', 'Word register') + item('gdoc', 'Google Doc register') + item('print', 'Print / Save as PDF') + `<div class="border-t border-slate-200 my-1"></div>` + item('faq', 'FAQ / guide ↗');
+  toggleMenu('moreMenu');
+  $('moreMenu').querySelectorAll('[data-more]').forEach(b => b.onclick = ev => {
+    toggleMenu('moreMenu', false); const a = b.dataset.more;
+    if (a === 'refresh') refresh(false); else if (a === 'new') showModal(true); else if (a === 'kkm') openKkmForm(ev); else if (a === 'faq') window.open($('faqLink').href, '_blank', 'noopener'); else runExport(a);
+  });
+};
+document.addEventListener('click', () => { toggleMenu('exportMenu', false); toggleMenu('moreMenu', false); });
+document.querySelectorAll('[data-dossier]').forEach(b => b.onclick = () => { if (state.current) exportDoc('dossier', b.dataset.dossier, { ids: [state.current['ID']] }, $('dossierHint')); });
 
 // ---------------------------------------------------------------------------
 // Drawer
@@ -676,7 +1266,7 @@ function driveThumb(link) {
 }
 
 async function openRow(id) {
-  const local = state.rows.find(r => r['ID'] === id);
+  const local = state.rows.find(r => r['ID'] === id) || (state.archived || []).find(r => r['ID'] === id);
   if (local) fillDrawer(local);
   showDrawer(true);
   try {
@@ -700,7 +1290,7 @@ function fillDrawer(r) {
   const st = $('dStatus'); st.textContent = r['Status']; st.className = 'badge ' + (STATUS_STYLE[r['Status']] || '');
   const shot = $('dShot');
   shot.innerHTML = r['Screenshot Link']
-    ? `<a href="${esc(r['Screenshot Link'])}" target="_blank" rel="noopener"><img src="${esc(driveThumb(r['Screenshot Link']))}" alt="screenshot" class="w-full max-h-[420px] object-contain bg-white" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'p-4 text-sm',textContent:'Preview unavailable — open the link.'}))"></a>`
+    ? `<a href="${esc(r['Screenshot Link'])}" target="_blank" rel="noopener"><img src="${esc(driveThumb(r['Screenshot Link']))}" alt="screenshot" loading="lazy" class="w-full max-h-[420px] object-contain bg-white" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'p-4 text-sm',textContent:'Preview unavailable — open the link.'}))"></a>`
     : `<div class="p-4 text-sm text-slate-500">No screenshot.</div>`;
   $('dUrl').textContent = r['Post URL']; $('dUrl').href = r['Post URL'];
   $('dText').textContent = r['Extracted Text'] || '—';
@@ -711,12 +1301,14 @@ function fillDrawer(r) {
   $('eNama').value = r['Nama Kosmetik'] || '';
   $('eNot').value = r['Nombor Notifikasi'] || '';
   $('eJenis').value = r['Jenis Aduan'] || 'Iklan Kosmetik';
-  updateRouteUi();
+  if ($('eJenis').value !== (r['Jenis Aduan'] || 'Iklan Kosmetik')) { const o = document.createElement('option'); o.value = o.textContent = r['Jenis Aduan']; $('eJenis').appendChild(o); $('eJenis').value = r['Jenis Aduan']; }
   $('dTarikh').textContent = r['Tarikh Melapor'] || '— (set when marked Complete)';
   $('eDeskripsi').value = r['Deskripsi Aduan'] || '';
   $('eFeedback').value = r['KKM Feedback'] || '';
   $('eRemarks').value = r['Remarks'] || '';
   $('dMeta').textContent = `Updated ${r['Updated At'] || '—'}`;
+  $('dossierHint').textContent = '';
+  updateRouteUi();
 }
 
 function showDrawer(open) {
@@ -754,7 +1346,14 @@ async function setStatus(status) {
 }
 
 function copy(text, label) {
-  navigator.clipboard.writeText(text || '').then(() => toast(label + ' copied')).catch(() => toast('Copy blocked by browser'));
+  const done = () => toast(label + ' copied');
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text || '').then(done).catch(() => legacyCopy(text, done));
+  else legacyCopy(text, done);
+}
+// Samsung Internet and older WebViews can refuse the async clipboard; a hidden textarea + execCommand still works.
+function legacyCopy(text, done) {
+  try { const ta = document.createElement('textarea'); ta.value = text || ''; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.remove(); if (ok) done(); else toast('Copy blocked by browser'); }
+  catch (e) { toast('Copy blocked by browser'); }
 }
 
 // ---------------------------------------------------------------------------
@@ -844,7 +1443,7 @@ async function submitManual(ev) {
 //
 // It FILLS and never submits. Submitting a complaint to a regulator stays Wan's own click
 // (GUIDE.md section 10), and the screenshot has to be attached by hand: Google cannot pre-fill
-// a file-upload question.
+// a file-upload question. The same engine (kkmBuildUrl) fills any other route's template.
 // ---------------------------------------------------------------------------
 const KKM_PLACEHOLDER = /\{([^{}]+)\}/g;
 // A pre-fill link far past this risks Google refusing it; the Deskripsi then goes by clipboard.
@@ -974,6 +1573,7 @@ function kkmValues() {
   const d = new Date(); const p = n => String(n).padStart(2, '0');
   r['Today'] = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
   r['Akaun'] = ($('kkmEmail') && ![KKM_CHOOSE, KKM_ADD].includes($('kkmEmail').value)) ? $('kkmEmail').value : '';
+  const route = routeOf(r['Jenis Aduan']); r['Route'] = route.value; r['Agency'] = route.agency || ''; r['Instrument'] = route.act || '';
   return r;
 }
 
@@ -1044,6 +1644,7 @@ function kkmGate() {
     a.className = 'text-blue-700 underline'; a.textContent = 'buka halaman persediaan ↗';
     hint.append(a, ', jalankan bookmark pada borang KKM, kemudian Shift+klik "Open KKM form" dan tampal TEMPLATE.');
   } else hint.textContent = !hardOk ? 'Lengkapkan yang bertanda ✗ dahulu.' : ($('kkmConfirm').checked ? '' : 'Tandakan pengesahan untuk teruskan.');
+  if (!isKkmRoute($('eJenis').value)) updateRouteUi();
 }
 
 async function fillKkmForm() {
@@ -1080,6 +1681,24 @@ async function fillKkmForm() {
   } finally { kkmGate(); }
 }
 
+// Another route's form: a {Column} template is filled by the same engine (saving first, so what is
+// filed is what is saved); a plain link just opens the agency's portal.
+async function openRouteForm() {
+  const v = $('eJenis').value; const url = routeFormUrl(v);
+  if (!/^https?:\/\//i.test(url)) return;
+  if (!routeIsTemplate(url)) { window.open(url, '_blank', 'noopener'); return; }
+  const w = window.open('', '_blank');
+  try {
+    const fields = { 'Violation Type': $('eViolationType').value, 'Violation Reason': $('eViolationReason').value, 'Nama Kosmetik': $('eNama').value, 'Nombor Notifikasi': $('eNot').value,
+                     'Jenis Aduan': v, 'Deskripsi Aduan': $('eDeskripsi').value, 'KKM Feedback': $('eFeedback').value, 'Remarks': $('eRemarks').value };
+    const r = await rpc('apiUpdateFields', state.current['ID'], fields); mergeRow(r.row); fillDrawer(r.row);
+    const vals = kkmValues(); let { url: u, unknown } = kkmBuildUrl(url, vals);
+    if (u.length > KKM_URL_MAX) { ({ url: u, unknown } = kkmBuildUrl(url, vals, ['Deskripsi Aduan'])); copy(vals['Deskripsi Aduan'], 'Deskripsi'); }
+    if (w) { w.opener = null; w.location.href = u; } else window.open(u, '_blank', 'noopener');
+    toast('Form opened and filled. Attach the screenshot, submit, then Mark Complete.' + (unknown.length ? ` No value for: ${unknown.join(', ')}.` : ''), 7000);
+  } catch (e) { if (w) w.close(); toast('Not opened: ' + e.message, 5000); }
+}
+
 // Re-run the gate whenever a row is drawn or an input it reads changes. The tick is cleared on
 // every newly opened row: a confirmation belongs to one complaint, never carried to the next.
 const kkmFillDrawer_ = fillDrawer;
@@ -1100,14 +1719,23 @@ $('btnNew').onclick = () => showModal(true);
 $('kkmFormLink').onclick = openKkmForm;
 $('btnOpenForm').onclick = openKkmForm;
 $('btnFillForm').onclick = fillKkmForm;
-$('eJenis').addEventListener('change', updateRouteUi);
-$('btnRouteSave').onclick = () => {
+$('eJenis').addEventListener('change', () => { updateRouteUi(); kkmGate(); });
+$('mJenis').addEventListener('change', () => { const r = routeOf($('mJenis').value); $('mDraft').textContent = r.kkm ? 'Draft for NPRA' : 'Draft (NPRA rulebook)'; });
+$('btnRewrite').onclick = () => {
+  const r = routeOf($('eJenis').value); const v = kkmValues();
+  if ($('eDeskripsi').value.trim() && !confirm(`Replace the Deskripsi with a fresh draft for "${r.value}"? The current text is kept until you press Save.`)) return;
+  $('eDeskripsi').value = routeDescription(r, v); kkmGate(); toast('Deskripsi rewritten for ' + r.value + ' — read it, then Save');
+};
+$('btnRouteSave').onclick = async () => {
   const v = $('eJenis').value; const u = $('routeFormUrl').value.trim();
   if (u && !/^https?:\/\//i.test(u)) { toast('The link must start with https://'); return; }
-  toast(routeSaveForm(v, u) ? (u ? 'Link saved for this route' : 'Link cleared') : 'Could not save the link in this browser'); updateRouteUi();
+  try { const where = await routeSaveForm(v, u); toast(u ? (where === 'shared' ? 'Link saved for every browser' : 'Link saved in this browser') : 'Link cleared'); }
+  catch (e) { toast('Could not save: ' + e.message, 4000); }
+  updateRouteUi();
 };
 $('routeFormUrl').addEventListener('input', () => { $('btnRouteOpen').disabled = !/^https?:\/\//i.test($('routeFormUrl').value.trim()); });
-$('btnRouteOpen').onclick = () => { const u = $('routeFormUrl').value.trim(); if (/^https?:\/\//i.test(u)) window.open(u, '_blank', 'noopener'); };
+$('btnRouteOpen').onclick = () => { const typed = $('routeFormUrl').value.trim(); if (typed && typed !== routeFormUrl($('eJenis').value)) { if (/^https?:\/\//i.test(typed)) window.open(routeIsTemplate(typed) ? typed.split('?')[0] : typed, '_blank', 'noopener'); return; } openRouteForm(); };
+$('btnCopyPack').onclick = () => copy(routePack(routeOf($('eJenis').value), kkmValues()), 'Complaint pack');
 $('kkmConfirm').onchange = kkmGate;
 $('kkmEmail').onchange = kkmOnEmail;
 $('kkmCopyLast').onclick = () => copy($('kkmLast').dataset.url, 'Pautan');
@@ -1120,6 +1748,7 @@ $('btnSettings').onclick = () => showConnect(true);
 // #settings — reveal the button and open the connect screen for this visit.
 function checkSettingsHash() {
   if (location.hash === '#settings') { $('btnSettings').classList.remove('hidden'); showConnect(true); }
+  else if (VIEWS.includes(location.hash.slice(1)) && location.hash.slice(1) !== state.view && state.stats) showView(location.hash.slice(1));
 }
 checkSettingsHash();
 window.addEventListener('hashchange', checkSettingsHash);
@@ -1139,8 +1768,9 @@ $('manualForm').onsubmit = submitManual;
 $('mDraft').onclick = draftManual;
 $('fBrand').onchange = e => { state.filter.brand = e.target.value; renderTable(); };
 $('fPlatform').onchange = e => { state.filter.platform = e.target.value; renderTable(); };
+$('fRoute').onchange = e => { state.filter.route = e.target.value; renderTable(); };
 $('fSearch').oninput = e => { state.filter.q = e.target.value; renderTable(); };
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('ldModal').classList.contains('hidden')) { closeDetail(); return; } showDrawer(false); showModal(false); showLinks(false); if (cfg.key) showConnect(false); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('ldModal').classList.contains('hidden')) { closeDetail(); return; } showDrawer(false); showModal(false); showLinks(false); toggleMenu('exportMenu', false); toggleMenu('moreMenu', false); if (cfg.key) showConnect(false); } });
 // ---------------------------------------------------------------------------
 // TikTok links (Links.gs): paste here, a scheduled run reads them, the outcome comes back here.
 // ---------------------------------------------------------------------------
@@ -1161,7 +1791,7 @@ let linksTimer = null;
 function showLinks(open) {
   $('linksModal').classList.toggle('hidden', !open);
   clearInterval(linksTimer);
-  if (open) { loadLinks(); $('lText').focus(); linksTimer = setInterval(loadLinks, 20000); }
+  if (open) { loadLinks(); if (window.matchMedia('(min-width: 640px)').matches) $('lText').focus(); linksTimer = setInterval(loadLinks, 20000); }
 }
 function trimRun(s) { return s ? esc(s) : ''; }
 async function loadLinks() {
@@ -1186,7 +1816,7 @@ async function loadLinks() {
       try { await api('links_retry', { link: b.dataset.link }); toast('Back in the queue'); loadLinks(); } catch (e) { toast(e.message); b.disabled = false; }
     });
     const open = rows.filter(o => { const k = linkState(o.status)[0]; return k === 'waiting' || k === 'working' || k === 'decide'; }).length;
-    $('linksBadge').textContent = open; $('linksBadge').classList.toggle('hidden', !open);
+    ['linksBadge', 'linksBadge2'].forEach(id => { $(id).textContent = open; $(id).classList.toggle('hidden', !open); });
   } catch (e) {
     $('lMsg').textContent = /Unknown action/.test(e.message)
       ? 'The backend does not have the Links update yet (Apps Script needs the new Links.gs and a new version).' : e.message;
@@ -1244,12 +1874,14 @@ $('ldFile').onclick = () => fileHeld(ldLink, $('ldFile'));
 $('ldDismiss').onclick = () => dismissHeld(ldLink, $('ldDismiss'));
 document.querySelectorAll('[data-ldclose]').forEach(b => b.onclick = closeDetail);
 $('btnLinks').onclick = () => showLinks(true);
+$('bnavLinks').onclick = () => showLinks(true);
 $('lAdd').onclick = addLinks;
 document.querySelectorAll('[data-lclose]').forEach(b => b.onclick = () => showLinks(false));
 $('lText').addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') addLinks(); });
 
 setInterval(() => { if (cfg.key && $('drawer').classList.contains('translate-x-full') && $('modal').classList.contains('hidden') && $('connect').classList.contains('hidden')) refresh(true); }, 180000);
 if (cfg.key) loadLinks();
+showView(VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'home');
 boot();
 </script>
 </body>

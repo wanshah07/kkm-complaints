@@ -9,6 +9,15 @@
  *            a JSON API (list | get | known_urls | stats). The standalone dashboard in
  *            web/ (hosted on your own domain) talks to doPost with the DASHBOARD_KEY.
  * UI RPC   : the dashboard calls api* functions through google.script.run.
+ * Routes   : ROUTES below is the catalogue of where a complaint goes (NPRA, BPF, MDA,
+ *            CKAPS, BKKM, JAKIM/KPDN, MCMC, …), with the cases that belong to each,
+ *            the instrument cited, the reference number asked for and the agency's
+ *            complaint channel. The dashboard reads it from `bootstrap`, so a route
+ *            is edited HERE and nowhere else. A per-route form template (a Google
+ *            pre-fill link, like the KKM one) is kept in Script Properties ROUTE_FORMS.
+ * Exports  : `export` returns full rows for CSV; `export_doc` builds a Google Doc
+ *            (register of the filtered rows, or one complaint's dossier) and can hand
+ *            it back as PDF or Word. Needs the documents scope in appsscript.json.
  *
  * One-time setup (from the Apps Script editor):
  *   1. Run  setup()  once. It builds both tabs, the data validation, the Drive
@@ -41,11 +50,11 @@ var HEADERS = [
   'Status',             // 9  New | In-Progress | Complete | Dismissed
   'Remarks',            // 10
   'Nama Kosmetik',      // 11 product name as advertised (KKM form: Nama kosmetik)
-  'Nombor Notifikasi',  // 12 NOT number — blank until verified on QUEST3+
-  'Jenis Aduan',        // 13 Iklan Kosmetik | Kualiti Kosmetik | route to another regulator (JENIS_ADUAN)
+  'Nombor Notifikasi',  // 12 reference number: NOT for a cosmetic, the route's own number otherwise
+  'Jenis Aduan',        // 13 the route: a value of ROUTES (JENIS_ADUAN)
   'Deskripsi Aduan',    // 14 ready-to-paste complaint description (BM)
-  'Tarikh Melapor',     // 15 date the report was submitted to KKM
-  'KKM Feedback',       // 16 NPRA/KKM reply pasted in by Wan after submission
+  'Tarikh Melapor',     // 15 date the report was submitted to the agency
+  'KKM Feedback',       // 16 the agency's reply pasted in by Wan after submission
   'Source',             // 17 scraper | manual
   'Confidence',         // 18 0–1 from the LLM reviewer, blank for manual
   'Created At',         // 19 ISO timestamp
@@ -88,10 +97,230 @@ function listRowToObject_(row) {
 function isArchived_(rowVals) {
   return String(rowVals[COL['KKM Feedback']] || '').trim() !== '';
 }
-// The first two are the KKM cosmetic form's own options. The rest are routes to other regulators
-// (Wan, 3 Oct 2026); they only mark where a complaint goes and carry no form of their own.
-var JENIS_ADUAN = ['Iklan Kosmetik', 'Kualiti Kosmetik', 'MDA - Peranti Perubatan', 'Amalan Perubatan (MMC)',
-                   'Ubat / Suplemen (Lembaga Iklan Ubat)', 'Makanan (BKKM)', 'Lain-lain'];
+
+// ---------------------------------------------------------------------------
+// ROUTES — where a complaint goes, and everything a form for that route will need
+// (Wan, 3 Oct 2026: "for routing other than iklan kosmetik, make another options like MDA,
+// medical practice etc, so later I can setup to link with relevant complaint form";
+// 9 Oct 2026: "Add routes and all the cases related so later easy for me to setup the form").
+//
+// One entry per regulator route. `value` is what the sheet's Jenis Aduan column stores and
+// must never be renamed once rows carry it. `kkm: true` marks the two options of the KKM
+// cosmetic Google Form, which keep the automatic pre-fill. Every other route carries:
+//   agency   who receives it (BM, as the agency names itself)
+//   act      the instrument the complaint rests on; cited in the Deskripsi (BM)
+//   cases    what belongs on this route (UI, English) — the triage list
+//   ref      the reference number this agency asks for; it lives in the Nombor Notifikasi
+//            column with this label instead of "NOT"
+//   fields   the sheet columns the agency's form will need, in the order the form asks
+//   channel  the agency's own complaint channel: url, how it was checked and when. A url
+//            that did not answer at check time is still recorded, marked so.
+//   basis    the one BM sentence the Deskripsi Aduan uses for the legal basis
+// A pre-fill template for a route (a Google Form link with {Column} placeholders, built the
+// way kkm-form-helper.html builds the KKM one) is stored per route in ROUTE_FORMS and wins
+// over `channel.url` in the drawer. Channel facts were read live on 9 Oct 2026; `checked`
+// says what answered. Re-check before trusting a number — portals move.
+// ---------------------------------------------------------------------------
+var ROUTES = [
+  {
+    value: 'Iklan Kosmetik', kkm: true, group: 'KKM',
+    agency: 'NPRA — Pusat Pematuhan dan Kawalan Kualiti, Seksyen Surveilan dan Aduan (Bahagian Regulatori Farmasi Negara, KKM)',
+    act: 'Guidelines for Control of Cosmetic Products in Malaysia, Annex I Part 8 (Guideline for Cosmetic Claims) dan Part 10 (Guideline for Cosmetic Advertisement); Peraturan-Peraturan Kawalan Dadah dan Kosmetik 1984',
+    basis: 'Dakwaan ini tidak dibenarkan untuk produk kosmetik mengikut Guidelines for Control of Cosmetic Products in Malaysia, Annex I Part 8 (Guideline for Cosmetic Claims) dan Part 10 (Guideline for Cosmetic Advertisement), NPRA.',
+    ref: { label: 'Nombor Notifikasi (NOT)', hint: 'NOTxxxxxxxxK — verify on QUEST3+', pattern: '^NOT\\s*\\d' },
+    cases: ['Medicinal or disease claim (treats, cures, heals acne, eczema, fungal infection)', 'Mechanism claim (collagen, melanin, DNA, cells, hormones)',
+            'Professional endorsement (doctor, dermatologist, pharmacist fronting a cosmetic)', 'Prohibited sunscreen wording (sunblock, 100% protection, all-day)',
+            'Safety claim (no side effects, chemical-free, 100% safe)', 'Absolute or permanent result (whitening in 3 days, permanent)',
+            'Comparison or disparagement of another brand', 'Before-and-after without the time elapsed', 'GMP / MOH / KKM-approved wording on a notified cosmetic',
+            'Prohibited ingredient or procedure reference (hydroquinone, steroid, injection)', 'Unsubstantiated quantitative claim (99% effective, 10x)'],
+    fields: ['Nama Kosmetik', 'Nombor Notifikasi', 'Jenis Aduan', 'Platform', 'Post URL', 'Deskripsi Aduan', 'Screenshot Link'],
+    channel: { label: 'Borang Pelaporan Aduan Kosmetik Bernotifikasi (Google Form, KKM)', url: '', checked: '2026-10-09', status: 'template',
+               note: 'The pre-fill template lives in Script Properties KKM_FORM_URL (set from the dashboard). Paper form: Borang Aduan Produk Kosmetik Bernotifikasi, npra.gov.my.' },
+    email: 'aduankos@npra.gov.my', phone: '03-7883 5400'
+  },
+  {
+    value: 'Kualiti Kosmetik', kkm: true, group: 'KKM',
+    agency: 'NPRA — Pusat Pematuhan dan Kawalan Kualiti, Seksyen Surveilan dan Aduan',
+    act: 'Peraturan-Peraturan Kawalan Dadah dan Kosmetik 1984, Peraturan 18A (notifikasi kosmetik); Guidelines for Control of Cosmetic Products in Malaysia, Annex I Part 1 (notification) dan Annex II–VII (bahan terlarang/terhad)',
+    basis: 'Produk ini disyaki tidak mematuhi Peraturan-Peraturan Kawalan Dadah dan Kosmetik 1984 dan Guidelines for Control of Cosmetic Products in Malaysia (NPRA).',
+    ref: { label: 'Nombor Notifikasi (NOT)', hint: 'NOTxxxxxxxxK — verify on QUEST3+; blank if not notified', pattern: '^NOT\\s*\\d' },
+    cases: ['Cosmetic sold without a notification (no NOT on QUEST3+)', 'Suspected adulteration (hydroquinone, tretinoin, mercury, steroid)',
+            'Adverse reaction reported by a user', 'Prohibited or restricted ingredient on the label (Annex II / III)', 'Label missing NOT, ingredients, batch or notification holder',
+            'Counterfeit or parallel-import cosmetic', 'Notification cancelled by NPRA but product still on sale'],
+    fields: ['Nama Kosmetik', 'Nombor Notifikasi', 'Jenis Aduan', 'Platform', 'Post URL', 'Deskripsi Aduan', 'Screenshot Link'],
+    channel: { label: 'Borang Pelaporan Aduan Kosmetik Bernotifikasi (Google Form, KKM)', url: '', checked: '2026-10-09', status: 'template',
+               note: 'Same KKM form as Iklan Kosmetik; pick "Kualiti Kosmetik" on it. Sample or photo of the product helps.' },
+    email: 'aduankos@npra.gov.my', phone: '03-7883 5400'
+  },
+  {
+    value: 'Ubat / Suplemen (Lembaga Iklan Ubat)', group: 'KKM',
+    agency: 'Bahagian Penguatkuasaan Farmasi (BPF), KKM — Seksyen Kawal Selia Iklan Ubat / Lembaga Iklan Ubat (LIU)',
+    act: 'Akta Ubat (Iklan dan Penjualan) 1956 (Akta 290), Seksyen 3, 4, 4B; Peraturan-Peraturan Ubat (Iklan dan Penjualan) 1976 (kelulusan KKLIU); Peraturan-Peraturan Kawalan Dadah dan Kosmetik 1984 (pendaftaran MAL)',
+    basis: 'Iklan ini disyaki melanggar Akta Ubat (Iklan dan Penjualan) 1956 (Akta 290) kerana disiarkan tanpa nombor kelulusan Lembaga Iklan Ubat (KKLIU) dan/atau membuat dakwaan rawatan penyakit yang dilarang.',
+    ref: { label: 'No. Kelulusan Iklan KKLIU / No. Pendaftaran MAL', hint: 'KKLIU xxxx/2026 or MALxxxxxxxxA — blank if none shown', pattern: '^(KKLIU|MAL)' },
+    cases: ['Supplement, traditional medicine or health product advertised with no KKLIU approval number', 'Claim to treat a disease in the Schedule of Act 290 (diabetes, hypertension, cancer, infertility, …)',
+            'Unregistered product (no MAL number) advertised or sold', 'Expired KKLIU approval still in use (s.4B)', 'Scheduled poison (steroid, tretinoin, antibiotics) sold online',
+            'Cosmetic advertised as a medicine: product is in fact a health product', 'Doctor or pharmacist endorsing a health product in an advertisement', 'Slimming or sexual-performance claims on a supplement'],
+    fields: ['Nama Kosmetik', 'Nombor Notifikasi', 'Brand', 'Platform', 'Post URL', 'Date', 'Deskripsi Aduan', 'Screenshot Link'],
+    channel: { label: 'SisPAA KKM (Sistem Pengurusan Aduan Awam) — named by BPF notice "Aduan Iklan Ubat dan Perkhidmatan Yang Tidak Patuh", 8 Jun 2026', url: 'https://moh.spab.gov.my/', checked: '2026-10-09', status: 'loads',
+               note: 'Portal is a sign-in web app (register once). BPF: 03-7841 3200, Lot 36, Jalan Profesor Diraja Ungku Aziz, 46200 Petaling Jaya.' },
+    email: '', phone: '03-7841 3200'
+  },
+  {
+    value: 'MDA - Peranti Perubatan', group: 'KKM',
+    agency: 'Pihak Berkuasa Peranti Perubatan (MDA), KKM',
+    act: 'Akta Peranti Perubatan 2012 (Akta 737), Seksyen 5 (pendaftaran) dan Seksyen 40 (pelaporan); Peraturan-Peraturan Peranti Perubatan (Pengiklanan) 2019',
+    basis: 'Peranti ini disyaki diiklankan bertentangan dengan Akta Peranti Perubatan 2012 (Akta 737) dan Peraturan-Peraturan Peranti Perubatan (Pengiklanan) 2019: tanpa nombor pendaftaran MDA dan/atau dengan dakwaan di luar tujuan penggunaan yang didaftarkan.',
+    ref: { label: 'No. Pendaftaran Peranti MDA', hint: 'GAxxxx / GBxxxx / GCxxxx / GDxxxx — blank if none shown', pattern: '^G[ABCD]\\d' },
+    cases: ['Device sold or advertised without an MDA registration number (HIFU, laser, LED mask, microneedling pen, dermaroller, IPL)', 'Dermal filler, thread or skin booster (a device) promoted to the public with treatment claims',
+            'Claims beyond the registered intended use', 'Advertisement not approved under the 2019 Advertising Regulations', 'Home-use device promising clinical results',
+            'Counterfeit or grey-import device', 'Device adverse event (burn, scarring, infection) reported by a user'],
+    fields: ['Nama Kosmetik', 'Nombor Notifikasi', 'Brand', 'Platform', 'Post URL', 'Date', 'Deskripsi Aduan', 'Screenshot Link'],
+    channel: { label: 'MDA FEMES — Feedback Management System (complaints, inquiries)', url: 'https://femes.mda.gov.my/', checked: '2026-10-09', status: 'loads',
+               note: 'mda.gov.my "Customer Complaint Form" points here. Device safety complaints: device_complaint@mda.gov.my (MDA chatbot answer; unverified). Hotline 03-8230 0300.' },
+    email: 'device_complaint@mda.gov.my', phone: '03-8230 0300'
+  },
+  {
+    value: 'Amalan Perubatan (MMC)', group: 'KKM',
+    agency: 'CKAPS — Cawangan Kawalan Amalan Perubatan Swasta, KKM (kemudahan dan iklan klinik); Majlis Perubatan Malaysia (MMC) (kelakuan pengamal)',
+    act: 'Akta Kemudahan dan Perkhidmatan Jagaan Kesihatan Swasta 1998 (Akta 586), Seksyen 108 (iklan); Peraturan-Peraturan Kemudahan dan Perkhidmatan Jagaan Kesihatan Swasta (Hospital Swasta dan Kemudahan Jagaan Kesihatan Swasta Lain) 2006; Akta Ubat (Iklan dan Penjualan) 1956 (kelulusan Lembaga Iklan Ubat untuk iklan klinik/estetik); Akta Perubatan 1971 (Akta 50) dan Kod Kelakuan Profesional MMC; Garis Panduan Amalan Perubatan Estetik KKM',
+    basis: 'Iklan ini disyaki melanggar Seksyen 108 Akta Kemudahan dan Perkhidmatan Jagaan Kesihatan Swasta 1998 (Akta 586) dan syarat Lembaga Iklan Ubat bagi iklan perkhidmatan perubatan/estetik, serta Kod Kelakuan Profesional Majlis Perubatan Malaysia.',
+    ref: { label: 'No. Pendaftaran MMC / No. Pendaftaran Klinik (Borang B)', hint: 'MMC number of the doctor, or the clinic registration — blank if unknown', pattern: '' },
+    cases: ['Clinic or doctor advertising aesthetic procedures (filler, botulinum toxin, threads, laser) with before-after, prices, discounts or packages',
+            'Testimonials or guarantees of a medical outcome', 'Aesthetic procedure performed or advertised by a non-doctor (beautician, salon, spa)',
+            'Doctor without an aesthetic LCP advertising aesthetic services', 'Unregistered or unlicensed clinic', 'Misleading clinic name or signboard (s.108)',
+            'Doctor endorsing a product in a professional capacity (also an NPRA / BPF matter)', 'Mobile or online consultation sold outside a registered facility'],
+    fields: ['Brand', 'Nombor Notifikasi', 'Platform', 'Post URL', 'Date', 'Deskripsi Aduan', 'Screenshot Link'],
+    channel: { label: 'SisPAA CKAPS (myCKAPS) — complaints on private clinics and their advertising', url: 'https://myckaps.spab.gov.my/', checked: '2026-10-09', status: 'loads',
+               note: 'Sign-in web app. Also SisPAA KKM moh.spab.gov.my. CKAPS phone 03-8883 1362 (RTM report; unverified). A practitioner-conduct complaint goes to MMC (mmc.gov.my).' },
+    email: '', phone: '03-8883 1362'
+  },
+  {
+    value: 'Makanan (BKKM)', group: 'KKM',
+    agency: 'Bahagian Keselamatan dan Kualiti Makanan (BKKM), KKM',
+    act: 'Akta Makanan 1983 (Akta 281), Seksyen 17 (pelabelan dan iklan mengelirukan); Peraturan-Peraturan Makanan 1985, Peraturan 18(6) (tuntutan rawatan penyakit dilarang), Peraturan 18A–18E (tuntutan pemakanan dan kesihatan)',
+    basis: 'Iklan ini disyaki melanggar Seksyen 17 Akta Makanan 1983 (Akta 281) dan Peraturan 18(6) Peraturan-Peraturan Makanan 1985 kerana membuat tuntutan mencegah, merawat atau menyembuhkan penyakit bagi suatu makanan.',
+    ref: { label: 'No. rujukan produk / pengilang (jika ada)', hint: 'MeSTI / HACCP / company registration if shown — blank otherwise', pattern: '' },
+    cases: ['Food, drink or food-supplement claiming to prevent, treat or cure a disease (reg 18(6))', 'Slimming, detox or "burn fat" claims on a food', 'Lactation (milk booster) or fertility claims on a food',
+            'Infant formula or follow-up formula advertised to the public', 'Nutrient or health claim not permitted by reg 18A–18E', 'Unregistered "health drink" or coffee mix with medicinal claims',
+            'Misleading origin, ingredient or halal-looking wording on a food label'],
+    fields: ['Nama Kosmetik', 'Brand', 'Platform', 'Post URL', 'Date', 'Deskripsi Aduan', 'Screenshot Link'],
+    channel: { label: 'SisPAA KKM (Sistem Pengurusan Aduan Awam)', url: 'https://moh.spab.gov.my/', checked: '2026-10-09', status: 'loads',
+               note: 'BKKM hotline 03-8885 0797 / MyGCC 03-8000 8000 and Facebook BKKMHQ (2025 reports; unverified). A District Health Office (PKD) also takes it.' },
+    email: '', phone: '03-8885 0797'
+  },
+  {
+    value: 'Perubatan Tradisional & Komplementari (BPTK)', group: 'KKM',
+    agency: 'Bahagian Perubatan Tradisional dan Komplementari (BPTK), KKM — Cawangan Inspektorat dan Penguatkuasaan',
+    act: 'Akta Perubatan Tradisional dan Komplementari 2016 (Akta 775), Bahagian IX (penguatkuasaan, berkuat kuasa 1 Ogos 2024); Garis Panduan Pengiklanan Pengamal PT&K (BPTK, 2025); Akta Ubat (Iklan dan Penjualan) 1956 bagi dakwaan produk',
+    basis: 'Iklan ini disyaki melanggar Akta Perubatan Tradisional dan Komplementari 2016 (Akta 775) dan Garis Panduan Pengiklanan Pengamal PT&K kerana menawarkan rawatan penyakit oleh pengamal yang tidak berdaftar dan/atau dengan dakwaan yang mengelirukan.',
+    ref: { label: 'No. Pendaftaran Pengamal PT&K', hint: 'Practitioner registration under Act 775 — blank if none shown', pattern: '' },
+    cases: ['Urut, bekam, akupunktur, homeopati or Islamic-medicine practitioner advertising a cure for a disease', 'Unregistered T&CM practitioner or premises (after 28 Feb 2025)',
+            'T&CM practitioner promoting a product with medicinal claims (also a BPF matter)', 'Testimonials or guarantees of a cure'],
+    fields: ['Brand', 'Nombor Notifikasi', 'Platform', 'Post URL', 'Date', 'Deskripsi Aduan', 'Screenshot Link'],
+    channel: { label: 'SisPAA KKM (Sistem Pengurusan Aduan Awam)', url: 'https://moh.spab.gov.my/', checked: '2026-10-09', status: 'loads',
+               note: 'BPTK portal hq.moh.gov.my/tcm answered HTTP 500 at check time; its advertising guideline is under Guideline → Advertisement.' },
+    email: '', phone: ''
+  },
+  {
+    value: 'Produk Merokok / Vape (Akta 852)', group: 'KKM',
+    agency: 'Kementerian Kesihatan Malaysia — penguatkuasaan Akta 852 (Bahagian Kawalan Penyakit, Sektor Kawalan Tembakau)',
+    act: 'Akta Kawalan Produk Merokok Demi Kesihatan Awam 2024 (Akta 852), Seksyen 7–10 (iklan, promosi, tajaan); berkuat kuasa 1 Oktober 2024',
+    basis: 'Iklan atau promosi ini disyaki melanggar Seksyen 7 hingga 10 Akta Kawalan Produk Merokok Demi Kesihatan Awam 2024 (Akta 852).',
+    ref: { label: 'No. Pendaftaran Produk (Akta 852)', hint: 'Registration under Act 852 if shown — blank otherwise', pattern: '' },
+    cases: ['Online sale, advertisement or promotion of vape / e-liquid / tobacco', 'Influencer or sponsorship promoting a smoking product', 'Sale to a minor', 'Unregistered smoking product', 'Flavour or lifestyle marketing aimed at young people'],
+    fields: ['Brand', 'Nama Kosmetik', 'Platform', 'Post URL', 'Date', 'Deskripsi Aduan', 'Screenshot Link'],
+    channel: { label: 'SisPAA KKM (Sistem Pengurusan Aduan Awam)', url: 'https://moh.spab.gov.my/', checked: '2026-10-09', status: 'loads', note: 'No dedicated vape complaint form was found on 9 Oct 2026; SisPAA is the MOH-wide channel.' },
+    email: '', phone: ''
+  },
+  {
+    value: 'Halal (JAKIM / KPDN)', group: 'Other',
+    agency: 'JAKIM — Bahagian Pengurusan Halal (sijil dan logo); KPDN — Bahagian Penguatkuasa (pendakwaan di bawah Akta Perihal Dagangan 2011)',
+    act: 'Akta Perihal Dagangan 2011 (Akta 730); Perintah Perihal Dagangan (Takrif Halal) 2011; Perintah Perihal Dagangan (Perakuan dan Penandaan Halal) 2011; Manual Prosedur Pensijilan Halal Malaysia (Domestik)',
+    basis: 'Penggunaan perihal atau logo halal ini disyaki melanggar Perintah Perihal Dagangan (Takrif Halal) 2011 dan Perintah Perihal Dagangan (Perakuan dan Penandaan Halal) 2011 di bawah Akta Perihal Dagangan 2011 (Akta 730).',
+    ref: { label: 'No. Sijil Halal (SPHM) / kod pengesahan', hint: 'From the Halal Malaysia portal verification — blank if none', pattern: '' },
+    cases: ['Fake, expired or altered Malaysian halal logo', 'Foreign halal logo not recognised by JAKIM', '"Halal" claim without a Sijil Pengesahan Halal Malaysia (SPHM)',
+            'Product sold under a certified brand but outside the certificate scope', 'Cosmetic or food claiming halal with no certificate', 'Premises claiming halal certification it does not hold'],
+    fields: ['Brand', 'Nama Kosmetik', 'Nombor Notifikasi', 'Platform', 'Post URL', 'Date', 'Deskripsi Aduan', 'Screenshot Link'],
+    channel: { label: 'E-Aduan JAKIM (SisPAA Islam) — linked from halal.gov.my "E-Aduan"', url: 'https://islam.spab.gov.my/eApps/system/index.do', checked: '2026-10-09', status: 'loads',
+               note: 'Enforcement and prosecution are KPDN: e-aduan.kpdn.gov.my (answered 503 at check time), 1-800-886-800. JAKIM halal hub: pr_halal@islam.gov.my, 03-8892 5000.' },
+    email: 'pr_halal@islam.gov.my', phone: '03-8892 5000'
+  },
+  {
+    value: 'Pengguna / Perihal Dagangan (KPDN)', group: 'Other',
+    agency: 'Kementerian Perdagangan Dalam Negeri dan Kos Sara Hidup (KPDN) — Bahagian Penguatkuasa',
+    act: 'Akta Perihal Dagangan 2011 (Akta 730), Seksyen 5 (perihal dagangan palsu); Akta Perlindungan Pengguna 1999 (Akta 599), Seksyen 10 (representasi palsu atau mengelirukan); Peraturan-Peraturan Perlindungan Pengguna (Urus Niaga Perdagangan Elektronik) 2012',
+    basis: 'Iklan ini disyaki membuat perihal dagangan palsu atau representasi mengelirukan yang menyalahi Akta Perihal Dagangan 2011 (Akta 730) dan Akta Perlindungan Pengguna 1999 (Akta 599).',
+    ref: { label: 'No. Pendaftaran Syarikat (SSM) jika diketahui', hint: 'Seller or company registration — blank if unknown', pattern: '' },
+    cases: ['False claims about origin, maker or award ("No.1", "clinically proven" without proof)', 'Fake reviews, fabricated testimonials or paid endorsements undisclosed',
+            'Fake discount, misleading price or profiteering', 'Counterfeit product', 'Online seller with no identity, address or return terms (2012 e-commerce regulations)', 'Non-delivery or scam after payment'],
+    fields: ['Brand', 'Nama Kosmetik', 'Nombor Notifikasi', 'Platform', 'Post URL', 'Date', 'Deskripsi Aduan', 'Screenshot Link'],
+    channel: { label: 'e-Aduan KPDN', url: 'https://e-aduan.kpdn.gov.my/', checked: '2026-10-09', status: 'down',
+               note: 'Portal answered HTTP 503 at check time (and the KPDN home page too) — retry. Call centre 1-800-886-800; WhatsApp 019-279 4317 and the Ez ADU app (2020 reports; unverified).' },
+    email: 'e-aduan@kpdnhep.gov.my', phone: '1-800-886-800'
+  },
+  {
+    value: 'Kandungan Dalam Talian (MCMC)', group: 'Other',
+    agency: 'Suruhanjaya Komunikasi dan Multimedia Malaysia (MCMC / SKMM)',
+    act: 'Akta Komunikasi dan Multimedia 1998 (Akta 588), Seksyen 211 dan 233 (kandungan yang menyalahi undang-undang); Kod Kandungan Komunikasi dan Multimedia (CMCF); arahan Menteri Komunikasi 19 Sep 2026: aduan iklan kesihatan dalam talian yang mengelirukan dirujuk kepada MCMC',
+    basis: 'Kandungan ini disyaki menyalahi Akta Komunikasi dan Multimedia 1998 (Akta 588) dan Kod Kandungan Komunikasi dan Multimedia, dan dirujuk untuk tindakan penurunan kandungan.',
+    ref: { label: 'No. rujukan aduan MCMC', hint: 'Filled after the portal issues one', pattern: '' },
+    cases: ['Takedown of an online health advertisement already found non-compliant by KKM (BPF / NPRA / CKAPS)', 'Impersonation of a doctor, clinic or brand', 'Deepfake or AI endorsement by a public figure',
+            'Scam page selling health products', 'Repeat offender whose page keeps re-posting a banned advertisement'],
+    fields: ['Brand', 'Platform', 'Post URL', 'Date', 'Deskripsi Aduan', 'Screenshot Link'],
+    channel: { label: 'Portal Aduan MCMC (Consumer Redress Portal) — register, verify e-mail, then New Complaint', url: 'https://aduan.mcmc.gov.my/', checked: '2026-10-09', status: 'loads',
+               note: 'Loads as "MCMC - CRP Portal". Hotline 1-800-188-030 (weekdays 8:30–17:30). The older aduan.skmm.gov.my address is superseded.' },
+    email: '', phone: '1-800-188-030'
+  },
+  {
+    value: 'Iklan Media Cetak / Luar (ASA)', group: 'Other',
+    agency: 'Advertising Standards Malaysia (ASA) — badan kawal selia kendiri industri pengiklanan',
+    act: 'Malaysian Code of Advertising Practice (MCAP) — iklan mesti sah, sopan, jujur dan benar; Klausa 4.2.2 (gambaran palsu tentang kualiti produk); superlatif perlu dibuktikan',
+    basis: 'Iklan ini disyaki melanggar Malaysian Code of Advertising Practice (ASA Malaysia) kerana membuat dakwaan yang tidak benar atau tidak dapat dibuktikan.',
+    ref: { label: 'No. rujukan ASA', hint: 'Filled after ASA acknowledges', pattern: '' },
+    cases: ['Print, outdoor, billboard or cinema advertisement with a misleading claim', 'Unsubstantiated superlative ("No.1", "the best", "fastest")', 'Indecent or offensive visual',
+            'Broadcast (TV / radio) advertisement — goes to the CMCF Content Forum instead'],
+    fields: ['Brand', 'Nama Kosmetik', 'Platform', 'Post URL', 'Date', 'Deskripsi Aduan', 'Screenshot Link'],
+    channel: { label: 'ASA Malaysia complaints page', url: '', checked: '2026-10-09', status: 'unverified',
+               note: 'ASA\'s domain did not resolve from the checking environment on 9 Oct 2026. Search "Advertising Standards Malaysia complaint", confirm the page, and paste the link as this route\'s form. ASA also has a mobile app.' },
+    email: '', phone: ''
+  },
+  {
+    value: 'Lain-lain', group: 'Other',
+    agency: 'Other — name the agency in Remarks',
+    act: '',
+    basis: '',
+    ref: { label: 'Reference number', hint: 'Whatever the agency asks for', pattern: '' },
+    cases: ['Anything that fits none of the routes above — write the agency and the instrument in Remarks'],
+    fields: ['Brand', 'Nama Kosmetik', 'Platform', 'Post URL', 'Date', 'Deskripsi Aduan', 'Screenshot Link'],
+    channel: { label: '', url: '', checked: '', status: 'none', note: 'Paste the agency\'s form or portal link as this route\'s form.' },
+    email: '', phone: ''
+  }
+];
+var JENIS_ADUAN = ROUTES.map(function (r) { return r.value; });
+
+function routeOf_(v) {
+  for (var i = 0; i < ROUTES.length; i++) if (ROUTES[i].value === v) return ROUTES[i];
+  return ROUTES[0];
+}
+
+// Per-route form templates, kept in Script Properties so they appear in every browser.
+// { "<route value>": "<url or pre-fill template>" }. The KKM cosmetic template stays in KKM_FORM_URL.
+function routeForms_() {
+  try { return JSON.parse(PROPS.getProperty('ROUTE_FORMS') || '{}') || {}; } catch (err) { return {}; }
+}
+function setRouteForm_(value, url) {
+  if (JENIS_ADUAN.indexOf(value) < 0) throw new Error('Unknown route: ' + value);
+  url = String(url || '').trim();
+  if (url && !/^https?:\/\/\S+$/i.test(url)) throw new Error('The link must start with https://');
+  var m = routeForms_();
+  if (url) m[value] = url; else delete m[value];
+  PROPS.setProperty('ROUTE_FORMS', JSON.stringify(m));
+  return { ok: true, forms: m };
+}
+function routesPayload_() {
+  return { routes: ROUTES, forms: routeForms_() };
+}
 
 var DEFAULT_BRANDS = ['La Roche-Posay', 'Eucerin', 'QV', 'The Raw'];
 var DEFAULT_PLATFORMS = ['Instagram', 'Facebook', 'Threads'];
@@ -127,7 +356,11 @@ var DEFAULT_TARGETS = [
 ];
 
 var SCREENSHOT_FOLDER_NAME = 'KKM Complaint Screenshots';
+var EXPORT_FOLDER_NAME = 'KKM Complaint Exports';
 var MAX_ROWS_RETURNED = 2000;
+var EXPORT_PAGE_MAX = 500;      // rows per `export` page; the dashboard pages through
+var EXPORT_DOC_MAX_ROWS = 400;  // rows a register document will carry
+var EXPORT_DOC_MAX_IMAGES = 30; // screenshots embedded in one document (Drive reads are the slow part)
 var PROPS = PropertiesService.getScriptProperties();
 var TZ = 'Asia/Kuala_Lumpur';
 
@@ -147,6 +380,7 @@ function setup() {
   if (!PROPS.getProperty('DASHBOARD_KEY')) PROPS.setProperty('DASHBOARD_KEY', randomToken_(24));
   if (!PROPS.getProperty('OWNER_EMAIL')) PROPS.setProperty('OWNER_EMAIL', Session.getEffectiveUser().getEmail());
   if (!PROPS.getProperty('KKM_FORM_URL')) PROPS.setProperty('KKM_FORM_URL', '');
+  if (!PROPS.getProperty('ROUTE_FORMS')) PROPS.setProperty('ROUTE_FORMS', '{}');
   if (!PROPS.getProperty('SCHEMA_VERSION')) PROPS.setProperty('SCHEMA_VERSION', '1');
   Logger.log('Setup complete.\nAPI_TOKEN=%s\nDASHBOARD_KEY=%s\nOWNER_EMAIL=%s',
     PROPS.getProperty('API_TOKEN'), PROPS.getProperty('DASHBOARD_KEY'), PROPS.getProperty('OWNER_EMAIL'));
@@ -359,6 +593,17 @@ function ensureFolder_() {
   return folder;
 }
 
+function ensureExportFolder_() {
+  var id = PROPS.getProperty('EXPORT_FOLDER_ID');
+  if (id) {
+    try { return DriveApp.getFolderById(id); } catch (err) { /* recreate below */ }
+  }
+  var it = DriveApp.getFoldersByName(EXPORT_FOLDER_NAME);
+  var folder = it.hasNext() ? it.next() : DriveApp.createFolder(EXPORT_FOLDER_NAME);
+  PROPS.setProperty('EXPORT_FOLDER_ID', folder.getId());
+  return folder;
+}
+
 // ---------------------------------------------------------------------------
 // HTTP entry points
 // ---------------------------------------------------------------------------
@@ -429,12 +674,15 @@ function handleApi_(action, body, p) {
                             return { ok: true, row: getRecord_(p.id || body.id) };
       case 'stats':         if (!viewer) return deny;
                             return { ok: true, stats: stats_() };
+      case 'summary':       if (!viewer) return deny;
+                            return { ok: true, summary: summary_() };
       case 'update_status': if (!viewer) return deny;
                             return updateStatus_(body.id, body.status, body.remarks);
       case 'bootstrap':     if (!viewer) return deny;
                             return { ok: true, rows: listRecords_(), stats: stats_(), lookups: lookups_(),
                                      kkmFormUrl: PROPS.getProperty('KKM_FORM_URL') || '',
-                                     questUrl: 'https://quest3plus.bpfk.gov.my/pmo2/index.php', statuses: STATUSES };
+                                     questUrl: 'https://quest3plus.bpfk.gov.my/pmo2/index.php', statuses: STATUSES,
+                                     routes: routesPayload_(), summary: summary_() };
       case 'open':          if (!viewer) return deny;
                             return { ok: true, row: openRecord_(body.id) };
       case 'update_fields': if (!viewer) return deny;
@@ -447,6 +695,16 @@ function handleApi_(action, body, p) {
                             PROPS.setProperty('KKM_FORM_URL', String(body.url || '')); return { ok: true };
       case 'draft_review':  if (!viewer) return deny;
                             return draftReview_(body);
+      // --- routes (the catalogue above) ---
+      case 'routes':        if (!viewer) return deny;
+                            return { ok: true, routes: routesPayload_() };
+      case 'set_route_form': if (!viewer) return deny;
+                            return setRouteForm_(body.route, body.url);
+      // --- exports ---
+      case 'export':        if (!viewer) return deny;
+                            return exportRows_(body);
+      case 'export_doc':    if (!viewer) return deny;
+                            return exportDoc_(body);
       // --- Links tab (Links.gs): dashboard adds and watches, the scheduled workflow claims and reports ---
       case 'links_list':    if (!viewer) return deny;
                             return linksList_();
@@ -614,7 +872,9 @@ function apiBootstrap(key) {
     lookups: lookups_(),
     kkmFormUrl: PROPS.getProperty('KKM_FORM_URL') || '',
     questUrl: 'https://quest3plus.bpfk.gov.my/pmo2/index.php',
-    statuses: STATUSES
+    statuses: STATUSES,
+    routes: routesPayload_(),
+    summary: summary_()
   };
 }
 
@@ -754,19 +1014,29 @@ function normaliseRecord_(rec) {
   return out;
 }
 
+// Fallback complaint text (BM) when the client did not supply one. Nothing here is a fact the
+// scraper cannot vouch for: it only restates what was captured, and the legal basis is the one
+// sentence the route carries, so a food complaint cites the Food Act and not Annex I.
+// The dashboard has the same function (routeDescription) for "rewrite for this route".
 function buildComplaintDescription_(rec) {
-  // Fallback complaint text (BM) when the client did not supply one. Nothing here is
-  // a fact the scraper cannot vouch for: it only restates what was captured.
+  var route = routeOf_(rec['Jenis Aduan']);
   var product = rec['Nama Kosmetik'] || '[SAHKAN: nama produk]';
+  var refLabel = (route.ref && route.ref.label) || 'Nombor rujukan';
+  // A cosmetic always has a NOT to check; another route's number is only demanded when the route
+  // says what it looks like (ref.pattern), otherwise "tiada" is an honest answer and not a gap.
+  var ref = rec['Nombor Notifikasi'] || (route.kkm ? '[SAHKAN: semak QUEST3+]' : (route.ref && route.ref.pattern ? '[SAHKAN: ' + refLabel + ']' : 'tiada'));
+  var heading = route.kkm
+    ? (route.value === 'Kualiti Kosmetik' ? 'Aduan kualiti produk kosmetik bernotifikasi.' : 'Aduan iklan kosmetik bernotifikasi.')
+    : 'Aduan ' + route.value.replace(/\s*\(.*\)\s*$/, '').toLowerCase() + ' — untuk perhatian ' + (route.agency.split(' — ')[0] || route.agency) + '.';
   var lines = [
-    'Aduan iklan kosmetik bernotifikasi.',
+    heading,
     'Jenama: ' + (rec['Brand'] || '-') + '. Produk: ' + product + '. Platform: ' + (rec['Platform'] || '-') + '.',
     'Pautan iklan: ' + (rec['Post URL'] || '-'),
     'Dakwaan yang dikesan: ' + (rec['Violation Reason'] || '-'),
-    'Jenis pelanggaran: ' + (rec['Violation Type'] || '-') + '.',
-    'Dakwaan ini tidak dibenarkan untuk produk kosmetik mengikut Guidelines for Control of Cosmetic Products in Malaysia, Annex I Part 8 (Guideline for Cosmetic Claims) dan Part 10 (Guideline for Cosmetic Advertisement), NPRA.',
-    'Tangkapan skrin dilampirkan. Nombor notifikasi: ' + (rec['Nombor Notifikasi'] || '[SAHKAN: semak QUEST3+]') + '.'
+    'Jenis pelanggaran: ' + (rec['Violation Type'] || '-') + '.'
   ];
+  if (route.basis) lines.push(route.basis);
+  lines.push('Tangkapan skrin dilampirkan. ' + refLabel + ': ' + ref + '.');
   return lines.join('\n');
 }
 
@@ -851,6 +1121,66 @@ function stats_() {
   return { counts: counts, byBrand: byBrand, byPlatform: byPlatform, generatedAt: nowIso_() };
 }
 
+// ---------------------------------------------------------------------------
+// Overview figures for the dashboard's home view (Wan, 9 Oct 2026: "add home dashboard to see
+// overall status"). Computed here over EVERY row, because the list the page holds is capped at
+// MAX_ROWS_RETURNED and leaves the archive out - a chart drawn from it would quietly undercount.
+// One pass over the sheet; nothing is written.
+// ---------------------------------------------------------------------------
+function summary_() {
+  var sheet = sheet_();
+  var last = sheet.getLastRow();
+  var byMonth = {}, byRoute = {}, byPlatform = {}, byBrand = {}, byType = {}, bySource = {}, byStatus = { total: 0 };
+  STATUSES.forEach(function (s) { byStatus[s] = 0; }); byStatus[ARCHIVED_FILTER] = 0;
+  var filed = 0, replied = 0, lags = [], last7 = 0, last30 = 0, oldestNew = null, newest = '';
+  var now = new Date(), day = 86400000;
+  JENIS_ADUAN.forEach(function (v) { byRoute[v] = { total: 0, filed: 0, replied: 0, open: 0 }; });
+  if (last >= 2) {
+    var vals = sheet.getRange(2, 1, last - 1, HEADERS.length).getValues();
+    vals.forEach(function (row) {
+      if (!row[COL['ID']]) return;
+      var date = row[COL['Date']] instanceof Date ? Utilities.formatDate(row[COL['Date']], TZ, 'yyyy-MM-dd') : String(row[COL['Date']] || '');
+      var month = date.slice(0, 7) || 'unknown';
+      var archived = isArchived_(row);
+      var status = archived ? ARCHIVED_FILTER : String(row[COL['Status']] || 'New');
+      byStatus.total++; byStatus[status] = (byStatus[status] || 0) + 1;
+      var m = byMonth[month] || (byMonth[month] = { total: 0, 'New': 0, 'In-Progress': 0, 'Complete': 0, 'Dismissed': 0, 'Archived': 0 });
+      m.total++; m[status] = (m[status] || 0) + 1;
+      var route = String(row[COL['Jenis Aduan']] || 'Iklan Kosmetik');
+      var rr = byRoute[route] || (byRoute[route] = { total: 0, filed: 0, replied: 0, open: 0 });
+      rr.total++;
+      var tarikh = row[COL['Tarikh Melapor']] instanceof Date ? Utilities.formatDate(row[COL['Tarikh Melapor']], TZ, 'yyyy-MM-dd') : String(row[COL['Tarikh Melapor']] || '');
+      if (tarikh) {
+        filed++; rr.filed++;
+        var d0 = new Date(date), d1 = new Date(tarikh);
+        if (!isNaN(d0.getTime()) && !isNaN(d1.getTime())) lags.push(Math.max(0, Math.round((d1 - d0) / day)));
+      }
+      if (archived) { replied++; rr.replied++; }
+      if (status === 'New' || status === 'In-Progress') rr.open++;
+      var p = String(row[COL['Platform']] || '-'); byPlatform[p] = (byPlatform[p] || 0) + 1;
+      var b = String(row[COL['Brand']] || '-'); byBrand[b] = (byBrand[b] || 0) + 1;
+      var t = String(row[COL['Violation Type']] || '-'); byType[t] = (byType[t] || 0) + 1;
+      var src = String(row[COL['Source']] || '-'); bySource[src] = (bySource[src] || 0) + 1;
+      var created = String(row[COL['Created At']] || '');
+      var cd = new Date(created || date);
+      if (!isNaN(cd.getTime())) {
+        var age = (now - cd) / day;
+        if (age <= 7) last7++;
+        if (age <= 30) last30++;
+        if (status === 'New' && (oldestNew === null || cd < oldestNew)) oldestNew = cd;
+      }
+      if (created > newest) newest = created;
+    });
+  }
+  lags.sort(function (a, b) { return a - b; });
+  var median = lags.length ? (lags.length % 2 ? lags[(lags.length - 1) / 2] : Math.round((lags[lags.length / 2 - 1] + lags[lags.length / 2]) / 2)) : null;
+  return {
+    byStatus: byStatus, byMonth: byMonth, byRoute: byRoute, byPlatform: byPlatform, byBrand: byBrand, byType: byType, bySource: bySource,
+    filed: filed, replied: replied, lagMedianDays: median, lagCount: lags.length, last7: last7, last30: last30,
+    oldestNewDays: oldestNew ? Math.round((now - oldestNew) / day) : null, newestCreatedAt: newest, generatedAt: nowIso_()
+  };
+}
+
 function lookups_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(LOOKUP_SHEET_NAME);
@@ -874,6 +1204,169 @@ function lookups_() {
 
 function knownUrls_() {
   return Object.keys(knownUrlSet_(sheet_()));
+}
+
+// ---------------------------------------------------------------------------
+// Exports (Wan, 9 Oct 2026: "add features can export to docs, pdf, csv when needed").
+//
+// `export` hands the dashboard FULL rows (no truncation), filtered the same way the list is,
+// in pages of up to EXPORT_PAGE_MAX so a 2,000-row register never has to fit one response.
+// `all: true` includes the archive. The dashboard turns the pages into a CSV in the browser.
+//
+// `export_doc` builds a Google Doc in Drive ("KKM Complaint Exports") and returns its link;
+// with format 'pdf' or 'docx' it also returns the file's bytes (base64) so the browser can
+// save it. Two shapes: a REGISTER (one table row per complaint) and a DOSSIER (one complaint,
+// every field, the screenshot embedded when Drive lets us read it) - the dossier is what goes
+// to an agency with a submission. The Doc stays in Drive, so there is a history of what was
+// sent and when.
+// ---------------------------------------------------------------------------
+function selectRows_(f) {
+  f = f || {};
+  var sheet = sheet_();
+  var last = sheet.getLastRow();
+  if (last < 2) return [];
+  var vals = sheet.getRange(2, 1, last - 1, HEADERS.length).getValues();
+  var ids = Array.isArray(f.ids) && f.ids.length ? f.ids.reduce(function (m, id) { m[String(id)] = true; return m; }, {}) : null;
+  var query = String(f.q || '').trim().toLowerCase();
+  var out = [];
+  for (var i = vals.length - 1; i >= 0; i--) {
+    var row = vals[i];
+    if (!row[COL['ID']]) continue;
+    if (ids) { if (!ids[String(row[COL['ID']])]) continue; }
+    else {
+      var archived = isArchived_(row);
+      if (f.status === ARCHIVED_FILTER) { if (!archived) continue; }
+      else if (f.status === 'Complete') { if (!(row[COL['Status']] === 'Complete')) continue; }   // Complete means filed, replied or not
+      else if (f.status) { if (archived || row[COL['Status']] !== f.status) continue; }
+      else if (!f.all && archived) continue;
+      if (f.brand && row[COL['Brand']] !== f.brand) continue;
+      if (f.platform && row[COL['Platform']] !== f.platform) continue;
+      if (f.route && String(row[COL['Jenis Aduan']] || 'Iklan Kosmetik') !== f.route) continue;
+      var date = row[COL['Date']] instanceof Date ? Utilities.formatDate(row[COL['Date']], TZ, 'yyyy-MM-dd') : String(row[COL['Date']] || '');
+      if (f.from && date && date < String(f.from)) continue;
+      if (f.to && date && date > String(f.to)) continue;
+      if (query && !rowMatches_(row, query)) continue;
+    }
+    out.push(rowToObject_(row));
+  }
+  return out;
+}
+
+function exportRows_(body) {
+  var all = selectRows_(body);
+  var offset = Math.max(0, Number(body.offset) || 0);
+  var limit = Math.min(EXPORT_PAGE_MAX, Math.max(1, Number(body.limit) || EXPORT_PAGE_MAX));
+  return { ok: true, total: all.length, offset: offset, rows: all.slice(offset, offset + limit), headers: HEADERS, generatedAt: nowIso_() };
+}
+
+function driveIdFromLink_(link) {
+  var m = /drive\.google\.com\/file\/d\/([^/?#]+)/.exec(link || '') || /[?&]id=([^&]+)/.exec(link || '');
+  return m ? m[1] : '';
+}
+
+function exportDoc_(body) {
+  body = body || {};
+  var kind = body.kind === 'dossier' ? 'dossier' : 'register';
+  var format = ['pdf', 'docx', 'gdoc'].indexOf(body.format) >= 0 ? body.format : 'gdoc';
+  var rows = selectRows_(body);
+  if (!rows.length) throw new Error('Nothing to export: no complaint matches.');
+  if (kind === 'register' && rows.length > EXPORT_DOC_MAX_ROWS) rows = rows.slice(0, EXPORT_DOC_MAX_ROWS);
+  var stamp = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HHmm');
+  var title = String(body.title || '').trim() ||
+    (kind === 'dossier' ? 'Aduan ' + rows[0]['ID'] + ' - ' + (rows[0]['Brand'] || '') : 'Daftar Aduan KKM - ' + stamp);
+  var doc = DocumentApp.create(title);
+  var docBody = doc.getBody();
+  docBody.setMarginTop(50).setMarginBottom(50).setMarginLeft(54).setMarginRight(54);
+  if (kind === 'dossier') {
+    rows.forEach(function (r, i) { if (i) docBody.appendPageBreak(); writeDossier_(docBody, r, body.includeScreenshot !== false && i < EXPORT_DOC_MAX_IMAGES); });
+  } else {
+    writeRegister_(docBody, rows, body);
+  }
+  doc.saveAndClose();
+  var file = DriveApp.getFileById(doc.getId());
+  try { ensureExportFolder_().addFile(file); DriveApp.getRootFolder().removeFile(file); } catch (err) { console.warn('export folder: ' + err); }
+  var out = { ok: true, url: doc.getUrl(), id: doc.getId(), name: title, count: rows.length, format: format };
+  if (format === 'pdf') {
+    var pdf = file.getAs('application/pdf');
+    out.base64 = Utilities.base64Encode(pdf.getBytes()); out.mime = 'application/pdf'; out.filename = safeFilename_(title) + '.pdf';
+  } else if (format === 'docx') {
+    var res = UrlFetchApp.fetch('https://docs.google.com/feeds/download/documents/export/Export?id=' + doc.getId() + '&exportFormat=docx',
+      { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) throw new Error('Word export failed (HTTP ' + res.getResponseCode() + '). The Google Doc is saved: ' + doc.getUrl());
+    out.base64 = Utilities.base64Encode(res.getContent()); out.mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'; out.filename = safeFilename_(title) + '.docx';
+  }
+  return out;
+}
+
+function writeRegister_(docBody, rows, f) {
+  var h = docBody.appendParagraph('Daftar Aduan — KKM Complaint System'); h.setHeading(DocumentApp.ParagraphHeading.HEADING1);
+  var filters = [];
+  if (f.status) filters.push('Status: ' + f.status); if (f.brand) filters.push('Brand: ' + f.brand); if (f.platform) filters.push('Platform: ' + f.platform);
+  if (f.route) filters.push('Laluan: ' + f.route); if (f.from || f.to) filters.push('Tarikh: ' + (f.from || '…') + ' hingga ' + (f.to || '…')); if (f.q) filters.push('Carian: "' + f.q + '"');
+  docBody.appendParagraph('Dijana ' + nowIso_() + ' · ' + rows.length + ' aduan' + (filters.length ? ' · ' + filters.join(' · ') : '')).setFontSize(9).setForegroundColor('#64748b');
+  // Status roll-up above the table so the first page reads as a report, not a dump.
+  var counts = {};
+  rows.forEach(function (r) { var s = r['KKM Feedback'] ? 'Dijawab (archived)' : r['Status']; counts[s] = (counts[s] || 0) + 1; });
+  docBody.appendParagraph(Object.keys(counts).map(function (k) { return k + ': ' + counts[k]; }).join('   ·   ')).setFontSize(10);
+  var cols = ['ID', 'Date', 'Brand', 'Platform', 'Nama Kosmetik', 'Violation Type', 'Jenis Aduan', 'Status', 'Tarikh Melapor', 'Post URL'];
+  var data = [cols].concat(rows.map(function (r) { return cols.map(function (c) { return String(r[c] == null ? '' : r[c]); }); }));
+  var table = docBody.appendTable(data);
+  table.setBorderWidth(0.5).setBorderColor('#cbd5e1');
+  var widths = [92, 56, 80, 56, 90, 100, 90, 56, 60, 120];
+  for (var c = 0; c < cols.length; c++) table.setColumnWidth(c, widths[c]);
+  for (var r = 0; r < table.getNumRows(); r++) {
+    var row = table.getRow(r);
+    for (var cc = 0; cc < row.getNumCells(); cc++) {
+      var cell = row.getCell(cc); cell.setFontSize(7.5).setPaddingTop(2).setPaddingBottom(2).setPaddingLeft(3).setPaddingRight(3);
+      if (r === 0) { cell.setBackgroundColor('#0f172a'); cell.editAsText().setForegroundColor('#ffffff').setBold(true); }
+    }
+  }
+  docBody.appendParagraph('').setFontSize(6);
+  docBody.appendParagraph('Setiap baris ialah saringan pertama oleh sistem; keputusan untuk memfailkan adalah keputusan penilai. Pautan skrin dan teks penuh ada dalam pangkalan data.').setFontSize(8).setForegroundColor('#64748b');
+}
+
+function writeDossier_(docBody, r, withShot) {
+  var route = routeOf_(r['Jenis Aduan']);
+  var h = docBody.appendParagraph('Aduan ' + r['ID']); h.setHeading(DocumentApp.ParagraphHeading.HEADING1);
+  docBody.appendParagraph((r['Brand'] || '-') + ' · ' + (r['Platform'] || '-') + ' · dikesan ' + (r['Date'] || '-') + ' · status ' + (r['Status'] || '-')).setFontSize(10).setForegroundColor('#475569');
+  var sec = function (t) { docBody.appendParagraph(t).setHeading(DocumentApp.ParagraphHeading.HEADING3); };
+  var kv = function (pairs) {
+    var t = docBody.appendTable(pairs.map(function (p) { return [p[0], String(p[1] == null || p[1] === '' ? '-' : p[1])]; }));
+    t.setBorderWidth(0.5).setBorderColor('#e2e8f0'); t.setColumnWidth(0, 150); t.setColumnWidth(1, 330);
+    for (var i = 0; i < t.getNumRows(); i++) { var row = t.getRow(i); row.getCell(0).setBackgroundColor('#f8fafc').editAsText().setBold(true).setFontSize(9); row.getCell(1).editAsText().setFontSize(9); }
+  };
+  sec('Laluan aduan');
+  kv([['Jenis Aduan', r['Jenis Aduan'] || 'Iklan Kosmetik'], ['Agensi', route.agency], ['Instrumen', route.act || '-'],
+      ['Saluran', (route.channel && (route.channel.url || route.channel.label)) || '-']]);
+  sec('Produk dan iklan');
+  kv([['Nama produk', r['Nama Kosmetik']], [(route.ref && route.ref.label) || 'Nombor rujukan', r['Nombor Notifikasi']], ['Jenama / akaun', r['Brand']],
+      ['Platform', r['Platform']], ['Pautan iklan', r['Post URL']], ['Tarikh dikesan', r['Date']], ['Sumber', r['Source']],
+      ['Keyakinan penyemak', r['Confidence'] !== '' && r['Confidence'] != null ? Math.round(Number(r['Confidence']) * 100) + '%' : '-']]);
+  sec('Pelanggaran');
+  kv([['Jenis pelanggaran', r['Violation Type']], ['Alasan (dengan petikan)', r['Violation Reason']]]);
+  sec('Deskripsi Aduan');
+  docBody.appendParagraph(r['Deskripsi Aduan'] || '-').setFontSize(10);
+  sec('Teks yang diekstrak');
+  docBody.appendParagraph(String(r['Extracted Text'] || '-').slice(0, 6000)).setFontSize(8.5).setForegroundColor('#334155');
+  sec('Pemfailan');
+  kv([['Tarikh Melapor', r['Tarikh Melapor']], ['Maklum balas agensi', r['KKM Feedback']], ['Catatan', r['Remarks']], ['Dikemas kini', r['Updated At']]]);
+  sec('Tangkapan skrin');
+  var link = r['Screenshot Link'] || '';
+  if (link) docBody.appendParagraph(link).setFontSize(8).setLinkUrl(link);
+  if (withShot && link) {
+    try {
+      var fid = driveIdFromLink_(link);
+      if (fid) {
+        var blob = DriveApp.getFileById(fid).getBlob();
+        if (/^image\//.test(blob.getContentType()) && blob.getBytes().length < 6 * 1024 * 1024) {
+          var img = docBody.appendImage(blob);
+          var w = img.getWidth(), hh = img.getHeight(), maxW = 440, maxH = 520;
+          var k = Math.min(maxW / w, maxH / hh, 1);
+          img.setWidth(Math.round(w * k)); img.setHeight(Math.round(hh * k));
+        }
+      }
+    } catch (err) { docBody.appendParagraph('(tangkapan skrin tidak dapat dibaca dari Drive: ' + String(err && err.message || err).slice(0, 120) + ')').setFontSize(8).setForegroundColor('#b91c1c'); }
+  } else if (!link) docBody.appendParagraph('Tiada tangkapan skrin pada rekod ini.').setFontSize(9);
 }
 
 // ---------------------------------------------------------------------------
@@ -1087,4 +1580,5 @@ function smokeTest_() {
   Logger.log(JSON.stringify(res));
   Logger.log(JSON.stringify(updateStatus_(res.ids[0], 'In-Progress', 'opened in smoke test')));
   Logger.log(JSON.stringify(stats_()));
+  Logger.log(JSON.stringify(summary_()).slice(0, 500));
 }

@@ -74,6 +74,9 @@ Deskripsi Aduan · Tarikh Melapor · Source · Confidence · Created At · Updat
    In-Progress, and the stats log prints. Delete the row afterwards or Dismiss it.
 
 Any code change needs **Deploy → Manage deployments → Edit → Version: New** to go live.
+Since 9 Oct 2026 `appsscript.json` also asks for the Google Docs scope (the PDF / Word /
+Google Doc exports build a Doc): after pasting the new files, run any function once in the
+editor and accept the scope, then publish the new version.
 
 ### 1b. Dashboard on your own domain (Module E)
 
