@@ -10,7 +10,7 @@
  *            web/ (hosted on your own domain) talks to doPost with the DASHBOARD_KEY.
  * UI RPC   : the dashboard calls api* functions through google.script.run.
  * Routes   : ROUTES below is the catalogue of where a complaint goes (NPRA, BPF, MDA,
- *            CKAPS, BKKM, JAKIM/KPDN, MCMC, …), with the cases that belong to each,
+ *            CKAPS, BKKM, JAKIM/KPDN, MCMC, …; ASA dropped 9 Oct 2026 on Wan's word: "irrelevant for Malaysia"), with the cases that belong to each,
  *            the instrument cited, the reference number asked for and the agency's
  *            complaint channel. The dashboard reads it from `bootstrap`, so a route
  *            is edited HERE and nowhere else. A per-route form template (a Google
@@ -256,7 +256,7 @@ var ROUTES = [
             'Fake discount, misleading price or profiteering', 'Counterfeit product', 'Online seller with no identity, address or return terms (2012 e-commerce regulations)', 'Non-delivery or scam after payment'],
     fields: ['Brand', 'Nama Kosmetik', 'Nombor Notifikasi', 'Platform', 'Post URL', 'Date', 'Deskripsi Aduan', 'Screenshot Link'],
     channel: { label: 'e-Aduan KPDN', url: 'https://e-aduan.kpdn.gov.my/', checked: '2026-10-09', status: 'down',
-               note: 'Portal answered HTTP 503 at check time (and the KPDN home page too) — retry. Call centre 1-800-886-800; WhatsApp 019-279 4317 and the Ez ADU app (2020 reports; unverified).' },
+               note: 'Not reachable on 9 Oct 2026 from three vantage points outside Malaysia (the checking session: 503 then timeout; a sandbox and a GitHub runner: timeout and TLS EOF on e-aduan, www and eaduan). It may be fenced to Malaysian addresses, so try it from your own browser. Re-checked every few hours until it answers. Call centre 1-800-886-800; WhatsApp 019-279 4317 and the Ez ADU app (2020 reports; unverified).' },
     email: 'e-aduan@kpdnhep.gov.my', phone: '1-800-886-800'
   },
   {
@@ -271,19 +271,6 @@ var ROUTES = [
     channel: { label: 'Portal Aduan MCMC (Consumer Redress Portal) — register, verify e-mail, then New Complaint', url: 'https://aduan.mcmc.gov.my/', checked: '2026-10-09', status: 'loads',
                note: 'Loads as "MCMC - CRP Portal". Hotline 1-800-188-030 (weekdays 8:30–17:30). The older aduan.skmm.gov.my address is superseded.' },
     email: '', phone: '1-800-188-030'
-  },
-  {
-    value: 'Iklan Media Cetak / Luar (ASA)', group: 'Other',
-    agency: 'Advertising Standards Malaysia (ASA) — badan kawal selia kendiri industri pengiklanan',
-    act: 'Malaysian Code of Advertising Practice (MCAP) — iklan mesti sah, sopan, jujur dan benar; Klausa 4.2.2 (gambaran palsu tentang kualiti produk); superlatif perlu dibuktikan',
-    basis: 'Iklan ini disyaki melanggar Malaysian Code of Advertising Practice (ASA Malaysia) kerana membuat dakwaan yang tidak benar atau tidak dapat dibuktikan.',
-    ref: { label: 'No. rujukan ASA', hint: 'Filled after ASA acknowledges', pattern: '' },
-    cases: ['Print, outdoor, billboard or cinema advertisement with a misleading claim', 'Unsubstantiated superlative ("No.1", "the best", "fastest")', 'Indecent or offensive visual',
-            'Broadcast (TV / radio) advertisement — goes to the CMCF Content Forum instead'],
-    fields: ['Brand', 'Nama Kosmetik', 'Platform', 'Post URL', 'Date', 'Deskripsi Aduan', 'Screenshot Link'],
-    channel: { label: 'ASA Malaysia complaints page', url: '', checked: '2026-10-09', status: 'unverified',
-               note: 'ASA\'s domain did not resolve from the checking environment on 9 Oct 2026. Search "Advertising Standards Malaysia complaint", confirm the page, and paste the link as this route\'s form. ASA also has a mobile app.' },
-    email: '', phone: ''
   },
   {
     value: 'Lain-lain', group: 'Other',
