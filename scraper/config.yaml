@@ -33,8 +33,8 @@ run:
   # run killed mid-pair keeps what it paid for (8 Oct 2026). 0 turns it off.
   flush_every_reviews: 10
   # Reviews of one target's posts run this many at a time (1 = one call at a time, the old behaviour). Needs the gateway
-  # to take parallel requests; raise it only after checking one run's 502 count does not go up. Proposed 8 Oct 2026.
-  review_concurrency: 1
+  # to take parallel requests. Set to 3 on 9 Oct 2026 (Wan: "push concurrency") because rootsys.cloud needed 3-5 minutes a call; if a run's 502 count or REVIEWER FAILED count goes UP, set it back to 1.
+  review_concurrency: 3
   screenshot_max_width: 1200      # px, before JPEG compression
   screenshot_jpeg_quality: 80
   headless: true
