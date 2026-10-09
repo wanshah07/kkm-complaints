@@ -28,7 +28,12 @@ run:
   # Instagram started 51 minutes in, and the reviewer gateway needed 3-5 minutes a call (502 after 300 s), so 13
   # of its 60 posts were judged in 2 hours. The budget cannot fix a gateway that slow; it only shortens the
   # time before a new pair may start. See flush_every_reviews below for what keeps the judged posts.
-  max_run_minutes: 80
+  # 100, not 80 (9 Oct 2026): with review_concurrency 3 and a healthy gateway the run is scrape-bound, not review-bound.
+  # Runs 128, 130, 131, 132 and 133 all ended on the 80-minute gate after 1h21m-1h26m with 0 x 502, 0 x 429 and the pairs
+  # finishing in 10-15 minutes each, so the gate was cutting off a quarter of the day's useful time. 180 - 100 = 80 minutes
+  # remain for the last target to finish; flush_every_reviews keeps what a slow target had judged if the kill comes first.
+  # If a run is cancelled at 180 minutes again, put this back to 80.
+  max_run_minutes: 100
   # File and ledger a pair's judged posts every N reviews instead of only when the whole pair is done, so a
   # run killed mid-pair keeps what it paid for (8 Oct 2026). 0 turns it off.
   flush_every_reviews: 10
