@@ -63,8 +63,43 @@ var HEADERS = [
 var COL = {};
 HEADERS.forEach(function (h, i) { COL[h] = i; });
 
-var STATUSES = ['New', 'In-Progress', 'Complete', 'Dismissed'];
-var STATUS_FLOW = { 'New': 'In-Progress', 'In-Progress': 'Complete', 'Complete': 'Complete', 'Dismissed': 'Dismissed' };
+// 'Action taken' (Wan, 11 Oct 2026) is for the own-brand segment: a row about one of Wan's own brands is never filed
+// with an agency, so it ends either Dismissed or Action taken (he dealt with it himself). It is not part of the flow.
+var STATUSES = ['New', 'In-Progress', 'Complete', 'Dismissed', 'Action taken'];
+var STATUS_FLOW = { 'New': 'In-Progress', 'In-Progress': 'Complete', 'Complete': 'Complete', 'Dismissed': 'Dismissed', 'Action taken': 'Action taken' };
+
+// ---------------------------------------------------------------------------
+// OWN BRANDS (Wan, 11 Oct 2026: "for own brand, like skintific, lumixpert, facerinna, bodibreze, nextprime do
+// separate another segment - make sure got dismissed, action taken button").
+// A row whose brand, product, reviewer reasoning or remarks name one of these is about Wan's own business, never a
+// complaint to file. The dashboard's "Own brand" segment lists them, with Dismissed / Action taken buttons, and they
+// stay out of the Complaints list and its counts. Only reviewer-written fields and the URL are read: the caption
+// ('Extracted Text') is not, because a post about another brand can mention one of these in passing.
+// A row Wan marks "Not own brand" carries the tag below in Remarks and returns to the Complaints list.
+// ---------------------------------------------------------------------------
+var OWN_BRANDS = [
+  { name: 'Skintific', keys: ['skintific'] },
+  { name: 'Lumixpert', keys: ['lumixpert'] },
+  { name: 'Facerinna', keys: ['facerinna', 'facerina'] },
+  { name: 'Bodibreze', keys: ['bodibreze', 'body breze', 'bodybreze'] },
+  { name: 'Nextprime', keys: ['nextprime', 'next prime'] },
+  { name: 'Valorith', keys: ['valorith'] }
+];
+var OWN_BRAND_FIELDS = ['Brand', 'Nama Kosmetik', 'Violation Reason', 'Remarks', 'Post URL'];
+var NOT_OWN_TAG = '[not own brand]';
+
+// The own brand a row is about ('' when it is about none).
+function ownBrandOf_(row) {
+  if (String(row[COL['Remarks']] || '').toLowerCase().indexOf(NOT_OWN_TAG) >= 0) return '';
+  var hay = OWN_BRAND_FIELDS.map(function (h) { return String(row[COL[h]] || ''); }).join('\n').toLowerCase();
+  for (var i = 0; i < OWN_BRANDS.length; i++) {
+    for (var j = 0; j < OWN_BRANDS[i].keys.length; j++) {
+      if (hay.indexOf(OWN_BRANDS[i].keys[j]) >= 0) return OWN_BRANDS[i].name;
+    }
+  }
+  return '';
+}
+function isOwnBrandRow_(row) { return ownBrandOf_(row) !== ''; }
 
 // Archived is not a Status. A complaint is archived when KKM has replied - that is, when
 // 'KKM Feedback' carries anything - because at that point the file is closed and it should
@@ -256,7 +291,7 @@ var ROUTES = [
             'Fake discount, misleading price or profiteering', 'Counterfeit product', 'Online seller with no identity, address or return terms (2012 e-commerce regulations)', 'Non-delivery or scam after payment'],
     fields: ['Brand', 'Nama Kosmetik', 'Nombor Notifikasi', 'Platform', 'Post URL', 'Date', 'Deskripsi Aduan', 'Screenshot Link'],
     channel: { label: 'e-Aduan KPDN', url: 'https://e-aduan.kpdn.gov.my/', checked: '2026-10-09', status: 'down',
-               note: 'Not reachable on 9 Oct 2026 from three vantage points outside Malaysia (the checking session: 503 then timeout; a sandbox and a GitHub runner: timeout and TLS EOF on e-aduan, www and eaduan). It may be fenced to Malaysian addresses, so try it from your own browser. Re-checked every few hours until it answers. Call centre 1-800-886-800; WhatsApp 019-279 4317 and the Ez ADU app (2020 reports; unverified).' },
+               note: 'Not reachable on 9 Oct 2026 from three vantage points outside Malaysia (the checking session: 503 then timeout; a sandbox and a GitHub runner: timeout and TLS EOF on e-aduan, www and eaduan). It may be fenced to Malaysian addresses, so try it from your own browser. Re-checking stopped on 11 Oct 2026 (Wan: ignore it). Call centre 1-800-886-800; WhatsApp 019-279 4317 and the Ez ADU app (2020 reports; unverified).' },
     email: 'e-aduan@kpdnhep.gov.my', phone: '1-800-886-800'
   },
   {
@@ -709,6 +744,22 @@ function handleApi_(action, body, p) {
                             return linksPending_();
       case 'links_update':  if (!machine) return deny;
                             return linksUpdate_(body.updates);
+      // --- Own brand segment (Wan, 11 Oct 2026) ---
+      case 'own_brand_list': if (!viewer) return deny;
+                            return ownBrandList_();
+      case 'own_brand_set': if (!viewer) return deny;
+                            return ownBrandAct_(body.id, body.op);
+      // --- Held tab / "To check" segment (Held.gs): the scraper parks, Wan decides ---
+      case 'held_add':      if (!machine) return deny;
+                            return heldAdd_(body.records || (body.record ? [body.record] : []));
+      case 'held_list':     if (!viewer) return deny;
+                            return heldList_();
+      case 'held_detail':   if (!viewer) return deny;
+                            return heldDetail_(body.url);
+      case 'held_file':     if (!viewer) return deny;
+                            return heldFile_(body.url, body.route);
+      case 'held_dismiss':  if (!viewer) return deny;
+                            return heldDismiss_(body.url);
       default:              return { ok: false, error: 'Unknown action: ' + action };
     }
   } catch (err) {
@@ -1055,6 +1106,7 @@ function listRecords_(status, brand, platform, q) {
   for (var i = vals.length - 1; i >= 0; i--) { // newest first
     var row = vals[i];
     if (!row[COL['ID']]) continue;
+    if (!query && isOwnBrandRow_(row)) continue;        // own-brand rows live in their own segment
     // A search reaches everywhere, archive included: not finding a complaint you know you
     // filed is worse than a longer list. Without one, closed files stay out of the way.
     if (query) { if (!rowMatches_(row, query)) continue; }
@@ -1081,6 +1133,66 @@ function rowMatches_(row, query) {
   return false;
 }
 
+// The Own brand segment: every row about one of OWN_BRANDS, any status, newest first.
+function ownBrandList_() {
+  var sheet = sheet_();
+  var last = sheet.getLastRow();
+  var counts = { total: 0 }; STATUSES.forEach(function (s) { counts[s] = 0; });
+  var rows = [];
+  if (last >= 2) {
+    var vals = sheet.getRange(2, 1, last - 1, HEADERS.length).getValues();
+    for (var i = vals.length - 1; i >= 0; i--) {
+      var row = vals[i];
+      if (!row[COL['ID']]) continue;
+      var brand = ownBrandOf_(row);
+      if (!brand) continue;
+      counts.total++;
+      var st = String(row[COL['Status']] || 'New'); counts[st] = (counts[st] || 0) + 1;
+      var o = listRowToObject_(row); o._ownBrand = brand;
+      rows.push(o);
+    }
+  }
+  return { ok: true, rows: rows, counts: counts, brands: OWN_BRANDS.map(function (b) { return b.name; }) };
+}
+
+// Wan's buttons in the Own brand segment. `op` (not `action`, which names the API call itself) is 'dismiss' | 'taken' | 'reopen' | 'not_own'.
+// Every action leaves a dated line in Remarks, in the same shape as the other rows Wan dismissed.
+function ownBrandAct_(id, action) {
+  var plan = { dismiss: 'Dismissed', taken: 'Action taken', reopen: 'New', not_own: '' };
+  if (!(action in plan)) return { ok: false, error: 'Unknown action: ' + action };
+  return withLock_(function () {
+    var sheet = sheet_();
+    var r = findRowById_(sheet, id);
+    if (r < 0) return { ok: false, error: 'Not found: ' + id };
+    var rowVals = sheet.getRange(r, 1, 1, HEADERS.length).getValues()[0];
+    var today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+    var old = String(rowVals[COL['Remarks']] || '');
+    if (action === 'dismiss') {
+      if (rowVals[COL['Status']] === 'Dismissed') return { ok: true, row: rowToObject_(rowVals), unchanged: true };
+      rowVals[COL['Status']] = 'Dismissed';
+      rowVals[COL['Remarks']] = 'Dismissed (Wan, ' + today + '): own brand, not for filing. | ' + old;
+    } else if (action === 'taken') {
+      if (rowVals[COL['Status']] === 'Action taken') return { ok: true, row: rowToObject_(rowVals), unchanged: true };
+      rowVals[COL['Status']] = 'Action taken';
+      rowVals[COL['Remarks']] = 'Action taken (Wan, ' + today + '): own brand. | ' + old;
+    } else if (action === 'reopen') {
+      rowVals[COL['Status']] = 'New';
+    } else {
+      if (old.toLowerCase().indexOf(NOT_OWN_TAG) >= 0) return { ok: true, row: rowToObject_(rowVals), unchanged: true };
+      rowVals[COL['Remarks']] = NOT_OWN_TAG + ' (Wan, ' + today + '): not an own-brand complaint, back in the Complaints list. | ' + old;
+    }
+    rowVals[COL['Updated At']] = nowIso_();
+    sheet.getRange(r, 1, 1, HEADERS.length).setValues([rowVals]);
+    // The sheet's Status dropdown was built before 'Action taken' existed: give this one cell the current list, so it is
+    // not flagged as invalid data (setup() would redo every row, but Wan should not have to run it for this).
+    try {
+      sheet.getRange(r, COL['Status'] + 1).setDataValidation(
+        SpreadsheetApp.newDataValidation().requireValueInList(STATUSES, true).setAllowInvalid(false).build());
+    } catch (err) { console.error(err); }
+    return { ok: true, row: rowToObject_(rowVals) };
+  });
+}
+
 function getRecord_(id) {
   var sheet = sheet_();
   var r = findRowById_(sheet, id);
@@ -1092,12 +1204,14 @@ function stats_() {
   var counts = { total: 0 }; STATUSES.forEach(function (s) { counts[s] = 0; });
   counts[ARCHIVED_FILTER] = 0;
   var byBrand = {}, byPlatform = {};
+  var own = { total: 0, open: 0 };                       // own-brand rows are counted apart, not in the figures above
   var sheet = sheet_();
   var last = sheet.getLastRow();
   if (last >= 2) {
     var vals = sheet.getRange(2, 1, last - 1, HEADERS.length).getValues();
     vals.forEach(function (row) {
       if (!row[COL['ID']]) return;
+      if (isOwnBrandRow_(row)) { own.total++; if (String(row[COL['Status']] || 'New') === 'New') own.open++; return; }
       counts.total++;
       if (isArchived_(row)) { counts[ARCHIVED_FILTER]++; }
       else { var s = row[COL['Status']]; counts[s] = (counts[s] || 0) + 1; }
@@ -1105,7 +1219,7 @@ function stats_() {
       var p = row[COL['Platform']]; byPlatform[p] = (byPlatform[p] || 0) + 1;
     });
   }
-  return { counts: counts, byBrand: byBrand, byPlatform: byPlatform, generatedAt: nowIso_() };
+  return { counts: counts, byBrand: byBrand, byPlatform: byPlatform, ownBrand: own, generatedAt: nowIso_() };
 }
 
 // ---------------------------------------------------------------------------
@@ -1126,12 +1240,13 @@ function summary_() {
     var vals = sheet.getRange(2, 1, last - 1, HEADERS.length).getValues();
     vals.forEach(function (row) {
       if (!row[COL['ID']]) return;
+      if (isOwnBrandRow_(row)) return;                   // own-brand rows are not complaints to file: they have their own segment
       var date = row[COL['Date']] instanceof Date ? Utilities.formatDate(row[COL['Date']], TZ, 'yyyy-MM-dd') : String(row[COL['Date']] || '');
       var month = date.slice(0, 7) || 'unknown';
       var archived = isArchived_(row);
       var status = archived ? ARCHIVED_FILTER : String(row[COL['Status']] || 'New');
       byStatus.total++; byStatus[status] = (byStatus[status] || 0) + 1;
-      var m = byMonth[month] || (byMonth[month] = { total: 0, 'New': 0, 'In-Progress': 0, 'Complete': 0, 'Dismissed': 0, 'Archived': 0 });
+      var m = byMonth[month] || (byMonth[month] = { total: 0, 'New': 0, 'In-Progress': 0, 'Complete': 0, 'Dismissed': 0, 'Action taken': 0, 'Archived': 0 });
       m.total++; m[status] = (m[status] || 0) + 1;
       var route = String(row[COL['Jenis Aduan']] || 'Iklan Kosmetik');
       var rr = byRoute[route] || (byRoute[route] = { total: 0, filed: 0, replied: 0, open: 0 });

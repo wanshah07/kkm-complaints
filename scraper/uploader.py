@@ -255,6 +255,21 @@ class AppsScriptClient:
             log.warning("could not write the Links tab (%s); the findings themselves are unaffected", e)
             return {"ok": False, "error": str(e)}
 
+    # --- Held tab (apps-script/Held.gs) ---------------------------------------------------------
+    def held_add(self, records: List[Dict]) -> dict:
+        """
+        Park posts the run held back for a visual check in the dashboard's To check segment (Wan, 11 Oct 2026).
+        A failure here must never fail a run: the post is in the reviewed ledger either way, so only the card
+        is lost, and the run summary still names the post as a HOLD.
+        """
+        if not records:
+            return {"ok": True, "added": 0}
+        try:
+            return self._post({"action": "held_add", "records": records}, retries=3)
+        except Exception as e:
+            log.warning("could not park the held post(s) in the To check tab (%s); the run summary still names them", e)
+            return {"ok": False, "error": str(e)}
+
     def insert(self, records: List[Dict], batch_size: int = 10) -> dict:
         """Insert in small batches so one oversized payload cannot sink the whole run."""
         totals = {"inserted": 0, "duplicates": [], "errors": [], "ids": []}

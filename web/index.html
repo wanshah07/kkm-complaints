@@ -145,6 +145,8 @@
     <button data-nav="home" class="tab py-2">Overview</button>
     <button data-nav="list" class="tab py-2">Complaints <span id="navListCount" class="text-xs text-slate-400"></span></button>
     <button data-nav="routes" class="tab py-2">Routes</button>
+    <button data-nav="own" class="tab py-2">Own brand <span id="navOwnCount" class="text-xs text-slate-400"></span></button>
+    <button data-nav="check" class="tab py-2">To check <span id="navCheckCount" class="text-xs text-slate-400"></span></button>
   </nav>
 </header>
 
@@ -246,13 +248,36 @@
     <div id="routesNote" class="hidden rounded-xl border border-amber-300 bg-amber-50/60 p-3 text-sm"></div>
     <div id="routeCards" class="grid md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
   </section>
+
+  <!-- ===================== OWN BRAND ===================== -->
+  <section id="viewOwn" class="view space-y-4">
+    <div>
+      <h2 class="text-lg font-semibold">Own brand</h2>
+      <p class="text-xs text-slate-500 mt-1">Posts that name one of your own brands (<span id="ownNames">Skintific, Lumixpert, Facerinna, Bodibreze, Nextprime</span>). They are never filed with an agency, and they stay out of the Complaints list and its counts. Mark each one <b>Dismissed</b> (nothing to do) or <b>Action taken</b> (you dealt with it). <b>Not own brand</b> sends a row back to Complaints if the match was a mistake.</p>
+    </div>
+    <div id="ownChips" class="flex flex-wrap gap-2 text-sm"></div>
+    <div id="ownMsg" class="text-sm text-slate-600"></div>
+    <div id="ownList" class="grid md:grid-cols-2 gap-3"></div>
+  </section>
+
+  <!-- ===================== TO CHECK (held posts) ===================== -->
+  <section id="viewCheck" class="view space-y-4">
+    <div>
+      <h2 class="text-lg font-semibold">To check</h2>
+      <p class="text-xs text-slate-500 mt-1">Posts the reviewer flagged, but whose reasoning quoted wording that is not in the caption the scraper captured, so nothing was filed. Open the post and look. Then <b>Dismiss</b> it, <b>File as cosmetic ad</b> (Iklan Kosmetik), or <b>Route to</b> another agency (the description is rewritten for that route).</p>
+    </div>
+    <div id="checkMsg" class="text-sm text-slate-600"></div>
+    <div id="checkList" class="grid md:grid-cols-2 gap-3"></div>
+  </section>
 </main>
 
 <!-- Bottom navigation (phones) -->
-<nav class="bnav sm:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-slate-200 grid grid-cols-4 text-[11px] text-slate-500" aria-label="Views">
+<nav class="bnav sm:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-slate-200 grid grid-cols-6 text-[10px] text-slate-500" aria-label="Views">
   <button data-nav="home" class="tap py-2 flex flex-col items-center gap-0.5"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Overview</button>
   <button data-nav="list" class="tap py-2 flex flex-col items-center gap-0.5"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Complaints</button>
   <button data-nav="routes" class="tap py-2 flex flex-col items-center gap-0.5"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h7l3 3h6M4 12h5l3 3h8M4 17h9"/></svg>Routes</button>
+  <button data-nav="own" class="tap py-2 flex flex-col items-center gap-0.5 relative"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/></svg>Own brand<span id="bnavOwnBadge" class="hidden absolute top-1 right-3 rounded-full bg-amber-500 text-white px-1.5 text-[10px] font-bold"></span></button>
+  <button data-nav="check" class="tap py-2 flex flex-col items-center gap-0.5 relative"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></svg>To check<span id="bnavCheckBadge" class="hidden absolute top-1 right-3 rounded-full bg-amber-500 text-white px-1.5 text-[10px] font-bold"></span></button>
   <button id="bnavLinks" class="tap py-2 flex flex-col items-center gap-0.5 relative"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 14a4 4 0 0 1 0-5.7l2.3-2.3a4 4 0 0 1 5.7 5.7l-1 1M14 10a4 4 0 0 1 0 5.7L11.7 18a4 4 0 0 1-5.7-5.7l1-1"/></svg>TikTok<span id="linksBadge2" class="hidden absolute top-1 right-5 rounded-full bg-amber-500 text-white px-1.5 text-[10px] font-bold"></span></button>
 </nav>
 
@@ -594,7 +619,8 @@ const STATUS_STYLE = {
   'New':         'bg-blue-100 text-blue-800',
   'In-Progress': 'bg-amber-100 text-amber-900',
   'Complete':    'bg-emerald-100 text-emerald-800',
-  'Dismissed':   'bg-slate-200 text-slate-700'
+  'Dismissed':   'bg-slate-200 text-slate-700',
+  'Action taken': 'bg-violet-100 text-violet-800'
 };
 const state = { rows: [], archived: [], stats: null, summary: null, summaryFrom: '', lookups: null, statuses: [],
                 filter: { status: '', brand: '', platform: '', route: '', q: '' }, current: null, questUrl: '', view: 'home', routesFromBackend: false };
@@ -680,7 +706,7 @@ function forgetKey() {
 // ---------------------------------------------------------------------------
 // Views (Overview · Complaints · Routes). The hash remembers the view across reloads.
 // ---------------------------------------------------------------------------
-const VIEWS = ['home', 'list', 'routes'];
+const VIEWS = ['home', 'list', 'routes', 'own', 'check'];
 function showView(v) {
   if (!VIEWS.includes(v)) v = 'home';
   state.view = v;
@@ -688,6 +714,7 @@ function showView(v) {
   document.querySelectorAll('[data-nav]').forEach(b => b.classList.toggle('on', b.dataset.nav === v));
   if (location.hash !== '#' + v && location.hash !== '#settings') history.replaceState(null, '', '#' + v);
   if (v === 'home') renderHome(); if (v === 'routes') renderRoutes();
+  if (v === 'own') loadOwn(); if (v === 'check') loadChecks();
   window.scrollTo({ top: 0 });
 }
 document.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => showView(b.dataset.nav)));
@@ -721,6 +748,7 @@ async function refresh(silent) {
     state.rows = r.rows; state.stats = r.stats; renderAll(); loadArchived();
     if (state.summaryFrom === 'server') { try { state.summary = (await api('summary')).summary; } catch (e) {} }
     if (state.view === 'home') renderHome(); if (state.view === 'routes') renderRoutes();
+    if (state.view === 'own') loadOwn(); if (state.view === 'check') loadChecks();
     if (!silent) toast('Refreshed');
   } catch (e) { toast('Refresh failed: ' + e.message); }
   finally { btn.disabled = false; btn.innerHTML = was; }
@@ -878,7 +906,7 @@ function openKkmForm(ev) {
     .catch(e => toast('Could not save: ' + e.message, 4000));
 }
 
-function renderAll() { renderStats(); renderChips(); renderTable(); $('navListCount').textContent = state.rows.length ? `(${state.rows.length})` : ''; }
+function renderAll() { renderStats(); renderChips(); renderTable(); $('navListCount').textContent = state.rows.length ? `(${state.rows.length})` : ''; updateSegBadges(); }
 
 // A complaint KKM has replied to is "archived" by the backend: it leaves the working list and is no
 // longer counted under its Status, so the Complete tile read 0 while the Complete filter still showed
@@ -1879,8 +1907,140 @@ $('lAdd').onclick = addLinks;
 document.querySelectorAll('[data-lclose]').forEach(b => b.onclick = () => showLinks(false));
 $('lText').addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') addLinks(); });
 
+
+// ---------------------------------------------------------------------------
+// Own brand segment (Wan, 11 Oct 2026) and To check segment (held posts, Held.gs).
+// Both are read straight from the backend each time they are opened; nothing is cached across loads.
+// ---------------------------------------------------------------------------
+const OWN_BADGE = { Skintific: 'bg-fuchsia-100 text-fuchsia-800', Lumixpert: 'bg-sky-100 text-sky-800', Facerinna: 'bg-rose-100 text-rose-800',
+                    Bodibreze: 'bg-teal-100 text-teal-800', Nextprime: 'bg-indigo-100 text-indigo-800', Valorith: 'bg-orange-100 text-orange-800' };
+state.own = { rows: [], counts: {}, filter: 'New', loaded: false };
+state.check = { held: [], total: 0, loaded: false };
+const NEEDS_BACKEND = 'The backend does not have this update yet: paste the latest Code.gs and the new Held.gs into Apps Script, then Deploy → New version.';
+const clampCss = 'display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden';
+
+function updateSegBadges() {
+  const own = state.own.loaded ? (state.own.counts.New || 0) : ((state.stats && state.stats.ownBrand && state.stats.ownBrand.open) || 0);
+  const chk = state.check.loaded ? state.check.total : 0;
+  $('navOwnCount').textContent = own ? `(${own})` : '';
+  $('navCheckCount').textContent = chk ? `(${chk})` : '';
+  [['bnavOwnBadge', own], ['bnavCheckBadge', chk]].forEach(([id, n]) => { $(id).textContent = n; $(id).classList.toggle('hidden', !n); });
+}
+
+async function loadOwn() {
+  try {
+    const d = await api('own_brand_list');
+    state.own.rows = d.rows || []; state.own.counts = d.counts || {}; state.own.loaded = true;
+    if (d.brands && d.brands.length) $('ownNames').textContent = d.brands.filter(b => b !== 'Valorith').join(', ');
+    $('ownMsg').textContent = '';
+    renderOwn();
+  } catch (e) { $('ownMsg').textContent = /Unknown action/.test(e.message) ? NEEDS_BACKEND : e.message; }
+  updateSegBadges();
+}
+function renderOwn() {
+  const c = state.own.counts, f = state.own.filter;
+  const chips = [['New', 'To decide', c.New || 0], ['Dismissed', 'Dismissed', c.Dismissed || 0], ['Action taken', 'Action taken', c['Action taken'] || 0], ['', 'All', c.total || 0]];
+  $('ownChips').innerHTML = chips.map(([k, label, n]) => `<button data-ownf="${esc(k)}" class="rounded-full px-3 py-1.5 font-medium ${f === k ? 'bg-slate-900 text-white' : 'border border-slate-300 bg-white hover:bg-slate-50'}">${esc(label)} <span class="${f === k ? 'text-slate-300' : 'text-slate-400'}">${n}</span></button>`).join('');
+  $('ownChips').querySelectorAll('[data-ownf]').forEach(b => b.onclick = () => { state.own.filter = b.dataset.ownf; renderOwn(); });
+  const rows = state.own.rows.filter(r => !f || (r.Status || 'New') === f);
+  if (!rows.length) { $('ownList').innerHTML = `<div class="md:col-span-2 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">${f === 'New' ? 'Nothing waiting. Every own-brand post has been dealt with.' : 'Nothing in this list.'}</div>`; return; }
+  $('ownList').innerHTML = rows.map(r => {
+    const st = r.Status || 'New';
+    const shot = r['Screenshot Link'] ? `<a class="text-blue-700 hover:underline text-xs" href="${esc(r['Screenshot Link'])}" target="_blank" rel="noopener">Screenshot</a>` : '';
+    const btn = (act, label, cls) => `<button data-own-act="${act}" data-own-id="${esc(r.ID)}" class="rounded-lg px-3 py-2 text-xs font-semibold ${cls}">${label}</button>`;
+    const actions = st === 'New'
+      ? btn('dismiss', 'Dismissed', 'bg-slate-900 text-white hover:bg-slate-800') + btn('taken', 'Action taken', 'bg-violet-700 text-white hover:bg-violet-600') + btn('not_own', 'Not own brand', 'border border-slate-300 bg-white hover:bg-slate-50')
+      : btn('reopen', 'Reopen', 'border border-slate-300 bg-white hover:bg-slate-50');
+    return `<div class="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="badge ${OWN_BADGE[r._ownBrand] || 'bg-slate-100 text-slate-700'}">${esc(r._ownBrand || 'Own brand')}</span>
+        <span class="badge ${STATUS_STYLE[st] || 'bg-slate-100 text-slate-700'}">${esc(st)}</span>
+        <span class="text-xs text-slate-500">@${esc(r.Brand)} · ${esc(r.Platform)}${r.Date ? ' · ' + esc(r.Date) : ''}${r.Confidence !== '' && r.Confidence != null ? ' · ' + esc(r.Confidence) : ''}</span>
+      </div>
+      <div class="text-sm font-medium">${esc(r['Nama Kosmetik'] || 'Product not named')} <span class="font-normal text-slate-500">· ${esc(String(r['Violation Type'] || '').replace(/^Risky:\s*/, ''))}</span></div>
+      <div class="text-xs text-slate-600" style="${clampCss}">${esc(r['Violation Reason'])}</div>
+      <div class="flex items-center gap-3 flex-wrap"><a class="text-blue-700 hover:underline text-xs font-medium" href="${esc(r['Post URL'])}" target="_blank" rel="noopener">Open post ↗</a>${shot}<span class="text-[11px] text-slate-400">${esc(r.ID)}</span></div>
+      <div class="flex flex-wrap gap-2 pt-1">${actions}</div>
+    </div>`;
+  }).join('');
+  $('ownList').querySelectorAll('[data-own-act]').forEach(b => b.onclick = () => ownAct(b.dataset.ownId, b.dataset.ownAct, b));
+}
+async function ownAct(id, action, btn) {
+  if (btn) { btn.disabled = true; btn.dataset.t = btn.textContent; btn.textContent = '…'; }
+  try {
+    await api('own_brand_set', { id, op: action });
+    toast({ dismiss: 'Dismissed', taken: 'Action taken', reopen: 'Reopened', not_own: 'Back in Complaints' }[action] || 'Done');
+    await loadOwn();
+    if (action === 'not_own') refresh(true);
+  } catch (e) { toast(/Unknown action/.test(e.message) ? NEEDS_BACKEND : e.message, 5000); if (btn) { btn.disabled = false; btn.textContent = btn.dataset.t; } }
+}
+
+async function loadChecks() {
+  try {
+    const d = await api('held_list');
+    state.check.held = d.held || []; state.check.total = (d.total != null ? d.total : state.check.held.length); state.check.loaded = true;
+    $('checkMsg').textContent = d.handled ? `${d.handled} already handled (kept in the Held tab of the sheet).` : '';
+    renderChecks();
+  } catch (e) { $('checkMsg').textContent = /Unknown action/.test(e.message) ? NEEDS_BACKEND : e.message; }
+  updateSegBadges();
+}
+function renderChecks() {
+  const list = state.check.held;
+  if (!list.length) { $('checkList').innerHTML = '<div class="md:col-span-2 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Nothing to check. A post the scraper holds back for a visual check will appear here.</div>'; return; }
+  const routeOpts = ROUTES.filter(r => r.value !== 'Iklan Kosmetik').map(r => `<option value="${esc(r.value)}">${esc(r.value)}</option>`).join('');
+  $('checkList').innerHTML = list.map((h, i) => {
+    const risky = h.verdict === 'Risky';
+    return `<div class="rounded-xl border border-slate-200 bg-white p-3 space-y-2" data-hi="${i}">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="badge ${risky ? 'bg-amber-100 text-amber-900' : 'bg-red-100 text-red-800'}">${esc(h.verdict || 'Unacceptable')}</span>
+        <span class="text-xs text-slate-500">${h.confidence !== '' && h.confidence != null ? 'confidence ' + esc(h.confidence) + ' · ' : ''}@${esc(h.account)} · ${esc(h.platform)}${h.found ? ' · held ' + esc(h.found) : ''}</span>
+      </div>
+      <div class="text-sm font-medium">${esc(h.product || 'Product not named')} <span class="font-normal text-slate-500">· ${esc(h.type)}</span></div>
+      <div class="rounded-lg bg-amber-50 border border-amber-200 px-2 py-1.5 text-xs text-amber-900">${esc(h.why)}</div>
+      <div class="text-xs text-slate-600" style="${clampCss}">${esc(h.reason)}</div>
+      <div class="flex items-center gap-3 flex-wrap"><a class="inline-flex items-center rounded-lg bg-blue-700 text-white px-3 py-2 text-xs font-semibold hover:bg-blue-600" href="${esc(h.url)}" target="_blank" rel="noopener">Open post ↗</a>
+        ${h.screenshot ? `<a class="text-blue-700 hover:underline text-xs" href="${esc(h.screenshot)}" target="_blank" rel="noopener">Screenshot</a>` : ''}
+        <button data-chk="more" class="text-xs text-slate-600 underline">Full reason</button></div>
+      <div data-chk-detail class="hidden rounded-lg bg-slate-50 border border-slate-200 p-2 text-xs text-slate-700 whitespace-pre-wrap max-h-64 overflow-y-auto"></div>
+      <div class="flex flex-wrap items-center gap-2 pt-1">
+        <button data-chk="dismiss" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold hover:bg-slate-50">Dismiss</button>
+        <button data-chk="cosmetic" class="rounded-lg bg-slate-900 text-white px-3 py-2 text-xs font-semibold hover:bg-slate-800">File as cosmetic ad</button>
+        <span class="inline-flex items-center gap-1"><select data-chk-route class="rounded-lg border border-slate-300 text-xs py-2 px-2 max-w-[200px]"><option value="">Route to…</option>${routeOpts}</select>
+        <button data-chk="route" class="rounded-lg bg-violet-700 text-white px-3 py-2 text-xs font-semibold hover:bg-violet-600">Route</button></span>
+      </div>
+    </div>`;
+  }).join('');
+  $('checkList').querySelectorAll('[data-hi]').forEach(card => {
+    const h = list[Number(card.dataset.hi)];
+    card.querySelectorAll('[data-chk]').forEach(b => b.onclick = () => checkAct(h, b.dataset.chk, card, b));
+  });
+}
+async function checkAct(h, what, card, btn) {
+  if (what === 'more') {
+    const box = card.querySelector('[data-chk-detail]');
+    if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
+    box.textContent = 'Loading…'; box.classList.remove('hidden');
+    try {
+      const d = (await api('held_detail', { url: h.url })).detail;
+      box.textContent = [d.reason || 'No reason recorded.', d.text ? '\n--- Caption captured ---\n' + d.text : '\n(no caption text was captured)', d.remarks ? '\n--- Remarks ---\n' + d.remarks : ''].join('\n');
+    } catch (e) { box.textContent = e.message; }
+    return;
+  }
+  let route = 'Iklan Kosmetik';
+  if (what === 'route') {
+    route = card.querySelector('[data-chk-route]').value;
+    if (!route) { toast('Pick a route first'); return; }
+  }
+  btn.disabled = true; const was = btn.textContent; btn.textContent = '…';
+  try {
+    if (what === 'dismiss') { await api('held_dismiss', { url: h.url }); toast('Dismissed'); }
+    else { const d = await api('held_file', { url: h.url, route }); toast(d.result || 'Added to the database', 4000); refresh(true); }
+    await loadChecks();
+  } catch (e) { toast(/Unknown action/.test(e.message) ? NEEDS_BACKEND : e.message, 5000); btn.disabled = false; btn.textContent = was; }
+}
+
 setInterval(() => { if (cfg.key && $('drawer').classList.contains('translate-x-full') && $('modal').classList.contains('hidden') && $('connect').classList.contains('hidden')) refresh(true); }, 180000);
-if (cfg.key) loadLinks();
+if (cfg.key) { loadLinks(); loadChecks(); }
 showView(VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'home');
 boot();
 </script>

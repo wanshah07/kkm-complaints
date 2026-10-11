@@ -211,16 +211,34 @@ def _run_label() -> str:
     return f"#{num}" if num else (rid or "local")
 
 
-def _detach_screenshot(rec: dict, client, post) -> None:
+def _detach_screenshot(rec: dict, client, post, platform: str = "TikTok") -> None:
     """A held record has to fit in one sheet cell, so its screenshot is stored in Drive now and carried as a link."""
     b64 = rec.pop("screenshot_base64", "")
     mime = rec.pop("screenshot_mime", "image/jpeg")
     if not b64 or rec.get("screenshot_link"):
         return
-    fname = f"{post.brand}_TikTok_{datetime.now(MYT).strftime('%Y%m%d')}_{abs(hash(post.url)) % 10_000_000}.jpg"
+    fname = f"{post.brand}_{platform}_{datetime.now(MYT).strftime('%Y%m%d')}_{abs(hash(post.url)) % 10_000_000}.jpg"
     link = client.upload_screenshot(b64, mime, fname.replace(" ", "_"))
     if link:
         rec["screenshot_link"] = link
+
+
+def _park_for_check(client, post, verdict: dict, run_cfg: dict, drive, dry_run: bool) -> None:
+    """
+    A post held back for a visual check used to live only in the run log (and, from then on, in nobody's
+    attention). Wan, 11 Oct 2026: "for held post and to check by eye, do put different segment, so I can check
+    and process further". It is parked in the Held tab with its whole record and screenshot, and the dashboard's
+    To check segment offers Dismiss / File as cosmetic ad / Route to. Never fails a sweep: the post is already in
+    the reviewed ledger, so a failure here only costs the card, and the run summary still prints the HOLD.
+    """
+    if client is None or dry_run:
+        return
+    try:
+        rec = build_record(post, verdict, run_cfg, drive)
+        _detach_screenshot(rec, client, post, platform=post.platform)
+        client.held_add([rec])
+    except Exception as e:
+        log.warning("could not park the held post %s for the To check segment: %s", post.url, e)
 
 
 def link_outcomes(report: dict, link_map: Dict[str, str], links: List[str],
@@ -769,6 +787,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                     report["flagged"].append(entry)
                     log.warning("%s: %s (%s) held back pending visual check, not pushed",
                                post.url, v["verdict"], v.get("confidence"))
+                    _park_for_check(client, post, v, run_cfg, drive, args.dry_run)
                 elif would_push:
                     rec = build_record(post, v, run_cfg, drive)
                     records.append(rec)
