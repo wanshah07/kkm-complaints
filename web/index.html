@@ -1928,6 +1928,7 @@ function updateSegBadges() {
 }
 
 async function loadOwn() {
+  if (!state.own.loaded) $('ownMsg').textContent = 'Loading own-brand posts… this reads the whole sheet and can take 10 to 30 seconds.';
   try {
     const d = await api('own_brand_list');
     state.own.rows = d.rows || []; state.own.counts = d.counts || {}; state.own.loaded = true;
@@ -1976,6 +1977,7 @@ async function ownAct(id, action, btn) {
 }
 
 async function loadChecks() {
+  if (!state.check.loaded) $('checkMsg').textContent = 'Loading held posts…';
   try {
     const d = await api('held_list');
     state.check.held = d.held || []; state.check.total = (d.total != null ? d.total : state.check.held.length); state.check.loaded = true;
