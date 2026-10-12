@@ -906,7 +906,7 @@ function openKkmForm(ev) {
     .catch(e => toast('Could not save: ' + e.message, 4000));
 }
 
-function renderAll() { renderStats(); renderChips(); renderTable(); $('navListCount').textContent = state.rows.length ? `(${state.rows.length})` : ''; updateSegBadges(); }
+function renderAll() { renderStats(); renderChips(); renderTable(); $('navListCount').textContent = state.rows.length ? (state.rows.length >= 4000 ? '(4000+)' : `(${state.rows.length})`) : ''; updateSegBadges(); }
 
 // A complaint KKM has replied to is "archived" by the backend: it leaves the working list and is no
 // longer counted under its Status, so the Complete tile read 0 while the Complete filter still showed

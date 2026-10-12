@@ -379,7 +379,10 @@ var DEFAULT_TARGETS = [
 
 var SCREENSHOT_FOLDER_NAME = 'KKM Complaint Screenshots';
 var EXPORT_FOLDER_NAME = 'KKM Complaint Exports';
-var MAX_ROWS_RETURNED = 2000;
+// 12 Oct 2026: 2000 -> 4000. The log passed 2,000 open rows that day, and the cap silently dropped the
+// OLDEST open complaints from the list (newest first) while the tab count read exactly 2000. Rows are
+// trimmed (see LIST_FIELD_LIMIT), so 4000 is about 6 MB. The dashboard shows '4000+' when it is reached.
+var MAX_ROWS_RETURNED = 4000;
 var EXPORT_PAGE_MAX = 500;      // rows per `export` page; the dashboard pages through
 var EXPORT_DOC_MAX_ROWS = 400;  // rows a register document will carry
 var EXPORT_DOC_MAX_IMAGES = 30; // screenshots embedded in one document (Drive reads are the slow part)
