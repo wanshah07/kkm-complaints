@@ -271,17 +271,41 @@ class AppsScriptClient:
             return {"ok": False, "error": str(e)}
 
     def insert(self, records: List[Dict], batch_size: int = 10) -> dict:
-        """Insert in small batches so one oversized payload cannot sink the whole run."""
-        totals = {"inserted": 0, "duplicates": [], "errors": [], "ids": []}
+        """
+        Insert in small batches so one oversized payload cannot sink the whole run.
+
+        A batch that raises (network error, timeout, ...) must not lose the totals already
+        gathered from earlier batches, and a batch that succeeds but rejects individual records
+        (per-record `errors[]` in the response) must not have those specific records treated as
+        filed. So on top of the old aggregate counters this also returns `succeeded_records`
+        (safe to mark seen - inserted or already a known duplicate) and `failed_records`
+        (never reached the sheet - belongs in the failed-payload file and must stay unseen so a
+        later run retries it).
+        """
+        totals = {"inserted": 0, "duplicates": [], "errors": [], "ids": [],
+                  "succeeded_records": [], "failed_records": []}
         for i in range(0, len(records), batch_size):
             batch = records[i:i + batch_size]
-            data = self._post({"action": "insert", "records": batch})
+            batch_num = i // batch_size + 1
+            try:
+                data = self._post({"action": "insert", "records": batch})
+            except Exception as e:
+                log.warning("batch %d: request failed (%s); %d record(s) not filed", batch_num, e, len(batch))
+                totals["errors"].append({"batch": batch_num, "error": str(e)})
+                totals["failed_records"] += batch
+                continue
             totals["inserted"] += data.get("inserted", 0)
             totals["duplicates"] += data.get("duplicates", [])
-            totals["errors"] += data.get("errors", [])
+            batch_errors = data.get("errors", [])
+            totals["errors"] += batch_errors
             totals["ids"] += data.get("ids", [])
-            log.info("batch %d: inserted=%s dup=%s err=%s", i // batch_size + 1,
-                     data.get("inserted"), len(data.get("duplicates", [])), len(data.get("errors", [])))
+            # `index` is this record's position within THIS batch (apps-script side forEach),
+            # not within the whole run, so only rely on it to split this batch's own records.
+            failed_idx = {e.get("index") for e in batch_errors if isinstance(e, dict) and "index" in e}
+            for idx, rec in enumerate(batch):
+                (totals["failed_records"] if idx in failed_idx else totals["succeeded_records"]).append(rec)
+            log.info("batch %d: inserted=%s dup=%s err=%s", batch_num,
+                     data.get("inserted"), len(data.get("duplicates", [])), len(batch_errors))
         return totals
 
     def update_status(self, record_id: str, status: str, remarks: str = "") -> dict:
