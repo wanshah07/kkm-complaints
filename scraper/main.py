@@ -573,7 +573,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             records.clear()
             reviewed.clear()
             return
-        insert_ok = True
+        failed_urls: set = set()
         if records:
             try:
                 totals = client.insert(records)
@@ -584,10 +584,28 @@ def main(argv: Optional[List[str]] = None) -> int:
                 log.info("filed: inserted=%d duplicates=%d errors=%d",
                          totals.get("inserted", 0), len(totals.get("duplicates", [])),
                          len(totals.get("errors", [])))
+                # Per-batch tracking (uploader.insert) tells us exactly which records made it to
+                # the sheet (inserted or already a known duplicate) and which didn't (request
+                # failure or a per-record rejection from the Apps Script side). Only the latter
+                # are lost and belong in the replay file / must stay unseen.
+                failed_records = totals.get("failed_records", [])
+                failed_urls = {r.get("post_url") for r in failed_records if r.get("post_url")}
+                if failed_records:
+                    report["errors"].append(f"insert: {len(failed_records)} of {len(records)} record(s) not filed")
+                    failed = os.path.join(run_dir, "payload_failed.json")
+                    existing = []
+                    if os.path.exists(failed):
+                        try:
+                            with open(failed, encoding="utf-8") as f:
+                                existing = json.load(f)
+                        except Exception:
+                            existing = []
+                    with open(failed, "w", encoding="utf-8") as f:
+                        json.dump(existing + failed_records, f, ensure_ascii=False)
             except Exception as e:
-                insert_ok = False
                 log.error("insert failed: %s", e)
                 report["errors"].append(f"insert: {e}")
+                failed_urls = {r.get("post_url") for r in records if r.get("post_url")}
                 # keep the payload on disk so it can be replayed by hand
                 failed = os.path.join(run_dir, "payload_failed.json")
                 existing = []
@@ -599,8 +617,12 @@ def main(argv: Optional[List[str]] = None) -> int:
                         existing = []
                 with open(failed, "w", encoding="utf-8") as f:
                     json.dump(existing + records, f, ensure_ascii=False)
-        if reviewed and insert_ok:
-            report["marked_seen"] = report.get("marked_seen", 0) + client.mark_seen(reviewed)
+        if reviewed:
+            # A post whose finding failed to reach the sheet must not be marked seen - that
+            # would bury it forever. Everything else (no finding to file, or filed fine) is safe.
+            to_mark = [r for r in reviewed if r.get("url") not in failed_urls] if failed_urls else reviewed
+            if to_mark:
+                report["marked_seen"] = report.get("marked_seen", 0) + client.mark_seen(to_mark)
         records.clear()
         reviewed.clear()
 

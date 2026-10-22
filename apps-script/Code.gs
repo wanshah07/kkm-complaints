@@ -872,7 +872,7 @@ function updateFields_(id, fields) {
     });
     closeOnFeedback_(rowVals);
     rowVals[COL['Updated At']] = nowIso_();
-    sheet.getRange(r, 1, 1, HEADERS.length).setValues([rowVals]);
+    sheet.getRange(r, 1, 1, HEADERS.length).setValues([sanitizeRowForSheet_(rowVals)]);
     return { ok: true, row: rowToObject_(rowVals) };
   });
 }
@@ -1016,7 +1016,7 @@ function apiInsertRecords_(records, source) {
       }
     });
     if (toAppend.length) {
-      sheet.getRange(sheet.getLastRow() + 1, 1, toAppend.length, HEADERS.length).setValues(toAppend);
+      sheet.getRange(sheet.getLastRow() + 1, 1, toAppend.length, HEADERS.length).setValues(sanitizeRowsForSheet_(toAppend));
       SpreadsheetApp.flush();
     }
     return { ok: true, inserted: toAppend.length, ids: ids, duplicates: duplicates, errors: errors };
@@ -1094,7 +1094,7 @@ function updateStatus_(id, status, remarks) {
       rowVals[COL['Tarikh Melapor']] = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
     }
     rowVals[COL['Updated At']] = nowIso_();
-    sheet.getRange(r, 1, 1, HEADERS.length).setValues([rowVals]);
+    sheet.getRange(r, 1, 1, HEADERS.length).setValues([sanitizeRowForSheet_(rowVals)]);
     return { ok: true, row: rowToObject_(rowVals), stats: stats_() };
   });
 }
@@ -1634,7 +1634,8 @@ function randomToken_(n) {
 function canonicalUrl_(u) {
   u = String(u || '').trim();
   try {
-    u = u.replace(/^http:\/\//i, 'https://').replace(/^https:\/\/(m|www|web)\./i, 'https://');
+    u = u.replace(/^http:\/\//i, 'https://')
+         .replace(/^https:\/\/(m|www|web|mbasic|touch)\./i, 'https://');
     u = u.split('#')[0];
     // Strip tracking params but keep identity params Facebook relies on (story_fbid, id, v, fbid).
     var parts = u.split('?');
@@ -1646,6 +1647,22 @@ function canonicalUrl_(u) {
     }
     return u.replace(/\/+$/, '').toLowerCase();
   } catch (err) { return u.toLowerCase(); }
+}
+
+// Sheets treats any cell text starting with =, +, -, or @ as a formula. Scraped captions/
+// reasons are untrusted input, so prefix a leading apostrophe to force plain text and stop
+// formula injection (CSV/Sheets exfiltration attacks) before writing with setValues().
+function sanitizeForSheet_(v) {
+  if (typeof v !== 'string') return v;
+  return /^[=+\-@]/.test(v) ? "'" + v : v;
+}
+
+function sanitizeRowForSheet_(row) {
+  return row.map(sanitizeForSheet_);
+}
+
+function sanitizeRowsForSheet_(rows) {
+  return rows.map(sanitizeRowForSheet_);
 }
 
 function safeFilename_(s) {
