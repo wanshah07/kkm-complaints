@@ -296,6 +296,18 @@ const state = { rows: [], archived: null, deep: null, stats: null, lookups: null
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// HTML-escaping alone does not stop a javascript: (or data:, vbscript:) URL from running when
+// clicked — only the scheme matters there. Only allow http(s) links; anything else (including
+// relative/garbage that fails to parse) is replaced with a harmless placeholder.
+const safeHref = (u) => {
+  const s = String(u ?? '').trim();
+  if (!s) return '#';
+  try {
+    const parsed = new URL(s, window.location.href);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return s;
+  } catch (e) {}
+  return '#';
+};
 
 function toast(msg, ms = 2600) {
   const t = $('toast'); t.textContent = msg; t.classList.remove('hidden');
@@ -451,8 +463,8 @@ function renderTable() {
       <td class="px-4 py-3 max-w-[340px]"><div class="font-medium">${esc(r['Violation Type'])}</div><div class="text-xs text-slate-500 clamp-2">${esc(r['Violation Reason'])}</div></td>
       <td class="px-4 py-3"><span class="badge ${STATUS_STYLE[r['Status']] || 'bg-slate-100'}">${esc(r['Status'])}</span>${r['KKM Feedback'] ? '<div class="text-[11px] text-emerald-700 mt-1">KKM replied</div>' : ''}</td>
       <td class="px-4 py-3 whitespace-nowrap text-xs">
-        <a href="${esc(r['Post URL'])}" target="_blank" rel="noopener" class="text-blue-700 underline mr-2" onclick="event.stopPropagation()">post</a>
-        ${r['Screenshot Link'] ? `<a href="${esc(r['Screenshot Link'])}" target="_blank" rel="noopener" class="text-blue-700 underline" onclick="event.stopPropagation()">shot</a>` : '<span class="text-slate-400">no shot</span>'}
+        <a href="${esc(safeHref(r['Post URL']))}" target="_blank" rel="noopener" class="text-blue-700 underline mr-2" onclick="event.stopPropagation()">post</a>
+        ${r['Screenshot Link'] ? `<a href="${esc(safeHref(r['Screenshot Link']))}" target="_blank" rel="noopener" class="text-blue-700 underline" onclick="event.stopPropagation()">shot</a>` : '<span class="text-slate-400">no shot</span>'}
       </td>
     </tr>`).join('');
   $('rows').querySelectorAll('tr[data-id]').forEach(tr => tr.onclick = () => openRow(tr.dataset.id));
@@ -501,9 +513,9 @@ function fillDrawer(r) {
   const st = $('dStatus'); st.textContent = r['Status']; st.className = 'badge ' + (STATUS_STYLE[r['Status']] || '');
   const shot = $('dShot');
   shot.innerHTML = r['Screenshot Link']
-    ? `<a href="${esc(r['Screenshot Link'])}" target="_blank" rel="noopener"><img src="${esc(driveThumb(r['Screenshot Link']))}" alt="screenshot" loading="lazy" decoding="async" class="w-full max-h-[420px] object-contain bg-white" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'p-4 text-sm',textContent:'Preview unavailable — open the link.'}))"></a>`
+    ? `<a href="${esc(safeHref(r['Screenshot Link']))}" target="_blank" rel="noopener"><img src="${esc(driveThumb(r['Screenshot Link']))}" alt="screenshot" loading="lazy" decoding="async" class="w-full max-h-[420px] object-contain bg-white" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'p-4 text-sm',textContent:'Preview unavailable — open the link.'}))"></a>`
     : `<div class="p-4 text-sm text-slate-500">No screenshot.</div>`;
-  $('dUrl').textContent = r['Post URL']; $('dUrl').href = r['Post URL'];
+  $('dUrl').textContent = r['Post URL']; $('dUrl').href = safeHref(r['Post URL']);
   // The list payload carries only the first 300 characters. apiOpen is already in flight and
   // will refill this with the whole caption, so say so rather than showing a clipped one as
   // if it were complete.
