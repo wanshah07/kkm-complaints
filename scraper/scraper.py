@@ -369,12 +369,48 @@ def _usable_box(loc) -> Optional[dict]:
     return box
 
 
+# Instagram, measured on a runner 23 Oct 2026 (tools/ig_dom_probe.py, three posts: a carousel, a reel, a single image):
+# there is no <article> on a post page any more, so every selector in _POST_ELEMENT_SELECTORS missed and 76 of 77 shots
+# were `main[role='main']` - the whole column, with the 'More posts from <account>' grid under the card (Wan: "make it on
+# the post image ... not the page image"). The card is the <div> that holds the media and the caption: its parent also
+# holds the 'More posts from' section, so it is the HIGHEST ancestor of the post's own <time> whose text does not.
+_IG_CARD_JS = r"""() => {
+  const t = document.querySelector('main time'); if (!t) return null;
+  let n = t;
+  while (n.parentElement && n.parentElement.tagName !== 'MAIN') {
+    if (/more posts from|lagi siaran daripada/i.test(n.parentElement.innerText || '')) break;
+    n = n.parentElement;
+  }
+  return n;
+}"""
+
+
+def _instagram_card(page: Page):
+    """The post card of an Instagram post page as (element handle, box, label), or None. Refuses anything that is
+    not card-shaped, so a layout change falls through to the older selectors instead of framing the wrong thing."""
+    try:
+        h = page.evaluate_handle(_IG_CARD_JS).as_element()
+        if h is None:
+            return None
+        box = _usable_box(h)
+        # The probe's cards were 673-815 px wide and 600 px tall; the whole column is 975+ wide and 1600+ tall.
+        if not box or box["width"] < 300 or box["width"] > 1000 or box["height"] > 1000:
+            return None
+        return h, box, "instagram post card (ancestor of <time> below 'More posts from')"
+    except Exception:
+        return None
+
+
 def _post_element(page: Page, platform: str, url: str = ""):
     """
     The locator, box and a label for the post's own container, or (None, None, "") to fall back
     to the viewport. Tried in order of how sure we are that it is the right post.
     """
     post_id = _post_id(url)
+    if platform == "Instagram":
+        card = _instagram_card(page)
+        if card:
+            return card
     narrow = _POST_ELEMENT_SELECTORS.get(platform, ())
     wide = _CONTAINER_FALLBACKS.get(platform, ())
 

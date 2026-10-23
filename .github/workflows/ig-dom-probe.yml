@@ -34,6 +34,8 @@ jobs:
         run: |
           mapfile -t ARR < <(printf '%s\n' "$URLS" | sed '/^\s*$/d')
           python tools/ig_dom_probe.py "${ARR[@]}"
+          echo; echo "=== the scraper's own screenshot function ==="
+          python tools/ig_shot_test.py "${ARR[@]}"
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v4
