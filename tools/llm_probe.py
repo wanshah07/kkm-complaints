@@ -100,6 +100,16 @@ def t_urllib(path, body=None, timeout=None):
     return _urllib(path, body, None, timeout or TIMEOUT)
 
 
+# An honest, named client: what the scraper's own OpenAI SDK does (it sends "OpenAI/Python x.y"). Added 23 Oct 2026
+# because kiosapi.com's Cloudflare front refuses ONLY the stdlib default "Python-urllib/3.x" (HTTP 403, code 1010)
+# and passes an SDK or a named client, so the urllib baseline alone reads as "unreachable" for a host that is fine.
+HONEST_HEADERS = {"User-Agent": "kkm-complaints-llm-probe/1.0 (+https://github.com/wanshah07/kkm-complaints)"}
+
+
+def t_named(path, body=None, timeout=None):
+    return _urllib(path, body, HONEST_HEADERS, timeout or TIMEOUT)
+
+
 def t_headers(path, body=None, timeout=None):
     return _urllib(path, body, BROWSER_HEADERS, timeout or TIMEOUT)
 
@@ -170,6 +180,7 @@ def t_browser(path, body=None, timeout=None):
 
 TRANSPORTS = [
     ("urllib", "stdlib, default headers", t_urllib),
+    ("named", "stdlib, honest named User-Agent (like the OpenAI SDK)", t_named),
     ("headers", "stdlib, browser User-Agent", t_headers),
     ("browser", "real Chromium via Playwright", t_browser),
 ]

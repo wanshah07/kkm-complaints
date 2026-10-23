@@ -44,7 +44,7 @@ on:
       transport:
         description: 'Only this transport (blank = try all three in order)'
         type: choice
-        options: ['', urllib, headers, browser]
+        options: ['', urllib, named, headers, browser]
         default: ''
 
 concurrency:
@@ -84,7 +84,7 @@ jobs:
       - name: Install Playwright Chromium
         # Skipped for a urllib-only probe: the install hung for 10 minutes on 23 Oct 2026 and the job was cancelled
         # before the endpoint was ever asked.
-        if: inputs.transport != 'urllib'
+        if: inputs.transport != 'urllib' && inputs.transport != 'named'
         run: |
           python -m pip install --upgrade pip playwright
           python -m playwright install --with-deps chromium
