@@ -82,6 +82,9 @@ jobs:
       # block is the CALLER, not the network -- and the KKM scraper already
       # drives exactly this browser.
       - name: Install Playwright Chromium
+        # Skipped for a urllib-only probe: the install hung for 10 minutes on 23 Oct 2026 and the job was cancelled
+        # before the endpoint was ever asked.
+        if: inputs.transport != 'urllib'
         run: |
           python -m pip install --upgrade pip playwright
           python -m playwright install --with-deps chromium
