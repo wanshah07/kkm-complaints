@@ -33,6 +33,10 @@ on:
         description: 'Override the endpoint for this run (blank = OPENAI_BASE_URL)'
         type: string
         default: ''
+      use_alt:
+        description: 'Use the SECOND gateway key (secret OPENAI_ALT_API_KEY) instead of OPENAI_API_KEY. Set base_url to that gateway too, so the primary key is never sent to it.'
+        type: boolean
+        default: false
       timeout:
         description: 'Seconds to wait for each answer'
         type: string
@@ -56,7 +60,7 @@ jobs:
     timeout-minutes: 10
     env:
       PYTHONUNBUFFERED: '1'
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_API_KEY: ${{ inputs.use_alt && secrets.OPENAI_ALT_API_KEY || secrets.OPENAI_API_KEY }}
       OPENAI_BASE_URL: ${{ inputs.base_url || vars.OPENAI_BASE_URL }}
       OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
       PROBE_MODEL: ${{ inputs.model }}
