@@ -8,6 +8,7 @@ Falls back to the deterministic rule engine when no key is configured or the API
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import logging
 import os
@@ -400,7 +401,7 @@ def _parse_reply(raw: str) -> dict:
         return json.loads(m.group(0))
 
 
-def _review_openai(inp: ReviewInput) -> dict:
+def _review_openai(inp: ReviewInput, alt: bool = False) -> dict:
     """
     The OpenAI-compatible path. OPENAI_BASE_URL aims it at any gateway that speaks
     /v1/chat/completions — rootsys, OpenRouter, a local server — so GLM, Kimi, DeepSeek and
@@ -410,12 +411,21 @@ def _review_openai(inp: ReviewInput) -> dict:
     strict json_schema falls back to json_object and then to a plain request, and a model
     that will not take an image is retried on text alone (loudly — most violations here are
     on the artwork, not in the caption).
+
+    `alt=True` aims the same code at the SECOND gateway (OPENAI_ALT_BASE_URL / OPENAI_ALT_API_KEY /
+    OPENAI_ALT_MODEL), see _alt_configured. Nothing else differs, so both gateways are judged by one
+    set of rules and the reviewer tag says which one answered.
     """
     from openai import OpenAI
 
-    base_url = env_str("OPENAI_BASE_URL")
-    client = OpenAI(base_url=base_url) if base_url else OpenAI()
-    model = env_str("OPENAI_MODEL", "gpt-4.1")
+    if alt:
+        base_url = env_str("OPENAI_ALT_BASE_URL")
+        client = OpenAI(base_url=base_url, api_key=env_str("OPENAI_ALT_API_KEY"))
+        model = env_str("OPENAI_ALT_MODEL", env_str("OPENAI_MODEL", "gpt-4.1"))
+    else:
+        base_url = env_str("OPENAI_BASE_URL")
+        client = OpenAI(base_url=base_url) if base_url else OpenAI()
+        model = env_str("OPENAI_MODEL", "gpt-4.1")
     where = f" via {base_url}" if base_url else ""
 
     text_part = {"type": "text", "text": _user_prompt(inp) + "\n\n" + _SCHEMA_HINT}
@@ -498,7 +508,7 @@ def _review_openai(inp: ReviewInput) -> dict:
                 data, resp = data2, resp2
         except Exception as e:
             log.warning("reviewer%s: the verdict retry failed too (%s)", where, str(e)[:160])
-    data["reviewer"] = f"openai:{model}"
+    data["reviewer"] = f"openai-alt:{model}" if alt else f"openai:{model}"
     u = getattr(resp, "usage", None)
     if u is not None:
         # No price table for OpenAI here: tokens are reported, cost is left at 0 rather than guessed.
@@ -509,6 +519,49 @@ def _review_openai(inp: ReviewInput) -> dict:
 
 
 VERDICTS = ("Acceptable", "Risky", "Unacceptable")
+
+
+def _alt_configured() -> bool:
+    """A second OpenAI-compatible gateway is set up only when its URL AND its key are both present."""
+    return bool(env_str("OPENAI_ALT_BASE_URL") and env_str("OPENAI_ALT_API_KEY"))
+
+
+def _alt_first(url: str) -> bool:
+    """
+    Wan, 23 Oct 2026: the second gateway (KiosAPI) is there so rootsys is not the only one carrying the
+    load. OPENAI_ALT_SHARE (0-100, default 0) is the percentage of posts sent to it FIRST; whichever
+    gateway is asked first, the other one is tried once if it fails. The split is by a hash of the post
+    URL, so a post always goes the same way (re-walks and one-account retries are reproducible) and the
+    share is even across a run without any state to keep.
+    """
+    try:
+        share = max(0, min(100, int(float(env_str("OPENAI_ALT_SHARE", "0")))))
+    except ValueError:
+        share = 0
+    if not share:
+        return False
+    return int(hashlib.md5((url or "").encode("utf-8")).hexdigest()[:8], 16) % 100 < share
+
+
+def _review_openai_pair(inp: ReviewInput) -> dict:
+    """Primary and alternative gateway: ask one, and on any failure ask the other once."""
+    if not _alt_configured():
+        return _review_openai(inp)
+    order = [True, False] if _alt_first(inp.url) else [False, True]
+    first_err = None
+    for alt in order:
+        try:
+            data = _review_openai(inp, alt=alt)
+            if first_err is not None:
+                log.warning("reviewer: answered by the %s gateway after the %s one failed (%s)",
+                            "alternative" if alt else "primary", "primary" if alt else "alternative",
+                            str(first_err)[:120])
+            return data
+        except Exception as e:
+            first_err = first_err or e
+            log.warning("reviewer: the %s gateway failed for %s (%s)",
+                        "alternative" if alt else "primary", inp.url, str(e)[:160])
+    raise first_err
 
 
 def _normalise(data: dict) -> dict:
@@ -617,7 +670,7 @@ def review(inp: ReviewInput, use_llm: bool = True, provider: Optional[str] = Non
         return _normalise(v)
 
     try:
-        data = _review_anthropic(inp) if provider == "anthropic" else _review_openai(inp)
+        data = _review_anthropic(inp) if provider == "anthropic" else _review_openai_pair(inp)
         if str(data.get("verdict") or "").strip().title() not in VERDICTS:
             # Valid JSON of the wrong shape. Reviewers on a gateway do this occasionally, and
             # every field but the verdict has a default, so it used to surface far downstream as
