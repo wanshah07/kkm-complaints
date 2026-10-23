@@ -82,6 +82,11 @@ jobs:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4.1' }}
       OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+      # Second gateway (KiosAPI, 23 Oct 2026): inert until OPENAI_ALT_API_KEY (secret) and OPENAI_ALT_BASE_URL are both set.
+      OPENAI_ALT_BASE_URL: ${{ vars.OPENAI_ALT_BASE_URL }}
+      OPENAI_ALT_API_KEY: ${{ secrets.OPENAI_ALT_API_KEY }}
+      OPENAI_ALT_MODEL: ${{ vars.OPENAI_ALT_MODEL }}
+      OPENAI_ALT_SHARE: ${{ vars.OPENAI_ALT_SHARE }}
       LLM_USE_SCREENSHOT: ${{ vars.LLM_USE_SCREENSHOT || '1' }}
       SCREENSHOT_MODE: ${{ vars.SCREENSHOT_MODE || 'apps_script' }}
       GDRIVE_SA_JSON: ${{ secrets.GDRIVE_SA_JSON }}
