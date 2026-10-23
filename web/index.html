@@ -143,7 +143,7 @@
   <!-- View tabs (tablet / desktop) -->
   <nav class="max-w-7xl mx-auto px-4 sm:px-6 hidden sm:flex gap-5 text-sm font-medium text-slate-500" aria-label="Views">
     <button data-nav="home" class="tab py-2">Overview</button>
-    <button data-nav="list" class="tab py-2">Complaints <span id="navListCount" class="text-xs text-slate-400"></span></button>
+    <button data-nav="list" class="tab py-2">Cosmetic Ads <span id="navListCount" class="text-xs text-slate-400"></span></button>
     <button data-nav="routes" class="tab py-2">Routes</button>
     <button data-nav="own" class="tab py-2">Own brand <span id="navOwnCount" class="text-xs text-slate-400"></span></button>
     <button data-nav="check" class="tab py-2">To check <span id="navCheckCount" class="text-xs text-slate-400"></span></button>
@@ -201,8 +201,12 @@
 
   <!-- ===================== COMPLAINTS ===================== -->
   <section id="viewList" class="view space-y-5">
+    <!-- Route tabs (Wan, 23 Oct 2026: "create other route complaints (eg: Medical Device Ads), complaints tab change to
+         Cosmetic Ads"). One tab per route in ROUTES, in English, with the count of rows on that route; the first is
+         Cosmetic Ads and is selected on boot. A tab drives the same filter as the Route select below. -->
+    <nav id="routeTabs" class="flex gap-1 overflow-x-auto -mx-1 px-1 pb-1 text-sm no-print" aria-label="Routes"></nav>
     <!-- Stats -->
-    <section id="stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"></section>
+    <section id="stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"></section>
 
     <!-- Filters -->
     <section class="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 flex flex-wrap items-center gap-2 sm:gap-3 no-print">
@@ -274,7 +278,7 @@
 <!-- Bottom navigation (phones) -->
 <nav class="bnav sm:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-slate-200 grid grid-cols-6 text-[10px] text-slate-500" aria-label="Views">
   <button data-nav="home" class="tap py-2 flex flex-col items-center gap-0.5"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Overview</button>
-  <button data-nav="list" class="tap py-2 flex flex-col items-center gap-0.5"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Complaints</button>
+  <button data-nav="list" class="tap py-2 flex flex-col items-center gap-0.5"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Cosmetic Ads</button>
   <button data-nav="routes" class="tap py-2 flex flex-col items-center gap-0.5"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h7l3 3h6M4 12h5l3 3h8M4 17h9"/></svg>Routes</button>
   <button data-nav="own" class="tap py-2 flex flex-col items-center gap-0.5 relative"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/></svg>Own brand<span id="bnavOwnBadge" class="hidden absolute top-1 right-3 rounded-full bg-amber-500 text-white px-1.5 text-[10px] font-bold"></span></button>
   <button data-nav="check" class="tap py-2 flex flex-col items-center gap-0.5 relative"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></svg>To check<span id="bnavCheckBadge" class="hidden absolute top-1 right-3 rounded-full bg-amber-500 text-white px-1.5 text-[10px] font-bold"></span></button>
@@ -623,7 +627,7 @@ const STATUS_STYLE = {
   'Action taken': 'bg-violet-100 text-violet-800'
 };
 const state = { rows: [], archived: [], stats: null, summary: null, summaryFrom: '', lookups: null, statuses: [],
-                filter: { status: '', brand: '', platform: '', route: '', q: '' }, current: null, questUrl: '', view: 'home', routesFromBackend: false };
+                filter: { status: '', brand: '', platform: '', route: 'Iklan Kosmetik', q: '' }, current: null, questUrl: '', view: 'home', routesFromBackend: false };
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -888,7 +892,7 @@ function renderLookups() {
   fill('fBrand', L.brands, true); fill('fPlatform', L.platforms, true);
   fill('eViolationType', L.violationTypes); fill('mType', L.violationTypes);
   const jenis = ROUTE_VALUES.concat((L.jenisAduan || []).filter(v => ROUTE_VALUES.indexOf(v) < 0));
-  fill('eJenis', jenis); fill('mJenis', jenis); fill('fRoute', jenis, true);
+  fill('eJenis', jenis); fill('mJenis', jenis); fill('fRoute', jenis, true); $('fRoute').value = state.filter.route;
   $('brandList').innerHTML = L.brands.map(v => `<option value="${esc(v)}">`).join('');
   $('platformList').innerHTML = L.platforms.map(v => `<option value="${esc(v)}">`).join('');
   $('questLink').href = state.questUrl;
@@ -906,7 +910,8 @@ function openKkmForm(ev) {
     .catch(e => toast('Could not save: ' + e.message, 4000));
 }
 
-function renderAll() { renderStats(); renderChips(); renderTable(); $('navListCount').textContent = state.rows.length ? (state.rows.length >= 4000 ? '(4000+)' : `(${state.rows.length})`) : ''; updateSegBadges(); }
+const LIST_CAP = 60000;   // MAX_ROWS_RETURNED in Code.gs (23 Oct 2026: 4000 -> 60000)
+function renderAll() { renderRouteTabs(); renderStats(); renderChips(); renderTable(); $('navListCount').textContent = state.rows.length ? (state.rows.length >= LIST_CAP ? `(${LIST_CAP}+)` : `(${state.rows.length})`) : ''; updateSegBadges(); }
 
 // A complaint KKM has replied to is "archived" by the backend: it leaves the working list and is no
 // longer counted under its Status, so the Complete tile read 0 while the Complete filter still showed
@@ -932,12 +937,41 @@ async function loadArchived() {
   if (!state.summary && state.view === 'home') renderHome();
 }
 
+// English tab names for the routes (the sheet keeps the BM value in Jenis Aduan; a blank Jenis is a cosmetic ad).
+const ROUTE_TAB = { 'Iklan Kosmetik': 'Cosmetic Ads', 'Kualiti Kosmetik': 'Cosmetic Quality',
+  'Ubat / Suplemen (Lembaga Iklan Ubat)': 'Medicine & Supplement Ads', 'MDA - Peranti Perubatan': 'Medical Device Ads',
+  'Amalan Perubatan (MMC)': 'Medical Practice', 'Makanan (BKKM)': 'Food Ads', 'Perubatan Tradisional & Komplementari (BPTK)': 'Traditional Medicine',
+  'Produk Merokok / Vape (Akta 852)': 'Tobacco / Vape', 'Halal (JAKIM / KPDN)': 'Halal', 'Pengguna / Perihal Dagangan (KPDN)': 'Consumer (KPDN)',
+  'Kandungan Dalam Talian (MCMC)': 'Online Content', 'Lain-lain': 'Other' };
+const rowRoute = r => r['Jenis Aduan'] || 'Iklan Kosmetik';
+function renderRouteTabs() {
+  const counts = {}; state.rows.forEach(r => { const v = rowRoute(r); counts[v] = (counts[v] || 0) + 1; });
+  const values = ROUTE_VALUES.concat(Object.keys(counts).filter(v => ROUTE_VALUES.indexOf(v) < 0));
+  const tabs = [['', 'All routes', state.rows.length]].concat(values.map(v => [v, ROUTE_TAB[v] || v, counts[v] || 0]));
+  $('routeTabs').innerHTML = tabs.map(([v, label, n]) => `
+    <button data-route-tab="${esc(v)}" class="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold border ${state.filter.route === v ? 'bg-sky-700 text-white border-sky-700' : 'bg-white border-slate-300 hover:bg-slate-50'}">${esc(label)} <span class="${state.filter.route === v ? 'text-sky-100' : 'text-slate-400'}">${n}</span></button>`).join('');
+  $('routeTabs').querySelectorAll('[data-route-tab]').forEach(b => b.onclick = () => { state.filter.route = b.dataset.routeTab; $('fRoute').value = state.filter.route; renderAll(); });
+}
+// 'Sedia difailkan' (Wan, 23 Oct 2026): a pseudo-filter, not a Status. Every HARD check of the KKM form checklist
+// (kkmChecks) already passes from the list payload: open status, a KKM route, product name, a NOT number, a Deskripsi,
+// no [SAHKAN]/[VERIFY] marker in the three fields the checklist reads, and a screenshot. Own-brand rows never reach the
+// list. Violation Reason arrives cut at 300 characters, so a marker past that is seen only by the drawer, whose button
+// then stays grey: nothing wrong can be filed from this view.
+const READY = 'Sedia difailkan';
+function isReady(r) {
+  const open = s => /\[(SAHKAN|VERIFY)\b/i.test(s || '');
+  const st = r['Status'] || 'New';
+  return (st === 'New' || st === 'In-Progress') && isKkmRoute(r['Jenis Aduan']) &&
+    !!r['Post URL'] && !!r['Nama Kosmetik'] && !!r['Deskripsi Aduan'] && !!r['Screenshot Link'] &&
+    /^NOT\s*\d/i.test(r['Nombor Notifikasi'] || '') &&
+    !open(r['Deskripsi Aduan']) && !open(r['Violation Reason']) && !open(r['Remarks']);
+}
 function renderStats() {
   const c = state.stats.counts;
   const tiles = [
     ['New', c['New'] || 0, 'text-blue-700'], ['In-Progress', c['In-Progress'] || 0, 'text-amber-700'],
     ['Complete', completeCount(), 'text-emerald-700'], ['Dismissed', c['Dismissed'] || 0, 'text-slate-600'],
-    ['Total', c.total || 0, 'text-slate-900']
+    ['Total', c.total || 0, 'text-slate-900'], [READY, state.rows.filter(isReady).length, 'text-emerald-800']
   ];
   $('stats').innerHTML = tiles.map(([label, n, cls]) => `
     <button data-tile="${label === 'Total' ? '' : label}" class="text-left bg-white rounded-2xl border ${state.filter.status === label ? 'border-slate-900' : 'border-slate-200'} p-3 sm:p-4 hover:border-slate-400">
@@ -948,7 +982,7 @@ function renderStats() {
 }
 
 function renderChips() {
-  const all = ['', ...state.statuses];
+  const all = ['', ...state.statuses, READY];
   $('statusChips').innerHTML = all.map(s => `
     <button data-chip="${s}" class="rounded-full px-3 py-1.5 text-xs font-semibold border ${state.filter.status === s ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-300 hover:bg-slate-50'}">${s || 'All'}</button>`).join('');
   $('statusChips').querySelectorAll('[data-chip]').forEach(b => b.onclick = () => { state.filter.status = b.dataset.chip; renderAll(); });
@@ -958,10 +992,10 @@ function filtered() {
   const f = state.filter; const q = f.q.trim().toLowerCase();
   const src = f.status === 'Complete' ? completeRows() : state.rows;
   return src.filter(r =>
-    (!f.status || r['Status'] === f.status) &&
+    (!f.status || (f.status === READY ? isReady(r) : r['Status'] === f.status)) &&
     (!f.brand || r['Brand'] === f.brand) &&
     (!f.platform || r['Platform'] === f.platform) &&
-    (!f.route || (r['Jenis Aduan'] || 'Iklan Kosmetik') === f.route) &&
+    (!f.route || rowRoute(r) === f.route) &&
     (!q || ['Extracted Text','Nama Kosmetik','Violation Reason','Violation Type','Post URL','Remarks','ID','KKM Feedback'].some(k => String(r[k] || '').toLowerCase().includes(q))));
 }
 
@@ -1796,7 +1830,7 @@ $('manualForm').onsubmit = submitManual;
 $('mDraft').onclick = draftManual;
 $('fBrand').onchange = e => { state.filter.brand = e.target.value; renderTable(); };
 $('fPlatform').onchange = e => { state.filter.platform = e.target.value; renderTable(); };
-$('fRoute').onchange = e => { state.filter.route = e.target.value; renderTable(); };
+$('fRoute').onchange = e => { state.filter.route = e.target.value; renderAll(); };
 $('fSearch').oninput = e => { state.filter.q = e.target.value; renderTable(); };
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('ldModal').classList.contains('hidden')) { closeDetail(); return; } showDrawer(false); showModal(false); showLinks(false); toggleMenu('exportMenu', false); toggleMenu('moreMenu', false); if (cfg.key) showConnect(false); } });
 // ---------------------------------------------------------------------------
