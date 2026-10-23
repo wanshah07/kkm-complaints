@@ -47,7 +47,7 @@
 <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
 
   <!-- Stats -->
-  <section id="stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"></section>
+  <section id="stats" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3"></section>
 
   <!-- Filters -->
   <section class="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap items-center gap-3">
@@ -290,6 +290,23 @@ const STATUS_STYLE = {
   'Dismissed':   'bg-slate-200 text-slate-700'
 };
 const ARCHIVED = 'Archived';
+// 'Sedia difailkan' (Wan, 23 Oct 2026: "build 1"): a pseudo-filter, not a Status. A row is ready when
+// every HARD check of the KKM form checklist (kkmChecks) already passes from the list payload: open
+// status, a KKM route, product name, a NOT number, a Deskripsi, no [SAHKAN]/[VERIFY] marker in the
+// three fields the checklist reads, and a screenshot. Own-brand rows never reach the list, so they
+// cannot be here. Violation Reason arrives cut at 300 characters, so a marker past that is seen
+// only by the drawer - the button there stays grey, so nothing wrong can be filed from this view.
+const READY = 'Sedia difailkan';
+const KKM_ROUTES = ['Iklan Kosmetik', 'Kualiti Kosmetik'];   // mirrors ROUTES[].kkm in Code.gs
+function isReady(r) {
+  const open = s => /\[(SAHKAN|VERIFY)\b/i.test(s || '');
+  const st = r['Status'] || 'New';
+  return (st === 'New' || st === 'In-Progress') &&
+    (!r['Jenis Aduan'] || KKM_ROUTES.includes(r['Jenis Aduan'])) &&
+    !!r['Post URL'] && !!r['Nama Kosmetik'] && !!r['Deskripsi Aduan'] && !!r['Screenshot Link'] &&
+    /^NOT\s*\d/i.test(r['Nombor Notifikasi'] || '') &&
+    !open(r['Deskripsi Aduan']) && !open(r['Violation Reason']) && !open(r['Remarks']);
+}
 // state.rows is the working list; the archive is fetched only when asked for, so a year of
 // closed complaints never slows the page that Wan actually works in.
 const state = { rows: [], archived: null, deep: null, stats: null, lookups: null, statuses: [], filter: { status: '', brand: '', platform: '', q: '' }, current: null, questUrl: '' };
@@ -382,7 +399,8 @@ function renderStats() {
   const tiles = [
     ['New', c['New'] || 0, 'text-blue-700'], ['In-Progress', c['In-Progress'] || 0, 'text-amber-700'],
     ['Complete', c['Complete'] || 0, 'text-emerald-700'], ['Dismissed', c['Dismissed'] || 0, 'text-slate-600'],
-    [ARCHIVED, c[ARCHIVED] || 0, 'text-slate-500'], ['Total', c.total || 0, 'text-slate-900']
+    [ARCHIVED, c[ARCHIVED] || 0, 'text-slate-500'], ['Total', c.total || 0, 'text-slate-900'],
+    [READY, state.rows.filter(isReady).length, 'text-emerald-800']
   ];
   $('stats').innerHTML = tiles.map(([label, n, cls]) => `
     <button data-tile="${label === 'Total' ? '' : label}" class="text-left bg-white rounded-2xl border ${state.filter.status === label ? 'border-slate-900' : 'border-slate-200'} p-4 hover:border-slate-400">
@@ -393,7 +411,7 @@ function renderStats() {
 }
 
 function renderChips() {
-  const all = ['', ...state.statuses, ARCHIVED];
+  const all = ['', ...state.statuses, ARCHIVED, READY];
   $('statusChips').innerHTML = all.map(s => `
     <button data-chip="${s}" class="rounded-full px-3 py-1.5 text-xs font-semibold border ${state.filter.status === s ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-300 hover:bg-slate-50'}">${s || 'All'}</button>`).join('');
   $('statusChips').querySelectorAll('[data-chip]').forEach(b => b.onclick = () => selectStatus(b.dataset.chip));
@@ -437,7 +455,7 @@ function filtered() {
   if (state.deep && state.deep.q === q && q) return state.deep.rows;
   const src = f.status === ARCHIVED ? (state.archived || []) : state.rows;
   return src.filter(r =>
-    (f.status === ARCHIVED || !f.status || r['Status'] === f.status) &&
+    (f.status === ARCHIVED || !f.status || (f.status === READY ? isReady(r) : r['Status'] === f.status)) &&
     (!f.brand || r['Brand'] === f.brand) &&
     (!f.platform || r['Platform'] === f.platform) &&
     (!q || ['Extracted Text','Nama Kosmetik','Violation Reason','Violation Type','Post URL','Remarks','ID','KKM Feedback'].some(k => String(r[k] || '').toLowerCase().includes(q))));
