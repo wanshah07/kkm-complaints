@@ -1,0 +1,44 @@
+# Read-only: loads Instagram post URLs with the sweep's recorded session and prints the DOM facts that decide which
+# element to crop for the screenshot (tools/ig_dom_probe.py). Writes nothing to the sheet. Manual only.
+name: Instagram DOM probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: 'Instagram post URLs, one per line'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Playwright
+        run: |
+          python -m pip install --upgrade pip
+          pip install "playwright>=1.47,<2"
+          python -m playwright install --with-deps chromium
+      - name: Probe
+        env:
+          URLS: ${{ github.event.inputs.urls }}
+          PW_STORAGE_STATE_B64: ${{ secrets.PW_STORAGE_STATE_B64 }}
+        run: |
+          mapfile -t ARR < <(printf '%s\n' "$URLS" | sed '/^\s*$/d')
+          python tools/ig_dom_probe.py "${ARR[@]}"
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ig-dom-probe-${{ github.run_id }}
+          path: probe_out/
+          retention-days: 7
+          if-no-files-found: ignore
