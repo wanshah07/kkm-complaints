@@ -296,7 +296,7 @@ const ARCHIVED = 'Archived';
 // three fields the checklist reads, and a screenshot. Own-brand rows never reach the list, so they
 // cannot be here. Violation Reason arrives cut at 300 characters, so a marker past that is seen
 // only by the drawer - the button there stays grey, so nothing wrong can be filed from this view.
-const READY = 'Sedia difailkan';
+const READY = 'Ready to file';   // Wan, 24 Oct 2026: English
 const KKM_ROUTES = ['Iklan Kosmetik', 'Kualiti Kosmetik'];   // mirrors ROUTES[].kkm in Code.gs
 function isReady(r) {
   const open = s => /\[(SAHKAN|VERIFY)\b/i.test(s || '');

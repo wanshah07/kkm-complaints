@@ -960,7 +960,7 @@ function renderRouteTabs() {
 // no [SAHKAN]/[VERIFY] marker in the three fields the checklist reads, and a screenshot. Own-brand rows never reach the
 // list. Violation Reason arrives cut at 300 characters, so a marker past that is seen only by the drawer, whose button
 // then stays grey: nothing wrong can be filed from this view.
-const READY = 'Sedia difailkan';
+const READY = 'Ready to file';   // Wan, 24 Oct 2026: English
 function isReady(r) {
   const open = s => /\[(SAHKAN|VERIFY)\b/i.test(s || '');
   const st = r['Status'] || 'New';
@@ -1726,7 +1726,12 @@ async function fillKkmForm() {
       'Nama Kosmetik': $('eNama').value, 'Nombor Notifikasi': $('eNot').value, 'Jenis Aduan': $('eJenis').value,
       'Deskripsi Aduan': $('eDeskripsi').value, 'KKM Feedback': $('eFeedback').value, 'Remarks': $('eRemarks').value
     };
-    const r = await rpc('apiUpdateFields', state.current['ID'], fields);   // what is filed is what is saved
+    let r = await rpc('apiUpdateFields', state.current['ID'], fields);   // what is filed is what is saved
+    // Wan, 24 Oct 2026: opening the form means the complaint is being worked on, so a New row moves to
+    // In-Progress here (never to Complete: Submit on the form is still his click, then Mark Complete).
+    if ((r.row['Status'] || 'New') === 'New') {
+      try { r = await rpc('apiSetStatus', state.current['ID'], 'In-Progress', ''); } catch (e) { toast('Status not changed: ' + e.message); }
+    }
     mergeRow(r.row); fillDrawer(r.row);
     const v = kkmValues();
     const email = $('kkmEmail') ? $('kkmEmail').value : KKM_CHOOSE;
