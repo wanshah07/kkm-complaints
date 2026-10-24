@@ -361,6 +361,9 @@
         <label class="block sm:col-span-2">
           <span class="text-xs font-medium text-slate-600">Jenis Aduan (route)</span>
           <select id="eJenis" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white"></select>
+          <!-- Wan, 24 Oct 2026: rows the bot judges non-cosmetic are routed straight to their agency; if he checks and it
+               IS a cosmetic, one click brings it back to Cosmetic Ads and saves. -->
+          <button type="button" id="btnBackCosmetic" class="mt-1 hidden text-xs rounded-lg border border-sky-300 bg-sky-50 px-2 py-1 text-sky-800 hover:bg-sky-100">↩ Sebenarnya kosmetik: kembalikan ke Cosmetic Ads &amp; simpan</button>
         </label>
         <label class="block">
           <span class="text-xs font-medium text-slate-600">Nama produk</span>
@@ -1363,6 +1366,7 @@ function fillDrawer(r) {
   $('eNama').value = r['Nama Kosmetik'] || '';
   $('eNot').value = r['Nombor Notifikasi'] || '';
   $('eJenis').value = r['Jenis Aduan'] || 'Iklan Kosmetik';
+  $('btnBackCosmetic').classList.toggle('hidden', ($('eJenis').value || 'Iklan Kosmetik') === 'Iklan Kosmetik');
   if ($('eJenis').value !== (r['Jenis Aduan'] || 'Iklan Kosmetik')) { const o = document.createElement('option'); o.value = o.textContent = r['Jenis Aduan']; $('eJenis').appendChild(o); $('eJenis').value = r['Jenis Aduan']; }
   $('dTarikh').textContent = r['Tarikh Melapor'] || '— (set when marked Complete)';
   $('eDeskripsi').value = r['Deskripsi Aduan'] || '';
@@ -1379,6 +1383,8 @@ function showDrawer(open) {
   document.body.style.overflow = open ? 'hidden' : '';
 }
 
+$('btnBackCosmetic').onclick = async () => { $('eJenis').value = 'Iklan Kosmetik'; $('btnBackCosmetic').classList.add('hidden'); if (typeof updateRouteUi === 'function') updateRouteUi(); await saveDrawer(); };
+$('eJenis').addEventListener('change', () => $('btnBackCosmetic').classList.toggle('hidden', $('eJenis').value === 'Iklan Kosmetik'));
 async function saveDrawer() {
   if (!state.current) return;
   const fields = {
