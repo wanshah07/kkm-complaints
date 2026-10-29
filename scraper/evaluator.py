@@ -660,9 +660,19 @@ def review(inp: ReviewInput, use_llm: bool = True, provider: Optional[str] = Non
     provider = (provider or env_str("LLM_PROVIDER", "anthropic")).lower()
     has_key = bool(os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN")) if provider == "anthropic" else bool(os.getenv("OPENAI_API_KEY"))
     if not use_llm or not has_key:
+        v = offline_verdict(inp.text)
         if use_llm and not has_key:
+            # A reviewer WAS asked for and there is no key to reach it, which is a configuration
+            # fault (secret unset, LLM_PROVIDER pointing at the other provider), not a choice. The
+            # verdict stays the rulebook's, but the row has to say so where Wan reads it: `reviewer`
+            # and `notes` both land in the sheet's Remarks column, so a sheet filled this way reads
+            # "rules-only (no LLM key)" on every row instead of looking reviewed. --no-llm is the
+            # deliberate case and keeps the plain "rules-only" tag.
             log.warning("no LLM key for provider=%s; using rules-only verdict", provider)
-        return _normalise(offline_verdict(inp.text))
+            v["reviewer"] = f"rules-only (no LLM key for provider={provider})"
+            v["notes"] = (f"LLM NOT CONSULTED: no API key for provider={provider}; "
+                          "this is the regex rulebook's verdict, not a review")
+        return _normalise(v)
 
     if not prescreen(inp.text) and not inp.screenshot_path and len(inp.text or "") < 2000:
         v = offline_verdict(inp.text)
@@ -687,6 +697,7 @@ def review(inp: ReviewInput, use_llm: bool = True, provider: Optional[str] = Non
     except Exception as e:  # any provider failure → rules fallback, never a crashed run
         log.error("LLM review failed for %s: %s — falling back to rules", inp.url, e)
         v = offline_verdict(inp.text)
+        v["reviewer"] = f"rules-only (LLM failed: {provider})"
         v["notes"] = f"LLM failed: {e}"
         # A reviewer was configured and did not answer. The rulebook verdict below is kept for
         # the record, but it is NOT a review: the caller must not file it or ledger it, or the
