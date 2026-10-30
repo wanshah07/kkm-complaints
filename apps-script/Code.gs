@@ -777,12 +777,19 @@ function handleApi_(action, body, p) {
 // ---------------------------------------------------------------------------
 // Reviewer for manual entries: the same rulebook the scraper uses, called from
 // the dashboard so a post pasted by hand comes back in the NPRA report format.
-// Needs ANTHROPIC_API_KEY in Script Properties; ANTHROPIC_MODEL is optional.
+// 30 Oct 2026 (Wan: "change to rootsys API key, no active credit at the moment
+// for anthropic"): the reviewer now prefers an OpenAI-compatible gateway, the
+// same kind the scraper uses. Script Properties:
+//   OPENAI_API_KEY   the gateway key (rootsys). When set, it is used first.
+//   OPENAI_BASE_URL  optional, default https://rootsys.cloud/v1
+//   OPENAI_MODEL     optional, default deepseek-v4-pro (match the repo's OPENAI_MODEL variable)
+// ANTHROPIC_API_KEY (+ optional ANTHROPIC_MODEL) still works when OPENAI_API_KEY is absent.
 // ---------------------------------------------------------------------------
 function draftReview_(body) {
-  var key = PROPS.getProperty('ANTHROPIC_API_KEY');
-  if (!key) {
-    return { ok: false, error: 'ANTHROPIC_API_KEY is not set. Apps Script → Project Settings → Script properties.' };
+  var oaKey = String(PROPS.getProperty('OPENAI_API_KEY') || '').trim();
+  var key = String(PROPS.getProperty('ANTHROPIC_API_KEY') || '').trim();
+  if (!oaKey && !key) {
+    return { ok: false, error: 'No reviewer key is set. Add OPENAI_API_KEY (rootsys) in Apps Script → Project Settings → Script properties.' };
   }
   var text = String(body.text || '').trim();
   var b64 = String(body.imageBase64 || '');
@@ -796,33 +803,41 @@ function draftReview_(body) {
   parts.push('');
   parts.push(text ? 'POST TEXT:\n' + text : 'POST TEXT: (none supplied — read the screenshot)');
 
-  var content = [];
-  if (b64) {
-    content.push({
-      type: 'image',
-      source: { type: 'base64', media_type: String(body.imageMime || 'image/png'), data: b64.replace(/^data:[^,]+,/, '') }
-    });
-  }
-  content.push({ type: 'text', text: parts.join('\n') });
+  var out;
+  var notes = '';
+  if (oaKey) {
+    var gw = draftViaGateway_(oaKey, parts.join('\n'), b64, String(body.imageMime || 'image/png'));
+    out = gw.text;
+    if (gw.imageDropped) notes = 'The gateway would not take the screenshot, so this draft was read from the pasted text alone; claims on the artwork were not seen. ';
+  } else {
+    var content = [];
+    if (b64) {
+      content.push({
+        type: 'image',
+        source: { type: 'base64', media_type: String(body.imageMime || 'image/png'), data: b64.replace(/^data:[^,]+,/, '') }
+      });
+    }
+    content.push({ type: 'text', text: parts.join('\n') });
 
-  var res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
-    method: 'post',
-    contentType: 'application/json',
-    muteHttpExceptions: true,
-    headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    payload: JSON.stringify({
-      model: PROPS.getProperty('ANTHROPIC_MODEL') || 'claude-haiku-4-5',
-      max_tokens: 2000,
-      system: NPRA_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: content }]
-    })
-  });
-  if (res.getResponseCode() !== 200) {
-    throw new Error('Reviewer API ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 300));
+    var res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'post',
+      contentType: 'application/json',
+      muteHttpExceptions: true,
+      headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      payload: JSON.stringify({
+        model: PROPS.getProperty('ANTHROPIC_MODEL') || 'claude-haiku-4-5',
+        max_tokens: 2000,
+        system: NPRA_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: content }]
+      })
+    });
+    if (res.getResponseCode() !== 200) {
+      throw new Error('Reviewer API ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 300));
+    }
+    var body_ = JSON.parse(res.getContentText());
+    out = (body_.content || []).filter(function (c) { return c.type === 'text'; })
+      .map(function (c) { return c.text; }).join('').trim();
   }
-  var body_ = JSON.parse(res.getContentText());
-  var out = (body_.content || []).filter(function (c) { return c.type === 'text'; })
-    .map(function (c) { return c.text; }).join('').trim();
   var data = parseReviewerJson_(out);
   if (!data) throw new Error('Reviewer did not return JSON: ' + out.slice(0, 200));
   return {
@@ -835,9 +850,55 @@ function draftReview_(body) {
       extractedText: data.extracted_text || text,
       productName: data.product_name || '',
       deskripsi: data.complaint_description_bm || '',
-      notes: data.notes || ''
+      notes: notes + (data.notes || '')
     }
   };
+}
+
+// OpenAI-compatible /chat/completions call (rootsys and similar gateways). A 401 or 403
+// means the key is wrong, so it stops at once; any other 4xx is a request shape the model
+// rejected, so it retries plain (no response_format) and then without the screenshot.
+// A timeout or 5xx is not retried: each call can be slow and Apps Script has a hard limit.
+function draftViaGateway_(key, userText, b64, mime) {
+  var base = String(PROPS.getProperty('OPENAI_BASE_URL') || 'https://rootsys.cloud/v1').replace(/\/+$/, '');
+  var model = PROPS.getProperty('OPENAI_MODEL') || 'deepseek-v4-pro';
+  var withImages = b64 ? [true, false] : [false];
+  var lastErr = '';
+  for (var i = 0; i < withImages.length; i++) {
+    var content = [{ type: 'text', text: userText }];
+    if (withImages[i]) {
+      var data = b64.indexOf('data:') === 0 ? b64 : 'data:' + mime + ';base64,' + b64;
+      content.push({ type: 'image_url', image_url: { url: data } });
+    }
+    var modes = [{ type: 'json_object' }, null];
+    for (var j = 0; j < modes.length; j++) {
+      var payload = {
+        model: model,
+        temperature: 0,
+        max_tokens: 2000,
+        messages: [{ role: 'system', content: NPRA_SYSTEM_PROMPT }, { role: 'user', content: content }]
+      };
+      if (modes[j]) payload.response_format = modes[j];
+      var res = UrlFetchApp.fetch(base + '/chat/completions', {
+        method: 'post',
+        contentType: 'application/json',
+        muteHttpExceptions: true,
+        headers: { Authorization: 'Bearer ' + key },
+        payload: JSON.stringify(payload)
+      });
+      var code = res.getResponseCode();
+      var txt = res.getContentText();
+      if (code === 200) {
+        var parsed = JSON.parse(txt);
+        var msg = parsed.choices && parsed.choices[0] && parsed.choices[0].message;
+        return { text: String((msg && msg.content) || '').trim(), imageDropped: !!b64 && !withImages[i] };
+      }
+      lastErr = code + ': ' + txt.slice(0, 200);
+      if (code === 401 || code === 403) throw new Error('Reviewer gateway ' + lastErr + ' (check OPENAI_API_KEY in Script properties)');
+      if (code < 400 || code >= 500) throw new Error('Reviewer gateway ' + lastErr);
+    }
+  }
+  throw new Error('Reviewer gateway rejected every request shape: ' + lastErr);
 }
 
 // The model is asked for bare JSON; a code fence or a stray sentence around it
