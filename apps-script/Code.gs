@@ -723,6 +723,13 @@ function handleApi_(action, body, p) {
                             PROPS.setProperty('KKM_FORM_URL', String(body.url || '')); return { ok: true };
       case 'draft_review':  if (!viewer) return deny;
                             return draftReview_(body);
+      // --- reviewer admin: dashboard key only, never the scraper token ---
+      case 'get_reviewer_settings':  if (!isAuthorisedViewer_(p.key)) return deny;
+                            return reviewerSettings_();
+      case 'set_reviewer_settings':  if (!isAuthorisedViewer_(p.key)) return deny;
+                            return setReviewerSettings_(body);
+      case 'test_reviewer': if (!isAuthorisedViewer_(p.key)) return deny;
+                            return testReviewer_();
       // --- routes (the catalogue above) ---
       case 'routes':        if (!viewer) return deny;
                             return { ok: true, routes: routesPayload_() };
@@ -789,7 +796,7 @@ function draftReview_(body) {
   var oaKey = String(PROPS.getProperty('OPENAI_API_KEY') || '').trim();
   var key = String(PROPS.getProperty('ANTHROPIC_API_KEY') || '').trim();
   if (!oaKey && !key) {
-    return { ok: false, error: 'No reviewer key is set. Add OPENAI_API_KEY (rootsys) in Apps Script → Project Settings → Script properties.' };
+    return { ok: false, error: 'No reviewer key is set. Open the Admin panel on the dashboard and save the rootsys API key (or add OPENAI_API_KEY in Apps Script → Project Settings → Script properties).' };
   }
   var text = String(body.text || '').trim();
   var b64 = String(body.imageBase64 || '');
@@ -860,8 +867,9 @@ function draftReview_(body) {
 // rejected, so it retries plain (no response_format) and then without the screenshot.
 // A timeout or 5xx is not retried: each call can be slow and Apps Script has a hard limit.
 function draftViaGateway_(key, userText, b64, mime) {
-  var base = String(PROPS.getProperty('OPENAI_BASE_URL') || 'https://rootsys.cloud/v1').replace(/\/+$/, '');
-  var model = PROPS.getProperty('OPENAI_MODEL') || 'deepseek-v4-pro';
+  var cfg = reviewerConfig_();
+  var base = cfg.baseUrl;
+  var model = cfg.model;
   var withImages = b64 ? [true, false] : [false];
   var lastErr = '';
   for (var i = 0; i < withImages.length; i++) {
@@ -894,11 +902,109 @@ function draftViaGateway_(key, userText, b64, mime) {
         return { text: String((msg && msg.content) || '').trim(), imageDropped: !!b64 && !withImages[i] };
       }
       lastErr = code + ': ' + txt.slice(0, 200);
-      if (code === 401 || code === 403) throw new Error('Reviewer gateway ' + lastErr + ' (check OPENAI_API_KEY in Script properties)');
+      if (code === 401 || code === 403) throw new Error('Reviewer gateway ' + lastErr + ' (check the key in the Admin panel)');
       if (code < 400 || code >= 500) throw new Error('Reviewer gateway ' + lastErr);
     }
   }
   throw new Error('Reviewer gateway rejected every request shape: ' + lastErr);
+}
+
+// ---------------------------------------------------------------------------
+// Reviewer admin (dashboard Admin panel). The key lives in Script properties and is
+// never returned: the panel only learns whether one is set and its last four characters.
+// ---------------------------------------------------------------------------
+var REVIEWER_DEFAULT_BASE = 'https://rootsys.cloud/v1';
+var REVIEWER_DEFAULT_MODEL = 'deepseek-v4-pro';
+
+function reviewerConfig_() {
+  return {
+    baseUrl: String(PROPS.getProperty('OPENAI_BASE_URL') || REVIEWER_DEFAULT_BASE).replace(/\/+$/, ''),
+    model: String(PROPS.getProperty('OPENAI_MODEL') || REVIEWER_DEFAULT_MODEL)
+  };
+}
+
+function reviewerSettings_() {
+  var cfg = reviewerConfig_();
+  var key = String(PROPS.getProperty('OPENAI_API_KEY') || '').trim();
+  var anth = String(PROPS.getProperty('ANTHROPIC_API_KEY') || '').trim();
+  return {
+    ok: true,
+    baseUrl: cfg.baseUrl,
+    model: cfg.model,
+    keySet: !!key,
+    keyHint: key ? key.slice(-4) : '',
+    anthropicKeySet: !!anth,
+    // draftReview_ prefers the gateway key; the Anthropic key is only a fallback when none is set
+    activeProvider: key ? 'gateway' : (anth ? 'anthropic' : 'none')
+  };
+}
+
+function setReviewerSettings_(b) {
+  b = b || {};
+  var changed = [];
+  if (b.baseUrl !== undefined) {
+    var u = String(b.baseUrl).trim().replace(/\/+$/, '');
+    if (u) {
+      if (!/^https:\/\/[A-Za-z0-9.\-]+(:\d{1,5})?(\/[A-Za-z0-9._~\-\/]*)?$/.test(u)) return { ok: false, error: 'Base URL must be https:// and look like https://host/v1' };
+      PROPS.setProperty('OPENAI_BASE_URL', u);
+    } else {
+      PROPS.deleteProperty('OPENAI_BASE_URL'); // blank = back to the default
+    }
+    changed.push('baseUrl');
+  }
+  if (b.model !== undefined) {
+    var m = String(b.model).trim();
+    if (m) {
+      if (!/^[A-Za-z0-9._:\/\-]{1,100}$/.test(m)) return { ok: false, error: 'Model name may only use letters, digits and . _ : / -' };
+      PROPS.setProperty('OPENAI_MODEL', m);
+    } else {
+      PROPS.deleteProperty('OPENAI_MODEL');
+    }
+    changed.push('model');
+  }
+  if (b.clearKey === true) {
+    PROPS.deleteProperty('OPENAI_API_KEY');
+    changed.push('key cleared');
+  } else if (b.apiKey !== undefined && String(b.apiKey).trim()) {
+    var k = String(b.apiKey).trim();
+    if (/\s/.test(k) || k.length < 8 || k.length > 400) return { ok: false, error: 'That does not look like an API key (no spaces, 8 to 400 characters).' };
+    PROPS.setProperty('OPENAI_API_KEY', k);
+    changed.push('key');
+  }
+  var out = reviewerSettings_();
+  out.changed = changed; // names only, never values
+  return out;
+}
+
+// One tiny completion with the stored settings: proves the key, the model name and the
+// network path in a few seconds, without spending a review.
+function testReviewer_() {
+  var key = String(PROPS.getProperty('OPENAI_API_KEY') || '').trim();
+  if (!key) return { ok: false, error: 'No gateway key is saved yet.' };
+  var cfg = reviewerConfig_();
+  var t0 = Date.now();
+  var res;
+  try {
+    res = UrlFetchApp.fetch(cfg.baseUrl + '/chat/completions', {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      headers: { Authorization: 'Bearer ' + key },
+      payload: JSON.stringify({ model: cfg.model, temperature: 0, max_tokens: 8,
+                                messages: [{ role: 'user', content: 'Reply with the single word: ok' }] })
+    });
+  } catch (err) {
+    return { ok: false, error: 'Cannot reach ' + cfg.baseUrl + ': ' + String(err.message || err).slice(0, 160) };
+  }
+  var ms = Date.now() - t0, code = res.getResponseCode(), txt = res.getContentText();
+  if (code === 200) {
+    var reply = '';
+    try { var j = JSON.parse(txt); reply = String((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '').trim().slice(0, 40); } catch (e) { /* keep blank */ }
+    return { ok: true, status: 200, ms: ms, model: cfg.model, reply: reply };
+  }
+  var hint = (code === 401 || code === 403) ? 'The gateway refused the key.'
+           : code === 404 ? 'Model or path not found: check the model name and base URL.'
+           : code === 402 || code === 429 ? 'Out of credit or rate limited.' : '';
+  // the gateway's own error text can echo request details, so only a short slice of it is shown
+  return { ok: false, status: code, ms: ms, model: cfg.model, error: ('Gateway ' + code + '. ' + hint + ' ' + txt.slice(0, 160).split(key).join('***')).trim() };
 }
 
 // The model is asked for bare JSON; a code fence or a stray sentence around it
