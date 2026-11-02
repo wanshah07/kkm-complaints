@@ -258,7 +258,7 @@
   <section id="viewOwn" class="view space-y-4">
     <div>
       <h2 class="text-lg font-semibold">Own brand</h2>
-      <p class="text-xs text-slate-500 mt-1">Posts that name one of your own brands (<span id="ownNames">Skintific, Lumixpert, Facerinna, Bodibreze, Nextprime</span>). They are never filed with an agency, and they stay out of the Complaints list and its counts. Mark each one <b>Dismissed</b> (nothing to do) or <b>Action taken</b> (you dealt with it). <b>Not own brand</b> sends a row back to Complaints if the match was a mistake.</p>
+      <p class="text-xs text-slate-500 mt-1">Posts that name one of your own brands (<span id="ownNames">Lumixpert, Facerinna, Bodibreze, Nextprime</span>). They are never filed with an agency, and they stay out of the Complaints list and its counts. Mark each one <b>Dismissed</b> (nothing to do) or <b>Action taken</b> (you dealt with it). <b>Not own brand</b> sends a row back to Complaints if the match was a mistake.</p>
     </div>
     <div id="ownChips" class="flex flex-wrap gap-2 text-sm"></div>
     <div id="ownMsg" class="text-sm text-slate-600"></div>
@@ -2046,7 +2046,7 @@ $('lText').addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.
 // Own brand segment (Wan, 11 Oct 2026) and To check segment (held posts, Held.gs).
 // Both are read straight from the backend each time they are opened; nothing is cached across loads.
 // ---------------------------------------------------------------------------
-const OWN_BADGE = { Skintific: 'bg-fuchsia-100 text-fuchsia-800', Lumixpert: 'bg-sky-100 text-sky-800', Facerinna: 'bg-rose-100 text-rose-800',
+const OWN_BADGE = { Lumixpert: 'bg-sky-100 text-sky-800', Facerinna: 'bg-rose-100 text-rose-800',
                     Bodibreze: 'bg-teal-100 text-teal-800', Nextprime: 'bg-indigo-100 text-indigo-800', Valorith: 'bg-orange-100 text-orange-800' };
 state.own = { rows: [], counts: {}, filter: 'New', loaded: false };
 state.check = { held: [], total: 0, loaded: false };

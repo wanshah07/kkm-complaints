@@ -78,7 +78,8 @@ var STATUS_FLOW = { 'New': 'In-Progress', 'In-Progress': 'Complete', 'Complete':
 // A row Wan marks "Not own brand" carries the tag below in Remarks and returns to the Complaints list.
 // ---------------------------------------------------------------------------
 var OWN_BRANDS = [
-  { name: 'Skintific', keys: ['skintific'] },
+  // Skintific removed 2 Nov 2026 (Wan: "allow me to report skintific video as well", answering that he means filing
+  // Skintific posts himself). A post naming Skintific is an ordinary complaint row again; add it back here to undo.
   { name: 'Lumixpert', keys: ['lumixpert'] },
   { name: 'Facerinna', keys: ['facerinna', 'facerina'] },
   { name: 'Bodibreze', keys: ['bodibreze', 'body breze', 'bodybreze'] },
