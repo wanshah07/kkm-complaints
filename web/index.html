@@ -213,9 +213,10 @@
     <section class="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 flex flex-wrap items-center gap-2 sm:gap-3 no-print">
       <div id="statusChips" class="flex flex-wrap gap-2 w-full sm:w-auto"></div>
       <select id="fBrand" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white max-w-[48%] sm:max-w-none"><option value="">All brands</option></select>
+      <select id="fType" title="Limit the list to one kind of account from the Targets tab (Wan, 4 Nov 2026: search a brand among the doctors' accounts)" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white max-w-[48%] sm:max-w-none"><option value="">All accounts</option></select>
       <select id="fPlatform" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white max-w-[48%] sm:max-w-none"><option value="">All platforms</option></select>
       <select id="fRoute" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white max-w-full"><option value="">All routes</option></select>
-      <input id="fSearch" type="search" placeholder="Search text, product, reason, URL…" class="flex-1 min-w-[160px] rounded-lg border border-slate-300 text-sm py-2 px-3">
+      <input id="fSearch" type="search" placeholder="Search a brand or product, text, reason, URL…" class="flex-1 min-w-[160px] rounded-lg border border-slate-300 text-sm py-2 px-3">
       <span id="count" class="text-xs text-slate-500"></span>
     </section>
 
@@ -668,7 +669,7 @@ const STATUS_STYLE = {
   'Action taken': 'bg-violet-100 text-violet-800'
 };
 const state = { rows: [], archived: [], stats: null, summary: null, summaryFrom: '', lookups: null, statuses: [],
-                filter: { status: '', brand: '', platform: '', route: 'Iklan Kosmetik', q: '' }, current: null, questUrl: '', view: 'home', routesFromBackend: false };
+                filter: { status: '', brand: '', type: '', platform: '', route: 'Iklan Kosmetik', q: '' }, acctType: {}, current: null, questUrl: '', view: 'home', routesFromBackend: false };
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -779,7 +780,7 @@ async function boot(rethrow) {
     state.questUrl = b.questUrl; KKM_FORM_URL = b.kkmFormUrl || KKM_FORM_URL;
     applyRoutes(b.routes);
     state.summary = b.summary || null; state.summaryFrom = b.summary ? 'server' : '';
-    renderLookups(); renderAll(); loadArchived();
+    renderLookups(); renderAll(); loadArchived(); loadAcctTypes();
     showView(VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'home');
   } catch (e) {
     $('loading').innerHTML = `<div class="text-sm text-rose-700">${esc(e.message)}</div>`;
@@ -1032,12 +1033,42 @@ function renderChips() {
   $('statusChips').querySelectorAll('[data-chip]').forEach(b => b.onclick = () => { state.filter.status = b.dataset.chip; renderAll(); });
 }
 
+// Account type (Wan, 4 Nov 2026: "allow me to search brand among the doctor's account"). The sheet's Brand column holds the
+// account a post was found on; its kind (General Doctor, Dermatologist, Pharmacist, a retail chain...) lives in the Targets tab's
+// Type column and is fetched once after boot with the same viewer key. DOCTORS_ALL is a group: every doctor-type account
+// (General Doctor, Dermatologist, Doctor - specialty TBC, Dentist) and not DoctorOnCall, which is a company.
+const DOCTORS_ALL = '__doctors';
+const isDoctorType = t => /doctor|dermatolog|dentist/i.test(t) && !/oncall/i.test(t);
+function acctTypeMatches(t, want) { return want === DOCTORS_ALL ? isDoctorType(t) : t === want; }
+async function loadAcctTypes() {
+  const sel = $('fType');
+  try {
+    const d = await api('targets', {}, 30000);
+    const map = {}; (d.targets || []).forEach(t => { if (t.name) map[t.name] = String(t.type || '').trim(); });
+    state.acctType = map;
+    const counts = {}; state.rows.forEach(r => { const t = map[r['Brand']] || ''; if (t) counts[t] = (counts[t] || 0) + 1; });
+    const types = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    const docs = types.filter(isDoctorType).reduce((n, t) => n + counts[t], 0);
+    const keep = state.filter.type;
+    sel.innerHTML = '<option value="">All accounts</option>' +
+      (docs ? `<option value="${DOCTORS_ALL}">Doctors, all (${docs})</option>` : '') +
+      types.map(t => `<option value="${esc(t)}">${esc(t)} (${counts[t]})</option>`).join('');
+    sel.value = keep && (keep === DOCTORS_ALL || counts[keep]) ? keep : ''; state.filter.type = sel.value;
+    sel.classList.remove('hidden');
+    renderTable();
+  } catch (e) {
+    // The backend may not offer the Targets list to this key; hide the control rather than show one that does nothing.
+    state.acctType = {}; state.filter.type = ''; sel.classList.add('hidden');
+  }
+}
+
 function filtered() {
   const f = state.filter; const q = f.q.trim().toLowerCase();
   const src = f.status === 'Complete' ? completeRows() : state.rows;
   return src.filter(r =>
     (!f.status || (f.status === READY ? isReady(r) : r['Status'] === f.status)) &&
     (!f.brand || r['Brand'] === f.brand) &&
+    (!f.type || acctTypeMatches(state.acctType[r['Brand']] || '', f.type)) &&
     (!f.platform || r['Platform'] === f.platform) &&
     (!f.route || rowRoute(r) === f.route) &&
     (!q || ['Extracted Text','Nama Kosmetik','Violation Reason','Violation Type','Post URL','Remarks','ID','KKM Feedback'].some(k => String(r[k] || '').toLowerCase().includes(q))));
@@ -1046,7 +1077,8 @@ function filtered() {
 function renderTable() {
   $('loading').classList.add('hidden');
   const rows = filtered();
-  $('count').textContent = `${rows.length} of ${state.filter.status === 'Complete' ? completeCount() : state.rows.length}`;
+  const accts = (state.filter.q.trim() || state.filter.type) ? new Set(rows.map(r => r['Brand'])).size : 0;
+  $('count').textContent = `${rows.length} of ${state.filter.status === 'Complete' ? completeCount() : state.rows.length}` + (accts ? ` · ${accts} account${accts === 1 ? '' : 's'}` : '');
   $('empty').classList.toggle('hidden', rows.length > 0);
   const routeTag = r => (r['Jenis Aduan'] && r['Jenis Aduan'] !== 'Iklan Kosmetik') ? `<div class="text-[11px] text-sky-700 mt-0.5 truncate">${esc(r['Jenis Aduan'])}</div>` : '';
   $('rows').innerHTML = rows.map(r => `
@@ -1881,6 +1913,7 @@ document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => showMod
 $('manualForm').onsubmit = submitManual;
 $('mDraft').onclick = draftManual;
 $('fBrand').onchange = e => { state.filter.brand = e.target.value; renderTable(); };
+$('fType').onchange = e => { state.filter.type = e.target.value; renderTable(); };
 $('fPlatform').onchange = e => { state.filter.platform = e.target.value; renderTable(); };
 $('fRoute').onchange = e => { state.filter.route = e.target.value; renderAll(); };
 $('fSearch').oninput = e => { state.filter.q = e.target.value; renderTable(); };
