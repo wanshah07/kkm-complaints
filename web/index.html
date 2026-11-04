@@ -1036,9 +1036,9 @@ function renderChips() {
 // Account type (Wan, 4 Nov 2026: "allow me to search brand among the doctor's account"). The sheet's Brand column holds the
 // account a post was found on; its kind (General Doctor, Dermatologist, Pharmacist, a retail chain...) lives in the Targets tab's
 // Type column and is fetched once after boot with the same viewer key. DOCTORS_ALL is a group: every doctor-type account
-// (General Doctor, Dermatologist, Doctor - specialty TBC, Dentist) and not DoctorOnCall, which is a company.
+// (General Doctor, Dermatologist, Doctor - specialty TBC, Dentist, Aesthetician; Wan, 4 Nov 2026) and not DoctorOnCall, which is a company.
 const DOCTORS_ALL = '__doctors';
-const isDoctorType = t => /doctor|dermatolog|dentist/i.test(t) && !/oncall/i.test(t);
+const isDoctorType = t => /doctor|dermatolog|dentist|aesthetician/i.test(t) && !/oncall/i.test(t);
 function acctTypeMatches(t, want) { return want === DOCTORS_ALL ? isDoctorType(t) : t === want; }
 async function loadAcctTypes() {
   const sel = $('fType');
