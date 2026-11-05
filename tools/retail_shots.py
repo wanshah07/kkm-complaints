@@ -94,7 +94,15 @@ def shoot(browser, r, tmp):
         if need:
             have = sum(1 for w in need if w in hay)
             if have < max(1, int(0.6 * len(need) + 0.5)):
-                return "wrong-page", f"only {have}/{len(need)} name words on the page '{title}'", None
+                # A shop may abbreviate a product in the complaint ("PHYSIOGEL DMT CLNSR 500ML") while its own page
+                # spells it out. That page is still the right one when the browser stayed on the very URL we asked
+                # for (no redirect to a home page) and the brand is on it. A redirect lands on a different path, so
+                # delisted products are still refused.
+                landed = urlsplit(page.url).path.rstrip("/").lower()
+                asked = urlsplit(url).path.rstrip("/").lower()
+                brand = (toks(r.get("Brand") or "") or toks(r.get("Nama Kosmetik") or "") or [""])[0]
+                if not (landed == asked and landed not in ("", "/") and brand and brand in hay):
+                    return "wrong-page", f"only {have}/{len(need)} name words on the page '{title}' (landed on {landed or '/'})", None
         # let lazy sections render, then photograph the whole page (the uploader caps it at 2400px)
         for _ in range(4):
             page.mouse.wheel(0, 900)
