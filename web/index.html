@@ -26,7 +26,7 @@
   :root {
     --surface:#ffffff; --ink:#0f172a; --muted:#64748b; --accent:#2a78d6; --accent-soft:#e8f1fc;
     --warn:#b45309; --warn-bg:#fef3c7; --crit:#b91c1c; --crit-bg:#fee2e2;
-    --series-1:#2a78d6; --st-new:#2a78d6; --st-prog:#eda100; --st-done:#1baf7a; --st-replied:#008300; --st-dismissed:#94a3b8;
+    --series-1:#2a78d6; --st-new:#2a78d6; --st-prog:#b47400; --st-done:#128a5c; --st-replied:#008300; --st-dismissed:#64748b;
     --lane-sweep:#2a78d6; --lane-dash:#1baf7a; --lane-file:#eb6834;
     --sa-top: env(safe-area-inset-top, 0px); --sa-bottom: env(safe-area-inset-bottom, 0px);
   }
@@ -75,13 +75,18 @@
     :root { --surface:#111a2e; --ink:#e2e8f0; --muted:#94a3b8; --accent:#3987e5; --accent-soft:#16294a; --warn:#fbbf24; --warn-bg:#3b2a07; --crit:#f87171; --crit-bg:#3f1414;
             --series-1:#3987e5; --st-new:#3987e5; --st-prog:#c98500; --st-done:#199e70; --st-replied:#2f9e44; --st-dismissed:#64748b; --lane-sweep:#3987e5; --lane-dash:#199e70; --lane-file:#d95926; }
     body, .bg-slate-50 { background-color: #0b1220 !important; color: #e2e8f0; }
-    .bg-white, .bg-white\/90 { background-color: #111a2e !important; }
+    .bg-white, .bg-white\/90, .bg-white\/95 { background-color: #111a2e !important; }
     .bg-slate-100 { background-color: #1e293b !important; } .bg-slate-200 { background-color: #334155 !important; color: #e2e8f0 !important; }
-    .bg-amber-50\/60 { background-color: rgba(120, 53, 15, .22) !important; }
+    .bg-amber-50\/60, .bg-amber-50 { background-color: rgba(120, 53, 15, .22) !important; }
+    .bg-sky-50 { background-color: #0c2a3f !important; } .text-sky-800, .text-sky-700 { color: #7dd3fc !important; } .hover\:bg-sky-100:hover, .hover\:bg-violet-50:hover { background-color: #162036 !important; }
+    .bg-sky-100 { background-color: #0c2a3f !important; } .bg-rose-100 { background-color: #4c1d2b !important; } .text-rose-800 { color: #fda4af !important; }
+    .bg-teal-100 { background-color: #0f3d3a !important; } .text-teal-800 { color: #99f6e4 !important; } .bg-indigo-100 { background-color: #2b2a6b !important; } .text-indigo-800 { color: #c7d2fe !important; }
+    .bg-orange-100 { background-color: #4a2a0c !important; } .text-orange-800 { color: #fed7aa !important; } .bg-amber-200 { background-color: #5c3d06 !important; }
+    .bg-slate-300 { background-color: #475569 !important; } .text-slate-300 { color: #94a3b8 !important; }
     .border-slate-200, .border-slate-300, .border-amber-200, .border-amber-300, .border-sky-300 { border-color: #263247 !important; }
     .divide-slate-100 > * + * { border-color: #1e293b !important; }
     .text-slate-900, .text-slate-800 { color: #e2e8f0 !important; } .text-slate-700, .text-slate-600 { color: #cbd5e1 !important; }
-    .text-slate-500 { color: #94a3b8 !important; } .text-slate-400 { color: #64748b !important; }
+    .text-slate-500 { color: #94a3b8 !important; } .text-slate-500 { color: #64748b !important; }
     .text-blue-700 { color: #93c5fd !important; } .text-emerald-700 { color: #6ee7b7 !important; } .text-amber-700 { color: #fcd34d !important; } .text-rose-700 { color: #fda4af !important; }
     .row-hover:hover, .hover\:bg-slate-50:hover { background-color: #162036 !important; }
     .hover\:border-slate-400:hover { border-color: #475569 !important; }
@@ -127,7 +132,7 @@
       <button id="kkmFormLink" title="Open the KKM complaint form (asks for the URL the first time)" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">KKM form ↗</button>
       <div class="relative">
         <button id="btnExport" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">Export ▾</button>
-        <div id="exportMenu" class="hidden absolute right-0 mt-1 w-72 rounded-xl border border-slate-200 bg-white shadow-xl p-1 text-sm z-40"></div>
+        <div id="exportMenu" class="hidden absolute right-0 mt-1 w-72 rounded-xl border border-slate-200 bg-white shadow-xl p-1 text-sm z-40 whitespace-normal"></div>
       </div>
       <button id="btnRefresh" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">⟳ Refresh</button>
       <button id="btnLinks" title="Paste TikTok video links to be reviewed" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">TikTok links<span id="linksBadge" class="hidden ml-1 rounded-full bg-amber-100 text-amber-900 px-1.5 text-xs font-semibold"></span></button>
@@ -144,10 +149,10 @@
   <!-- View tabs (tablet / desktop) -->
   <nav class="max-w-7xl mx-auto px-4 sm:px-6 hidden sm:flex gap-5 text-sm font-medium text-slate-500" aria-label="Views">
     <button data-nav="home" class="tab py-2">Overview</button>
-    <button data-nav="list" class="tab py-2">Cosmetic Ads <span id="navListCount" class="text-xs text-slate-400"></span></button>
+    <button data-nav="list" class="tab py-2">Cosmetic Ads <span id="navListCount" class="text-xs text-slate-500"></span></button>
     <button data-nav="routes" class="tab py-2">Routes</button>
-    <button data-nav="own" class="tab py-2">Own brand <span id="navOwnCount" class="text-xs text-slate-400"></span></button>
-    <button data-nav="check" class="tab py-2">To check <span id="navCheckCount" class="text-xs text-slate-400"></span></button>
+    <button data-nav="own" class="tab py-2">Own brand <span id="navOwnCount" class="text-xs text-slate-500"></span></button>
+    <button data-nav="check" class="tab py-2">To check <span id="navCheckCount" class="text-xs text-slate-500"></span></button>
   </nav>
 </header>
 
@@ -212,10 +217,10 @@
     <!-- Filters -->
     <section class="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 flex flex-wrap items-center gap-2 sm:gap-3 no-print">
       <div id="statusChips" class="flex flex-wrap gap-2 w-full sm:w-auto"></div>
-      <select id="fBrand" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white max-w-[48%] sm:max-w-none"><option value="">All brands</option></select>
+      <select id="fBrand" aria-label="Brand" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white max-w-[48%] sm:max-w-none"><option value="">All brands</option></select>
       <select id="fType" title="Limit the list to one kind of account from the Targets tab (Wan, 4 Nov 2026: search a brand among the doctors' accounts)" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white max-w-[48%] sm:max-w-none"><option value="">All accounts</option></select>
-      <select id="fPlatform" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white max-w-[48%] sm:max-w-none"><option value="">All platforms</option></select>
-      <select id="fRoute" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white max-w-full"><option value="">All routes</option></select>
+      <select id="fPlatform" aria-label="Platform" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white max-w-[48%] sm:max-w-none"><option value="">All platforms</option></select>
+      <select id="fRoute" aria-label="Route" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white max-w-full"><option value="">All routes</option></select>
       <input id="fSearch" type="search" placeholder="Search a brand or product, text, reason, URL…" class="flex-1 min-w-[160px] rounded-lg border border-slate-300 text-sm py-2 px-3">
       <span id="count" class="text-xs text-slate-500"></span>
     </section>
@@ -282,9 +287,9 @@
   <button data-nav="home" class="tap py-2 flex flex-col items-center gap-0.5"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Overview</button>
   <button data-nav="list" class="tap py-2 flex flex-col items-center gap-0.5"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Cosmetic Ads</button>
   <button data-nav="routes" class="tap py-2 flex flex-col items-center gap-0.5"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h7l3 3h6M4 12h5l3 3h8M4 17h9"/></svg>Routes</button>
-  <button data-nav="own" class="tap py-2 flex flex-col items-center gap-0.5 relative"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/></svg>Own brand<span id="bnavOwnBadge" class="hidden absolute top-1 right-3 rounded-full bg-amber-500 text-white px-1.5 text-[10px] font-bold"></span></button>
-  <button data-nav="check" class="tap py-2 flex flex-col items-center gap-0.5 relative"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></svg>To check<span id="bnavCheckBadge" class="hidden absolute top-1 right-3 rounded-full bg-amber-500 text-white px-1.5 text-[10px] font-bold"></span></button>
-  <button id="bnavLinks" class="tap py-2 flex flex-col items-center gap-0.5 relative"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 14a4 4 0 0 1 0-5.7l2.3-2.3a4 4 0 0 1 5.7 5.7l-1 1M14 10a4 4 0 0 1 0 5.7L11.7 18a4 4 0 0 1-5.7-5.7l1-1"/></svg>TikTok<span id="linksBadge2" class="hidden absolute top-1 right-5 rounded-full bg-amber-500 text-white px-1.5 text-[10px] font-bold"></span></button>
+  <button data-nav="own" class="tap py-2 flex flex-col items-center gap-0.5 relative"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/></svg>Own brand<span id="bnavOwnBadge" class="hidden absolute top-1 right-3 rounded-full bg-amber-700 text-white px-1.5 text-[10px] font-bold"></span></button>
+  <button data-nav="check" class="tap py-2 flex flex-col items-center gap-0.5 relative"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></svg>To check<span id="bnavCheckBadge" class="hidden absolute top-1 right-3 rounded-full bg-amber-700 text-white px-1.5 text-[10px] font-bold"></span></button>
+  <button id="bnavLinks" class="tap py-2 flex flex-col items-center gap-0.5 relative"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 14a4 4 0 0 1 0-5.7l2.3-2.3a4 4 0 0 1 5.7 5.7l-1 1M14 10a4 4 0 0 1 0 5.7L11.7 18a4 4 0 0 1-5.7-5.7l1-1"/></svg>TikTok<span id="linksBadge2" class="hidden absolute top-1 right-5 rounded-full bg-amber-700 text-white px-1.5 text-[10px] font-bold"></span></button>
 </nav>
 
 <!-- Drawer -->
@@ -305,7 +310,7 @@
     <!-- Status actions -->
     <div class="flex flex-wrap gap-2">
       <button data-status="In-Progress" class="stBtn rounded-lg bg-amber-100 text-amber-900 px-3 py-2 text-sm font-medium hover:bg-amber-200">Mark In-Progress</button>
-      <button data-status="Complete" class="stBtn rounded-lg bg-emerald-600 text-white px-3 py-2 text-sm font-medium hover:bg-emerald-700">Mark Complete (submitted)</button>
+      <button data-status="Complete" class="stBtn rounded-lg bg-emerald-700 text-white px-3 py-2 text-sm font-medium hover:bg-emerald-800">Mark Complete (submitted)</button>
       <button data-status="Dismissed" class="stBtn rounded-lg bg-slate-200 text-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-300">Dismiss (false positive)</button>
       <button data-status="New" class="stBtn rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50">Reset to New</button>
     </div>
@@ -389,7 +394,7 @@
         </label>
         <label class="block sm:col-span-2">
           <span class="text-xs font-medium text-slate-600 flex items-center justify-between">Deskripsi Aduan (paste into the form)<button id="btnRewrite" type="button" class="no-print text-xs underline text-blue-700">Rewrite for this route</button></span>
-          <textarea id="eDeskripsi" rows="8" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 font-mono text-[13px]"></textarea>
+          <textarea id="eDeskripsi" aria-label="Deskripsi Aduan" rows="8" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 font-mono text-[13px]"></textarea>
         </label>
       </div>
       <div class="flex flex-wrap gap-2">
@@ -406,7 +411,7 @@
         <details class="text-xs"><summary class="cursor-pointer text-slate-600">Cases on this route</summary><div id="routeCases" class="mt-1"></div></details>
         <ul id="routeChecks" class="text-sm space-y-0.5"></ul>
         <label class="block">
-          <span class="text-xs font-medium text-slate-600">Form or portal link for this route <span class="text-slate-400">(a {Column} template fills itself)</span></span>
+          <span class="text-xs font-medium text-slate-600">Form or portal link for this route <span class="text-slate-500">(a {Column} template fills itself)</span></span>
           <input id="routeFormUrl" placeholder="https://..." class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3">
         </label>
         <div class="flex flex-wrap items-center gap-2">
@@ -428,7 +433,7 @@
           <span>Saya telah semak semua maklumat di atas dan ia lengkap serta betul.</span>
         </label>
         <div class="flex flex-wrap items-center gap-2">
-          <button id="btnFillForm" disabled class="rounded-lg bg-amber-600 text-white px-3 py-2 text-sm font-semibold hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed">Isi borang KKM ↗</button>
+          <button id="btnFillForm" disabled class="rounded-lg bg-amber-700 text-white px-3 py-2 text-sm font-semibold hover:bg-amber-800 disabled:opacity-40 disabled:cursor-not-allowed">Isi borang KKM ↗</button>
           <span id="kkmFillHint" class="text-xs text-slate-500"></span>
         </div>
         <div id="kkmLast" class="hidden text-xs text-slate-500 break-all">
@@ -909,7 +914,7 @@ function updateRouteUi() {
   $('routeName').textContent = v;
   $('routeAgency').textContent = r.agency || '';
   $('routeAct').textContent = r.act ? 'Instrument: ' + r.act : '';
-  $('routeCases').innerHTML = (r.cases || []).map(c => `<span class="chip-case">${esc(c)}</span>`).join('') || '<span class="text-slate-400">—</span>';
+  $('routeCases').innerHTML = (r.cases || []).map(c => `<span class="chip-case">${esc(c)}</span>`).join('') || '<span class="text-slate-500">—</span>';
   const vals = kkmValues(); const checks = routeChecks(r, vals);
   const list = $('routeChecks'); list.textContent = '';
   checks.forEach(([ok, text, hard]) => { const li = document.createElement('li'); li.className = ok ? 'text-emerald-700' : (hard ? 'text-rose-700' : 'text-amber-700'); li.textContent = (ok ? '✓ ' : (hard ? '✗ ' : '! ')) + text; list.appendChild(li); });
@@ -994,7 +999,7 @@ function renderRouteTabs() {
   const values = ROUTE_VALUES.concat(Object.keys(counts).filter(v => ROUTE_VALUES.indexOf(v) < 0));
   const tabs = [['', 'All routes', state.rows.length]].concat(values.map(v => [v, ROUTE_TAB[v] || v, counts[v] || 0]));
   $('routeTabs').innerHTML = tabs.map(([v, label, n]) => `
-    <button data-route-tab="${esc(v)}" class="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold border ${state.filter.route === v ? 'bg-sky-700 text-white border-sky-700' : 'bg-white border-slate-300 hover:bg-slate-50'}">${esc(label)} <span class="${state.filter.route === v ? 'text-sky-100' : 'text-slate-400'}">${n}</span></button>`).join('');
+    <button data-route-tab="${esc(v)}" class="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold border ${state.filter.route === v ? 'bg-sky-700 text-white border-sky-700' : 'bg-white border-slate-300 hover:bg-slate-50'}">${esc(label)} <span class="${state.filter.route === v ? 'text-sky-100' : 'text-slate-500'}">${n}</span></button>`).join('');
   $('routeTabs').querySelectorAll('[data-route-tab]').forEach(b => b.onclick = () => { state.filter.route = b.dataset.routeTab; $('fRoute').value = state.filter.route; renderAll(); });
 }
 // 'Sedia difailkan' (Wan, 23 Oct 2026): a pseudo-filter, not a Status. Every HARD check of the KKM form checklist
@@ -1091,7 +1096,7 @@ function renderTable() {
       <td class="px-4 py-3"><span class="badge ${STATUS_STYLE[r['Status']] || 'bg-slate-100'}">${esc(r['Status'])}</span>${r['KKM Feedback'] ? '<div class="text-[11px] text-emerald-700 mt-1">Replied</div>' : ''}</td>
       <td class="px-4 py-3 whitespace-nowrap text-xs">
         <a href="${esc(r['Post URL'])}" target="_blank" rel="noopener" class="text-blue-700 underline mr-2" onclick="event.stopPropagation()">post</a>
-        ${r['Screenshot Link'] ? `<a href="${esc(r['Screenshot Link'])}" target="_blank" rel="noopener" class="text-blue-700 underline" onclick="event.stopPropagation()">shot</a>` : '<span class="text-slate-400">no shot</span>'}
+        ${r['Screenshot Link'] ? `<a href="${esc(r['Screenshot Link'])}" target="_blank" rel="noopener" class="text-blue-700 underline" onclick="event.stopPropagation()">shot</a>` : '<span class="text-slate-500">no shot</span>'}
       </td>
     </tr>`).join('');
   $('rows').querySelectorAll('tr[data-id]').forEach(tr => tr.onclick = () => openRow(tr.dataset.id));
@@ -1148,14 +1153,14 @@ function barList(el, pairs, opts = {}) {
     <div class="row grid items-center gap-2 py-1 ${click ? 'cursor-pointer' : ''}" style="grid-template-columns:minmax(0,1fr) minmax(0,42%) 3.2rem" title="${esc(label)}: ${n} (${Math.round(n / total * 100)}%)" ${click ? `data-click="${esc(click)}"` : ''}>
       <div class="text-xs truncate">${esc(label)}</div>
       <div class="bar" style="width:${Math.max(2, n / max * 100)}%;${color ? 'background:' + color : ''}"></div>
-      <div class="text-xs text-right tabular-nums"><b>${n}</b> <span class="text-slate-400">${Math.round(n / total * 100)}%</span></div>
-    </div>`).join('') + (rest > 0 ? `<div class="text-[11px] text-slate-400 mt-1">+ ${rest} more</div>` : '') || '<div class="text-xs text-slate-400">No data yet.</div>';
+      <div class="text-xs text-right tabular-nums"><b>${n}</b> <span class="text-slate-500">${Math.round(n / total * 100)}%</span></div>
+    </div>`).join('') + (rest > 0 ? `<div class="text-[11px] text-slate-500 mt-1">+ ${rest} more</div>` : '') || '<div class="text-xs text-slate-500">No data yet.</div>';
   if (opts.onClick) el.querySelectorAll('[data-click]').forEach(d => d.onclick = () => opts.onClick(d.dataset.click));
 }
 function monthChart(el, byMonth) {
   const keys = Object.keys(byMonth).filter(k => /^\d{4}-\d{2}$/.test(k)).sort();
   const last = keys.slice(-12);
-  if (!last.length) { el.innerHTML = '<div class="text-xs text-slate-400">No dated complaints yet.</div>'; return; }
+  if (!last.length) { el.innerHTML = '<div class="text-xs text-slate-500">No dated complaints yet.</div>'; return; }
   const vals = last.map(k => byMonth[k].total || 0); const max = Math.max(1, ...vals);
   const W = Math.max(420, last.length * 56), H = 190, padL = 8, padB = 28, padT = 18; const bw = (W - padL * 2) / last.length; const plotH = H - padB - padT;
   const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -1179,14 +1184,14 @@ function renderHome() {
   const bs = s.byStatus || {};
   const open = (bs['New'] || 0) + (bs['In-Progress'] || 0);
   $('homeSub').textContent = (fromRows ? 'Figures from the rows this page holds (redeploy Code.gs for the full sheet). ' : 'Every row in the sheet, archive included. ') + `Updated ${new Date().toLocaleString()}.`;
-  const tile = (label, n, color, sub, view) => `<button data-tile-view="${view || ''}" class="text-left bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 hover:border-slate-400"><div class="text-xs text-slate-500">${label}</div><div class="text-2xl font-bold" style="color:${color}">${n}</div>${sub ? `<div class="text-[11px] text-slate-400 mt-0.5">${sub}</div>` : ''}</button>`;
+  const tile = (label, n, color, sub, view) => `<button data-tile-view="${view || ''}" class="text-left bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 hover:border-slate-400"><div class="text-xs text-slate-500">${label}</div><div class="text-2xl font-bold" style="color:${color}">${n}</div>${sub ? `<div class="text-[11px] text-slate-500 mt-0.5">${sub}</div>` : ''}</button>`;
   $('homeTiles').innerHTML = [
     tile('Open', open, 'var(--ink)', 'New + In-Progress', ''), tile('New', bs['New'] || 0, 'var(--st-new)', 'not yet opened', 'New'),
     tile('In-Progress', bs['In-Progress'] || 0, 'var(--st-prog)', 'being worked', 'In-Progress'), tile('Complete', bs['Complete'] || 0, 'var(--st-done)', 'filed, awaiting reply', 'Complete'),
     tile('Replied', bs['Archived'] || 0, 'var(--st-replied)', 'agency answered', 'Complete'), tile('Dismissed', bs['Dismissed'] || 0, 'var(--st-dismissed)', 'false positives', 'Dismissed')
   ].join('');
   $('homeTiles').querySelectorAll('[data-tile-view]').forEach(b => b.onclick = () => { state.filter.status = b.dataset.tileView; renderAll(); showView('list'); });
-  const kpi = (label, v, sub) => `<div class="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4"><div class="text-xs text-slate-500">${label}</div><div class="text-xl font-bold">${v}</div><div class="text-[11px] text-slate-400 mt-0.5">${sub || ''}</div></div>`;
+  const kpi = (label, v, sub) => `<div class="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4"><div class="text-xs text-slate-500">${label}</div><div class="text-xl font-bold">${v}</div><div class="text-[11px] text-slate-500 mt-0.5">${sub || ''}</div></div>`;
   $('homeKpis').innerHTML = [
     kpi('Total in the database', bs.total || 0, 'all rows, every status'),
     kpi('Detected in the last 7 days', s.last7 || 0, `${s.last30 || 0} in the last 30 days`),
@@ -1195,9 +1200,9 @@ function renderHome() {
   ].join('');
   monthChart($('chartMonths'), s.byMonth || {});
   const total = bs.total || 0, filed = s.filed || 0, replied = s.replied || 0;
-  const step = (label, n, pct, color) => `<div><div class="flex justify-between text-xs"><span>${label}</span><span class="tabular-nums"><b>${n}</b>${pct != null ? ` <span class="text-slate-400">${pct}%</span>` : ''}</span></div><div class="h-2.5 rounded bg-slate-100 mt-1 overflow-hidden"><div class="h-full rounded" style="width:${total ? Math.max(1, n / total * 100) : 0}%;background:${color}"></div></div></div>`;
+  const step = (label, n, pct, color) => `<div><div class="flex justify-between text-xs"><span>${label}</span><span class="tabular-nums"><b>${n}</b>${pct != null ? ` <span class="text-slate-500">${pct}%</span>` : ''}</span></div><div class="h-2.5 rounded bg-slate-100 mt-1 overflow-hidden"><div class="h-full rounded" style="width:${total ? Math.max(1, n / total * 100) : 0}%;background:${color}"></div></div></div>`;
   $('funnel').innerHTML = step('Detected', total, null, 'var(--series-1)') + step('Filed (Tarikh Melapor)', filed, total ? Math.round(filed / total * 100) : 0, 'var(--st-done)') + step('Replied by the agency', replied, total ? Math.round(replied / total * 100) : 0, 'var(--st-replied)')
-    + `<p class="text-[11px] text-slate-400 pt-1">Dismissed rows count as detected and not filed. A reply moves a complaint to the archive.</p>`;
+    + `<p class="text-[11px] text-slate-500 pt-1">Dismissed rows count as detected and not filed. A reply moves a complaint to the archive.</p>`;
   const stColor = { 'New': 'var(--st-new)', 'In-Progress': 'var(--st-prog)', 'Complete': 'var(--st-done)', 'Archived': 'var(--st-replied)', 'Dismissed': 'var(--st-dismissed)' };
   barList($('chartStatus'), ['New', 'In-Progress', 'Complete', 'Archived', 'Dismissed'].map(k => [k === 'Archived' ? 'Replied (archived)' : k, bs[k] || 0, stColor[k], k === 'Archived' ? 'Complete' : k]), { onClick: v => { state.filter.status = v; renderAll(); showView('list'); } });
   const routePairs = Object.keys(s.byRoute || {}).map(k => [k, s.byRoute[k].total || 0, null, k]);
@@ -1284,11 +1289,11 @@ function renderRoutes() {
         ${[['total', c.total], ['open', c.open], ['filed', c.filed], ['replied', c.replied]].map(([l, n]) => `<button data-route-filter="${esc(r.value)}" class="rounded-lg bg-slate-50 py-1.5 hover:bg-slate-100"><div class="text-base font-bold tabular-nums">${n || 0}</div><div class="text-[10px] uppercase tracking-wide text-slate-500">${l}</div></button>`).join('')}
       </div>
       ${r.act ? `<div class="text-xs"><span class="font-semibold text-slate-600">Instrument</span><div class="text-slate-600 mt-0.5">${esc(r.act)}</div></div>` : ''}
-      <div class="text-xs"><span class="font-semibold text-slate-600">Reference asked for</span><div class="text-slate-600 mt-0.5">${esc(r.ref && r.ref.label || '—')}${r.ref && r.ref.hint ? ` <span class="text-slate-400">· ${esc(r.ref.hint)}</span>` : ''}</div></div>
+      <div class="text-xs"><span class="font-semibold text-slate-600">Reference asked for</span><div class="text-slate-600 mt-0.5">${esc(r.ref && r.ref.label || '—')}${r.ref && r.ref.hint ? ` <span class="text-slate-500">· ${esc(r.ref.hint)}</span>` : ''}</div></div>
       ${(r.cases || []).length ? `<details class="text-xs"><summary class="cursor-pointer font-semibold text-slate-600">Cases on this route (${r.cases.length})</summary><div class="mt-1">${r.cases.map(x => `<span class="chip-case">${esc(x)}</span>`).join('')}</div></details>` : ''}
       <div class="text-xs"><span class="font-semibold text-slate-600">Fields the form needs</span><div class="mt-0.5 text-slate-500">${(r.fields || []).map(esc).join(' · ') || '—'}</div></div>
       <div class="text-xs">
-        <div class="flex items-center gap-2 flex-wrap"><span class="font-semibold text-slate-600">Channel</span><span class="badge ${bcls}">${btext}</span>${ch.checked ? `<span class="text-slate-400">checked ${esc(ch.checked)}</span>` : ''}</div>
+        <div class="flex items-center gap-2 flex-wrap"><span class="font-semibold text-slate-600">Channel</span><span class="badge ${bcls}">${btext}</span>${ch.checked ? `<span class="text-slate-500">checked ${esc(ch.checked)}</span>` : ''}</div>
         <div class="text-slate-600 mt-0.5">${esc(ch.label || '')}${ch.url ? ` — <a class="text-blue-700 underline break-all" target="_blank" rel="noopener" href="${esc(ch.url)}">${esc(ch.url.replace(/^https?:\/\//, ''))}</a>` : ''}</div>
         ${ch.note ? `<div class="text-slate-500 mt-0.5">${esc(ch.note)}</div>` : ''}
         ${(r.email || r.phone) ? `<div class="text-slate-500 mt-0.5">${r.email ? `<a class="underline" href="mailto:${esc(r.email)}">${esc(r.email)}</a>` : ''}${r.email && r.phone ? ' · ' : ''}${r.phone ? `<a class="underline" href="tel:${esc(r.phone.replace(/\s+/g, ''))}">${esc(r.phone)}</a>` : ''}</div>` : ''}
@@ -1371,7 +1376,7 @@ async function exportDoc(kind, format, extra = {}, hintEl) {
 }
 function exportMenuHtml() {
   const f = state.filter; const scope = [f.status || 'all statuses (replied ones included)', f.brand, f.platform, f.route, f.q && `"${f.q}"`].filter(Boolean).join(' · ');
-  const item = (act, label, sub) => `<button data-export="${act}" class="w-full text-left rounded-lg px-3 py-2 hover:bg-slate-50"><div class="font-medium">${label}</div>${sub ? `<div class="text-[11px] text-slate-500">${sub}</div>` : ''}</button>`;
+  const item = (act, label, sub) => `<button data-export="${act}" class="block w-full text-left rounded-lg px-3 py-2 hover:bg-slate-50"><div class="font-medium">${label}</div>${sub ? `<div class="text-[11px] text-slate-500">${sub}</div>` : ''}</button>`;
   return `<div class="px-3 py-1.5 text-[11px] text-slate-500">Register of the current filter: ${esc(scope)}</div>` +
     item('csv', 'CSV', 'every column, full text · opens in Excel / Sheets') + item('pdf', 'PDF register', 'table of the filtered complaints') + item('docx', 'Word register', '.docx, editable') + item('gdoc', 'Google Doc register', 'created in Drive › KKM Complaint Exports') +
     `<div class="border-t border-slate-200 my-1"></div>` + item('print', 'Print / Save as PDF', 'the view on screen, from the browser');
@@ -1383,7 +1388,7 @@ function toggleMenu(id, open) { const m = $(id); m.classList.toggle('hidden', op
 $('btnExport').onclick = e => { e.stopPropagation(); $('exportMenu').innerHTML = exportMenuHtml(); toggleMenu('exportMenu'); $('exportMenu').querySelectorAll('[data-export]').forEach(b => b.onclick = () => { toggleMenu('exportMenu', false); runExport(b.dataset.export); }); };
 $('btnMore').onclick = e => {
   e.stopPropagation();
-  const item = (act, label) => `<button data-more="${act}" class="w-full text-left rounded-lg px-3 py-2.5 hover:bg-slate-50">${label}</button>`;
+  const item = (act, label) => `<button data-more="${act}" class="block w-full text-left rounded-lg px-3 py-2.5 hover:bg-slate-50">${label}</button>`;
   $('moreMenu').innerHTML = item('refresh', '⟳ Refresh') + item('new', '+ Manual entry') + item('kkm', 'Open KKM form ↗') + item('admin', 'Admin · reviewer key and model') + `<div class="border-t border-slate-200 my-1"></div><div class="px-3 pt-1 text-[11px] text-slate-500">Export the current filter</div>` +
     item('csv', 'CSV') + item('pdf', 'PDF register') + item('docx', 'Word register') + item('gdoc', 'Google Doc register') + item('print', 'Print / Save as PDF') + `<div class="border-t border-slate-200 my-1"></div>` + item('faq', 'FAQ / guide ↗');
   toggleMenu('moreMenu');
@@ -1995,7 +2000,7 @@ async function loadLinks() {
       const decide = (k === 'decide' && o.canFile) ? `<div class="flex gap-1 justify-end flex-wrap"><button class="lWhy text-xs rounded border border-violet-300 text-violet-800 px-2 py-1 hover:bg-violet-50" data-link="${esc(o.link)}">Why?</button><button class="lFile text-xs rounded bg-slate-900 text-white px-2 py-1 hover:bg-slate-800" data-link="${esc(o.link)}">Add to database</button><button class="lDismiss text-xs rounded border border-slate-300 px-2 py-1 hover:bg-slate-50" data-link="${esc(o.link)}">Dismiss</button></div>` : '';
       const retry = decide || ((k === 'error' && /tiktok\.com/.test(o.link)) ? `<button class="lRetry text-xs rounded border border-slate-300 px-2 py-1 hover:bg-slate-50" data-link="${esc(o.link)}">Retry</button>` : '');
       return `<tr><td class="px-3 py-2 max-w-[260px]"><a class="text-blue-700 hover:underline break-all" href="${esc(o.link)}" target="_blank" rel="noopener">${esc(short.length > 60 ? short.slice(0, 58) + '…' : short)}</a></td>
-        <td class="px-3 py-2"><span class="badge ${LINK_BADGE[k]}">${esc(label)}</span>${o.run ? `<div class="text-[11px] text-slate-400 mt-0.5">run ${trimRun(o.run)}</div>` : ''}</td>
+        <td class="px-3 py-2"><span class="badge ${LINK_BADGE[k]}">${esc(label)}</span>${o.run ? `<div class="text-[11px] text-slate-500 mt-0.5">run ${trimRun(o.run)}</div>` : ''}</td>
         <td class="px-3 py-2 text-slate-700">${esc(o.result)}</td><td class="px-3 py-2 text-right">${retry}</td></tr>`;
     }).join('');
     document.querySelectorAll('.lWhy').forEach(b => b.onclick = () => openDetail(b.dataset.link));
@@ -2108,7 +2113,7 @@ async function loadOwn() {
 function renderOwn() {
   const c = state.own.counts, f = state.own.filter;
   const chips = [['New', 'To decide', c.New || 0], ['Dismissed', 'Dismissed', c.Dismissed || 0], ['Action taken', 'Action taken', c['Action taken'] || 0], ['', 'All', c.total || 0]];
-  $('ownChips').innerHTML = chips.map(([k, label, n]) => `<button data-ownf="${esc(k)}" class="rounded-full px-3 py-1.5 font-medium ${f === k ? 'bg-slate-900 text-white' : 'border border-slate-300 bg-white hover:bg-slate-50'}">${esc(label)} <span class="${f === k ? 'text-slate-300' : 'text-slate-400'}">${n}</span></button>`).join('');
+  $('ownChips').innerHTML = chips.map(([k, label, n]) => `<button data-ownf="${esc(k)}" class="rounded-full px-3 py-1.5 font-medium ${f === k ? 'bg-slate-900 text-white' : 'border border-slate-300 bg-white hover:bg-slate-50'}">${esc(label)} <span class="${f === k ? 'text-slate-300' : 'text-slate-500'}">${n}</span></button>`).join('');
   $('ownChips').querySelectorAll('[data-ownf]').forEach(b => b.onclick = () => { state.own.filter = b.dataset.ownf; renderOwn(); });
   const rows = state.own.rows.filter(r => !f || (r.Status || 'New') === f);
   if (!rows.length) { $('ownList').innerHTML = `<div class="md:col-span-2 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">${f === 'New' ? 'Nothing waiting. Every own-brand post has been dealt with.' : 'Nothing in this list.'}</div>`; return; }
@@ -2127,7 +2132,7 @@ function renderOwn() {
       </div>
       <div class="text-sm font-medium">${esc(r['Nama Kosmetik'] || 'Product not named')} <span class="font-normal text-slate-500">· ${esc(String(r['Violation Type'] || '').replace(/^Risky:\s*/, ''))}</span></div>
       <div class="text-xs text-slate-600" style="${clampCss}">${esc(r['Violation Reason'])}</div>
-      <div class="flex items-center gap-3 flex-wrap"><a class="text-blue-700 hover:underline text-xs font-medium" href="${esc(r['Post URL'])}" target="_blank" rel="noopener">Open post ↗</a>${shot}<span class="text-[11px] text-slate-400">${esc(r.ID)}</span></div>
+      <div class="flex items-center gap-3 flex-wrap"><a class="text-blue-700 hover:underline text-xs font-medium" href="${esc(r['Post URL'])}" target="_blank" rel="noopener">Open post ↗</a>${shot}<span class="text-[11px] text-slate-500">${esc(r.ID)}</span></div>
       <div class="flex flex-wrap gap-2 pt-1">${actions}</div>
     </div>`;
   }).join('');
@@ -2174,7 +2179,7 @@ function renderChecks() {
       <div class="flex flex-wrap items-center gap-2 pt-1">
         <button data-chk="dismiss" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold hover:bg-slate-50">Dismiss</button>
         <button data-chk="cosmetic" class="rounded-lg bg-slate-900 text-white px-3 py-2 text-xs font-semibold hover:bg-slate-800">File as cosmetic ad</button>
-        <span class="inline-flex items-center gap-1"><select data-chk-route class="rounded-lg border border-slate-300 text-xs py-2 px-2 max-w-[200px]"><option value="">Route to…</option>${routeOpts}</select>
+        <span class="inline-flex items-center gap-1"><select data-chk-route aria-label="Route to" class="rounded-lg border border-slate-300 text-xs py-2 px-2 max-w-[200px]"><option value="">Route to…</option>${routeOpts}</select>
         <button data-chk="route" class="rounded-lg bg-violet-700 text-white px-3 py-2 text-xs font-semibold hover:bg-violet-600">Route</button></span>
       </div>
     </div>`;
