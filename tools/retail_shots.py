@@ -101,7 +101,8 @@ def shoot(browser, r, tmp):
                 landed = urlsplit(page.url).path.rstrip("/").lower()
                 asked = urlsplit(url).path.rstrip("/").lower()
                 brand = (toks(r.get("Brand") or "") or toks(r.get("Nama Kosmetik") or "") or [""])[0]
-                if not (landed == asked and landed not in ("", "/") and brand and brand in hay):
+                generic = re.match(r"^(home( page)?|welcome)\b", title.strip(), re.I) is not None   # Guardian serves its home page at a removed product's own URL
+                if generic or not (landed == asked and landed not in ("", "/") and brand and brand in hay):
                     return "wrong-page", f"only {have}/{len(need)} name words on the page '{title}' (landed on {landed or '/'})", None
         # let lazy sections render, then photograph the whole page (the uploader caps it at 2400px)
         for _ in range(4):
