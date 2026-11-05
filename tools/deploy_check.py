@@ -1,8 +1,8 @@
 """Read-only check of the live Apps Script deployment (Wan, 5 Nov 2026: 'republished, please check').
 Nothing is written. Prints what the new Code.gs does that the old one did not."""
-import collections, sys
-sys.path.insert(0, ".")
-from scraper.uploader import AppsScriptClient
+import collections, os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scraper"))
+from uploader import AppsScriptClient
 
 c = AppsScriptClient()
 print("PING", c.ping(), flush=True)
