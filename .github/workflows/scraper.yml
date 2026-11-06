@@ -1,12 +1,21 @@
 # KKM Cosmetic Complaint System — weekly scrape + NPRA review + push to Google Sheets.
 #
-# There is no cron here on purpose (Wan, 19 Sep 2026). The weekly sweep is driven by the
-# "KKM weekly cosmetic ads sweep" routine, which fires Friday 23:30 MYT and dispatches this
-# workflow in batches — only_type=brand first, then only_type=person until nothing is
-# unreached — reporting each batch as it lands. A cron here would be a second, unbatched
-# sweep competing for the same concurrency slot: run 35381137970 did exactly that, held the
-# runner for 2h42m, re-walked 51 already-judged targets and filed nothing, while the batch
-# that had work to do sat queued behind it. Trigger a one-off from Run workflow below.
+# Runs by itself every Friday 23:30 MYT (cron '30 15 * * 5', which is 15:30 UTC; GitHub reads cron as
+# UTC only). Wan, 6 Nov 2026: "kkm complaints make it auto run". Run workflow below still works for a
+# one-off, batched (only_type / offset) or dry run.
+#
+# A scheduled run has NO inputs, so every input below falls back to its dispatch default: a live run
+# (not dry), every target type, offset 0, unjudged targets included, LLM reviewer on. It is the same
+# run as pressing Run workflow and changing nothing. It stops starting new targets at
+# run.max_run_minutes (config.yaml) and lists what it did not reach.
+#
+# History: from 19 Sep to 6 Nov 2026 there was no cron here, because a Claude routine dispatched this
+# workflow in batches and a cron competed with it for the runner (run 35381137970 held it 2h42m and
+# filed nothing). That chain is paused. If it is ever re-enabled, take the schedule below out first:
+# one cron per job, never two drivers of the same sweep.
+#
+# The concurrency group below means a scheduled run and a manual run never overlap, so the sheet is
+# never written by two runs at once. A run that arrives while one is going waits for it.
 #
 # Required repository secrets
 #   APPS_SCRIPT_WEBHOOK_URL   the Apps Script /exec URL
@@ -20,6 +29,8 @@
 name: KKM complaint scraper
 
 on:
+  schedule:
+    - cron: '30 15 * * 5'   # Friday 15:30 UTC = Friday 23:30 MYT
   workflow_dispatch:
     inputs:
       dry_run:
@@ -56,6 +67,9 @@ on:
         type: string
         default: ''
 
+# One run at a time, scheduled or manual, so two runs can never write the Google Sheet together.
+# Never cancel a run in progress: it files each target as it finishes. (GitHub keeps one waiting
+# run per group; a newer one waiting replaces an older one waiting, never the one running.)
 concurrency:
   group: kkm-complaint-scraper
   cancel-in-progress: false
@@ -122,21 +136,34 @@ jobs:
 
       - name: Run scraper
         working-directory: scraper
+        # Inputs travel as env, not pasted into the script. On a scheduled run the inputs context is
+        # empty, so each one falls back to the same default the dispatch form shows.
+        env:
+          IN_DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
+          IN_BRAND: ${{ inputs.brand || '' }}
+          IN_PLATFORM: ${{ inputs.platform || '' }}
+          IN_ONLY_TYPE: ${{ inputs.only_type || '' }}
+          IN_OFFSET: ${{ inputs.offset || '0' }}
+          IN_SKIP_UNJUDGED: ${{ inputs.skip_unjudged && 'true' || 'false' }}
+          IN_COMPARE: ${{ inputs.compare && 'true' || 'false' }}
+          IN_SELFTEST: ${{ inputs.selftest || '' }}
         run: |
-          ARGS=""
-          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
-          if [ -n "${{ github.event.inputs.brand }}" ]; then ARGS="$ARGS --brand \"${{ github.event.inputs.brand }}\""; fi
-          if [ -n "${{ github.event.inputs.platform }}" ]; then ARGS="$ARGS --platform ${{ github.event.inputs.platform }}"; fi
-          if [ -n "${{ github.event.inputs.only_type }}" ]; then ARGS="$ARGS --only-type ${{ github.event.inputs.only_type }}"; fi
-          if [ -n "${{ github.event.inputs.offset }}" ] && [ "${{ github.event.inputs.offset }}" != "0" ]; then ARGS="$ARGS --offset ${{ github.event.inputs.offset }}"; fi
-          if [ "${{ github.event.inputs.skip_unjudged }}" = "true" ]; then ARGS="$ARGS --skip-unjudged"; fi
-          if [ "${{ github.event.inputs.compare }}" = "true" ]; then ARGS="$ARGS --compare"; fi
+          echo "trigger: ${{ github.event_name }}"
+          ARGS=()
+          if [ "$IN_DRY_RUN" = "true" ]; then ARGS+=(--dry-run); fi
+          if [ -n "$IN_BRAND" ]; then ARGS+=(--brand "$IN_BRAND"); fi
+          if [ -n "$IN_PLATFORM" ]; then read -ra P <<< "$IN_PLATFORM"; ARGS+=(--platform "${P[@]}"); fi
+          if [ -n "$IN_ONLY_TYPE" ]; then ARGS+=(--only-type "$IN_ONLY_TYPE"); fi
+          if [ -n "$IN_OFFSET" ] && [ "$IN_OFFSET" != "0" ]; then ARGS+=(--offset "$IN_OFFSET"); fi
+          if [ "$IN_SKIP_UNJUDGED" = "true" ]; then ARGS+=(--skip-unjudged); fi
+          if [ "$IN_COMPARE" = "true" ]; then ARGS+=(--compare); fi
           # A selftest replaces the run rather than adding to it: no browser, no scrape, no writes.
-          if [ -n "${{ github.event.inputs.selftest }}" ]; then
-            if [ "${{ github.event.inputs.selftest }}" = "1" ]; then ARGS="--selftest"
-            else ARGS="--selftest \"${{ github.event.inputs.selftest }}\""; fi
+          if [ -n "$IN_SELFTEST" ]; then
+            if [ "$IN_SELFTEST" = "1" ]; then ARGS=(--selftest)
+            else ARGS=(--selftest "$IN_SELFTEST"); fi
           fi
-          eval python main.py $ARGS
+          echo "python main.py ${ARGS[*]}"
+          python main.py "${ARGS[@]}"
 
       - name: Upload run artefacts (report + screenshots)
         if: always()

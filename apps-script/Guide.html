@@ -232,7 +232,9 @@
 <p><code>.github/workflows/scraper.yml</code></p>
 <ul>
 <li><strong>Time</strong>: <code>cron: '30 15 * * 5'</code> is UTC, which is Friday 23:30 MYT. GitHub only accepts UTC, so subtract 8 hours from the Malaysian time you want.</li>
-<li><strong>Skip a week</strong>: add the date to <code>SKIP_DATES</code> in the <em>Skip suppressed scheduled dates</em> step, space-separated, <code>YYYY-MM-DD</code>, Malaysian date. Manual runs are never affected. Entries expire by themselves.</li>
+<li><strong>One run at a time</strong>: a scheduled run and a manual run never overlap. One that starts while another is going waits for it, so the sheet is never written by two runs at once.</li>
+<li><strong>Skip a week</strong>: GitHub &rarr; Actions &rarr; <em>KKM complaint scraper</em> &rarr; &hellip; &rarr; Disable workflow, and Enable it again afterwards. Manual runs need it enabled too.</li>
+<li><strong>If it fails</strong>: the run page shows a red error. <em>Apps Script unreachable</em> means the /exec URL is not answering with data, usually a stale deployment: Deploy &rarr; Manage deployments &rarr; New version. <em>Complaints not filed</em> means findings were made but did not reach the sheet; they are kept in the run's artefact and the next run tries them again.</li>
 <li><strong>Dormancy</strong>: GitHub pauses schedules in a repository with no commits for 60 days. Any push, or one manual run, re-arms it.</li>
 </ul>
 

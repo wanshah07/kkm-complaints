@@ -6,7 +6,7 @@ Cosmetic Advertisement), with every non-compliant post landed in a Google Sheet 
 mirrors KKM's *Pelaporan Aduan Kosmetik Bernotifikasi* form, ready to submit.
 
 ```
-        Friday 23:30 MYT — the weekly routine dispatches this workflow in batches
+        Friday 23:30 MYT — GitHub's cron runs this workflow (or Run workflow by hand)
                                         │
    config.yaml ──▶ scraper/main.py ── Playwright ──▶ Instagram · Facebook · Threads
    (brands, handles)      │                            (profile → newest N posts → text + screenshot)
@@ -27,7 +27,7 @@ mirrors KKM's *Pelaporan Aduan Kosmetik Bernotifikasi* form, ready to submit.
 | A | `apps-script/Code.gs`, `appsscript.json` | Sheet initialiser, `doPost` webhook, `doGet` UI + JSON API, `api*` RPC for the dashboard |
 | B | `apps-script/Index.html` | Tailwind dashboard: stats, filters, table → drawer (auto In-Progress), KKM form fields, manual entry with screenshot upload |
 | C | `scraper/` | Playwright scraper, NPRA rule engine, LLM reviewer, Drive/webhook client |
-| D | `.github/workflows/scraper.yml` | Dispatch-only (no cron); inputs dry-run / brand / platform / only-type |
+| D | `.github/workflows/scraper.yml` | Cron Friday 23:30 MYT (`30 15 * * 5` UTC) + Run workflow; inputs dry-run / brand / platform / only-type |
 | E | `web/index.html`, `.github/workflows/pages.yml` | The same dashboard as a static page on GitHub Pages under your own domain, talking to the Apps Script JSON API |
 
 ## Sheet columns (the contract)
@@ -137,17 +137,17 @@ with a service account instead; `none` skips screenshots.
 
 ### 3. Scheduling (Module D)
 
-**There is no cron in the workflow** (Wan, 19 Sep 2026). It is dispatch-only. The weekly sweep is
-driven by the **KKM weekly cosmetic ads sweep** routine, which fires Friday 23:30 MYT and then
-dispatches this workflow in batches — `only_type=brand` first, then `only_type=person` until nothing
-is unreached. A cron fired one unbatched run that could never finish a watchlist this long, and it
-competed for the same concurrency slot as the batch that had work to do.
+**The workflow runs by itself every Friday 23:30 MYT** (`cron: '30 15 * * 5'`, UTC; Wan, 6 Nov 2026).
+A scheduled run takes the dispatch defaults (live, all target types, offset 0) and shares one
+concurrency group with manual runs, so two runs never write the sheet at once. From 19 Sep to 6 Nov
+2026 there was no cron because a Claude routine dispatched the workflow in batches; that chain is
+paused, and if it is ever re-enabled the cron comes out first (one driver per job).
 
-**Changing the time, the cadence, or skipping a week** is an edit to that routine, not to this repo.
+**Changing the time** is an edit to the cron line; **skipping a week** is Disable workflow in Actions.
 
 GitHub Actions: add the secrets listed at the top of
 `.github/workflows/scraper.yml` under **Settings → Secrets and variables →
-Actions**. There is no cron: the weekly routine dispatches the workflow. Use *Run workflow* for
+Actions**. The cron runs it weekly. Use *Run workflow* for
 a manual, batched or dry run. Each run uploads `out/` (report + screenshots) as an artefact for 30 days.
 
 **Windows PC alternative (Option B, residential IP, your own logged-in browser session):**
