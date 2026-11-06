@@ -30,7 +30,7 @@ Everything you do week to week, and everything you change without touching code.
 
 ## 1. The weekly routine
 
-The sweep runs Friday 23:30 MYT, driven by the weekly routine (section 6). Saturday morning, open the dashboard.
+The sweep runs by itself Friday 23:30 MYT (section 6). Saturday morning, open the dashboard.
 
 1. **New** rows are this week's findings. Click one. It moves to **In-Progress** automatically, so you never lose your place.
 2. Read the **Violation Reason**. It quotes each failing claim and cites the Annex I part and clause. This is the reviewer's work, not yours to redo, but it is a screen and not a verdict.
@@ -596,14 +596,17 @@ reach the model, because the regex pre-screen found nothing, cost zero and are n
 
 ## 6. The schedule
 
-**The workflow has no cron. It is dispatch-only.** The weekly sweep is driven by the **KKM weekly cosmetic ads sweep** routine, which fires Friday 23:30 MYT and then dispatches the workflow in batches — `only_type=brand` first, then `only_type=person` run after run until nothing is unreached — reporting each batch as it lands.
+**The workflow runs by itself every Friday at 23:30 MYT** (Wan, 6 Nov 2026: *"kkm complaints make it auto run"*). In `.github/workflows/scraper.yml` that is `cron: '30 15 * * 5'`: GitHub reads cron as UTC only, so 15:30 UTC Friday is 23:30 MYT Friday. **Run workflow** still works alongside it.
 
-**Why the cron went** (Wan, 19 Sep 2026). A cron fires one unbatched run that walks the whole list, so it could never finish the sweep, and it competed for the same concurrency slot as the batch that had real work to do. Run `35381137970` is the worked example: it held the runner for 2h 42m, re-walked 51 already-judged targets, filed nothing and spent nothing, while the next batch sat queued behind it the whole time.
+A scheduled run has no inputs, so it is exactly the run you get by pressing Run workflow and changing nothing: live (not a dry run), every target type, offset 0, the LLM reviewer on. It stops starting new targets at `run.max_run_minutes` in `config.yaml` and lists what it did not reach; with the Reviewed ledger, posts already judged are skipped next time.
 
-- **Change the time or the cadence**: edit the routine, not this repo. Twice a month, fortnightly, a different day — one edit to its cron.
-- **Skip a week**: there is nothing to suppress. Disable the routine, or just don't run it.
-- **Dormancy**: no longer a concern. GitHub pauses *schedules* in a quiet repository; a dispatch is unaffected.
-- **A one-off run** is still **Actions → KKM complaint scraper → Run workflow**, exactly as in section 7.
+- **One run at a time.** The workflow's concurrency group means a scheduled run and a manual run never overlap, so the sheet is never written by two runs at once. A run that arrives while one is going waits for it (GitHub keeps one waiting run; a newer waiting run replaces an older waiting one, never the one running).
+- **Change the time**: edit the cron line. Subtract 8 hours from the Malaysian time you want.
+- **Skip a week**: Actions → KKM complaint scraper → ⋯ → Disable workflow, then Enable it afterwards.
+- **If it fails**, the run page carries a red error. *Apps Script unreachable* means the /exec URL answered with a web page instead of data, usually a stale deployment (Deploy → Manage deployments → New version; see section 8's table). *Complaints not filed* means findings were made but did not reach the sheet: they are in `payload_failed.json` in the run's artefact, stay out of the ledger, and the next run tries them again.
+- **Dormancy**: GitHub pauses schedules in a repository with no commits for 60 days. Any push, or one manual run, re-arms it.
+
+**Why there was no cron from 19 Sep to 6 Nov 2026.** The sweep was then driven by the **KKM weekly cosmetic ads sweep** routine, which dispatched the workflow in batches (`only_type=brand`, then `only_type=person` until nothing was unreached). A cron beside it fired a second, unbatched run that competed for the same runner: run `35381137970` held it for 2h 42m, re-walked 51 already-judged targets and filed nothing while the batch with real work sat queued. That chain is paused now. **If it is ever re-enabled, take the cron out first**: one driver per job, never two.
 
 ---
 
@@ -774,7 +777,7 @@ Added 9 Oct 2026 (Wan: *"Add routes and all the cases related so later easy for 
 
 The dashboard now opens on **Overview**; **Complaints** is the queue you had before; **Routes** is the catalogue. On a tablet or desktop they are tabs under the header; on a phone they are the bottom bar, with **TikTok** as its fourth button. The address bar remembers the view (`#home`, `#list`, `#routes`), so a bookmark can open straight on the queue.
 
-**Overview** reads every row in the sheet, archive included, through the backend's `summary` action — not the rows the page holds, which are capped at 2,000 and leave the archive out. It shows: the six status tiles (Open, New, In-Progress, Complete = filed and awaiting a reply, Replied = archived, Dismissed), the total, last-7-days and last-30-days counts, the median days from detection to filing, the oldest untouched New; complaints per month for the last twelve months; the funnel detected → filed → replied; and bar lists by status, route, platform, account, violation type and source. Click a tile or a bar and the queue opens already filtered. Below the charts, **How they connect** is the map of the moving parts — one row per runner, with its trigger: the sweep (dispatched by the Claude chain, no GitHub schedule), the TikTok link review (its cron is set but GitHub does not fire it, so it is polled by hand — shown red for that reason), the Pages deploy, the Apps Script web app, and your own Submit. Against an Apps Script that has not been redeployed, the Overview falls back to the loaded rows and says so in its subtitle.
+**Overview** reads every row in the sheet, archive included, through the backend's `summary` action — not the rows the page holds, which are capped at 2,000 and leave the archive out. It shows: the six status tiles (Open, New, In-Progress, Complete = filed and awaiting a reply, Replied = archived, Dismissed), the total, last-7-days and last-30-days counts, the median days from detection to filing, the oldest untouched New; complaints per month for the last twelve months; the funnel detected → filed → replied; and bar lists by status, route, platform, account, violation type and source. Click a tile or a bar and the queue opens already filtered. Below the charts, **How they connect** is the map of the moving parts — one row per runner, with its trigger: the sweep (GitHub cron, Friday 23:30 MYT, or Run workflow), the TikTok link review (its cron is set but GitHub does not fire it, so it is polled by hand — shown red for that reason), the Pages deploy, the Apps Script web app, and your own Submit. Against an Apps Script that has not been redeployed, the Overview falls back to the loaded rows and says so in its subtitle.
 
 ### Routes — the catalogue
 

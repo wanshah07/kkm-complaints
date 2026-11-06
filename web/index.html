@@ -196,7 +196,7 @@
       <h3 class="font-semibold text-sm">How they connect</h3>
       <p class="text-xs text-slate-500 mt-1">Read left to right: where the code or data lives, what runs it and when, and where the result lands. One row per runner.</p>
       <div class="flex flex-wrap gap-3 text-[11px] text-slate-500 mt-2">
-        <span><i class="inline-block w-3 h-3 rounded align-middle mr-1" style="background:var(--accent-soft);border:1.5px solid var(--accent)"></i>scheduled (Claude Routine)</span>
+        <span><i class="inline-block w-3 h-3 rounded align-middle mr-1" style="background:var(--accent-soft);border:1.5px solid var(--accent)"></i>scheduled (GitHub cron / Claude Routine)</span>
         <span><i class="inline-block w-3 h-3 rounded align-middle mr-1" style="background:var(--warn-bg);border:1.5px dashed var(--warn)"></i>timed in another system</span>
         <span><i class="inline-block w-3 h-3 rounded align-middle mr-1" style="background:var(--surface);border:1.5px dashed var(--muted)"></i>on push / on request / manual</span>
         <span><i class="inline-block w-3 h-3 rounded align-middle mr-1" style="background:var(--crit-bg);border:1.5px dashed var(--crit)"></i>off or not firing</span>
@@ -1214,12 +1214,12 @@ function renderHome() {
   drawConnectionMap($('cmap'), LANES);
 }
 
-// "How they connect": one row per runner, read from the repo's own workflow triggers (9 Oct 2026):
-// scraper.yml has NO schedule (dispatch only; the Claude chain re-arms it run by run), tiktok-links.yml
+// "How they connect": one row per runner, read from the repo's own workflow triggers (9 Oct 2026; 6 Nov 2026):
+// scraper.yml runs on its own cron, Friday 23:30 MYT (15:30 UTC), and on Run workflow; tiktok-links.yml
 // carries a cron GitHub has never fired (manual poll stands in), pages.yml deploys on push to main.
 const LANES = [
   { lane: 'Sweep (kkm-complaints)', c: '--lane-sweep', rows: [
-    { src: [['scraper.yml', 'wanshah07/kkm-complaints · main'], ['Targets tab', 'Google Sheet · brands and handles']], run: ['Person / web sweep', 'Claude chain · one run after another'], kind: 'routine', a1: 'dispatch',
+    { src: [['scraper.yml', 'wanshah07/kkm-complaints · main'], ['Targets tab', 'Google Sheet · brands and handles']], run: ['Weekly sweep', 'GitHub cron · Fri 23:30 MYT · or Run workflow'], kind: 'routine', a1: 'cron',
       dst: [['Complaints tab', 'Google Sheet · one row per finding'], ['Reviewed ledger', 'never reads a post twice']] },
     { src: [['tiktok-links.yml', 'links pasted in the dashboard']], run: ['TikTok link review', 'cron set, not fired by GitHub · polled by hand'], kind: 'off', a1: 'claims 10',
       dst: [['Links tab', 'held findings wait for a decision']] }

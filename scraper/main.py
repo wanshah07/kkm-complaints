@@ -394,6 +394,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                      len(seen), new_to_us)
         except Exception as e:
             log.error("webhook unreachable: %s", e)
+            _gh_error("Apps Script unreachable - nothing was scraped or filed", e)
             report["errors"].append(f"webhook: {e}")
             _write_report(run_dir, report)
             return 1
@@ -872,6 +873,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     report["duration_s"] = round(time.time() - started.timestamp(), 1)
     _write_report(run_dir, report)
     _print_summary(report)
+    # Findings that never reached the sheet must not end in a green run. The Apps Script can start
+    # answering with a Google 404 page mid-run (a stale or replaced deployment); each failed batch is
+    # kept in payload_failed.json and its posts stay out of the ledger, so the next run retries them.
+    not_filed = [e for e in report["errors"] if str(e).startswith("insert")]
+    if not_filed:
+        _gh_error("Complaints not filed to the sheet",
+                  f"{len(not_filed)} filing failure(s), first: {not_filed[0]}. The records are in "
+                  f"payload_failed.json in this run's artefact; check the Apps Script deployment "
+                  f"(Deploy > Manage deployments) and run again.")
+        return 1
     return 0
 
 
@@ -891,6 +902,7 @@ def selftest(query: str) -> int:
         log.info("ping: %s", client.ping())
     except Exception as e:
         log.error("webhook unreachable: %s", e)
+        _gh_error("Apps Script unreachable", e)
         return 1
 
     rows = client.list_rows()
@@ -1028,6 +1040,16 @@ def resolve_targets(cfg: dict, mode: str, client: Optional[AppsScriptClient], re
     log.info("targets from sheet: %s", ", ".join(b["name"] for b in brands))
     report["targets_source"] = "sheet"
     return brands
+
+
+def _gh_error(title: str, message: str) -> None:
+    """
+    A red annotation on the run page. A scheduled run has nobody watching its log, so a dead
+    Apps Script (the stale-deployment 404 of 13 Oct 2026, a Google error page served instead of
+    JSON) must say so where it is seen, not only in a log.error line forty screens down.
+    """
+    msg = str(message).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    print(f"::error title={title}::{msg}", flush=True)
 
 
 def _write_report(run_dir: str, report: dict) -> None:
