@@ -333,6 +333,12 @@ def main(argv: Optional[List[str]] = None) -> int:
                          "on every run and are mostly rows that cannot produce one (private, "
                          "wrong handle, nothing in the date window). Do NOT pass this on a run "
                          "after handles have been added: a new handle is unjudged too")
+    ap.add_argument("--focus", metavar="TEXT",
+                    help="review only NEW posts whose caption/text contains TEXT (case-insensitive; e.g. 'skintific' "
+                         "matches @skintific.my, #skintific and the plain word). Posts already in the sheet or the "
+                         "reviewed ledger are skipped as always. A post that does not match is neither reviewed nor "
+                         "ledgered, so a later normal run still judges it. Opening a post still costs time: this saves "
+                         "the reviewer's calls, not the browser's.")
     ap.add_argument("--tiktok-links", action="store_true",
                     help="review the TikTok videos named in the TIKTOK_LINKS environment variable (one link per "
                          "line or space separated). A TikTok account's post list is not readable by a runner, "
@@ -640,6 +646,12 @@ def main(argv: Optional[List[str]] = None) -> int:
                            screenshot_path=post.screenshot_path, product_hints=hints.get(post.brand),
                            target_type=types.get(post.brand, ""))
 
+    focus_term = (args.focus or "").strip().lower()
+    focus_skipped = 0
+    if focus_term:
+        log.info("--focus %r: only new posts whose text contains it are reviewed", focus_term)
+        report["focus"] = focus_term
+
     def _will_review(post) -> bool:
         """The same filters the loop applies before it asks the reviewer, so a prefetched call is one the
         loop would have made anyway."""
@@ -648,6 +660,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         if canonical_url(post.url) in known:
             return False
         if not date_allowed(post.posted_at, lookback, min_date):
+            return False
+        if focus_term and focus_term not in (post.text or "").lower():
             return False
         return bool(post.text or post.screenshot_path)
 
@@ -714,6 +728,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                     continue
                 if not post.text and not post.screenshot_path:
                     report["skipped"].append({"url": post.url, "why": "nothing extracted"})
+                    continue
+                if focus_term and focus_term not in (post.text or "").lower():
+                    # Not reviewed, not filed, not ledgered: a normal run must still be free to judge it.
+                    report["skipped"].append({"url": post.url, "why": f"not about '{focus_term}'"})
+                    focus_skipped += 1
                     continue
                 ri = ReviewInput(brand=post.brand, platform=post.platform, url=post.url, text=post.text,
                                  screenshot_path=post.screenshot_path, product_hints=hints.get(post.brand),
@@ -1066,6 +1085,10 @@ def _print_summary(report: dict) -> None:
     flagged_n = len(report.get("flagged") or [])
     print(f"  pushed: {len(report['pushed'])}   skipped: {len(report['skipped'])}   "
           f"flagged: {flagged_n}   errors: {len(report['errors'])}")
+    if report.get("focus"):
+        _not = sum(1 for e in report["skipped"] if str(e.get("why", "")).startswith("not about"))
+        print(f"  focus '{report['focus']}': {len(report['pushed'])} pushed, {_not} new post(s) opened that did not mention it "
+              f"(not reviewed, not ledgered)")
     rf = report.get("reviewer_failed") or []
     if rf:
         by = {}
