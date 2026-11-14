@@ -283,43 +283,11 @@ _TIKTOK_LOGIN_DIALOG = "[data-e2e='login-modal'], #loginContainer"
 
 
 def _tiktok_login_dialog_up(page: Page) -> bool:
+    """TikTok's "Log in to TikTok" dialog is over the video. A signed-in page never shows it."""
     try:
         return page.locator(_TIKTOK_LOGIN_DIALOG).first.is_visible()
     except Exception:
         return False
-
-
-def _tiktok_shot_before_dialog(page: Page, post: "Post", brand: str, url: str, out_dir: str) -> bool:
-    """
-    Take a logged-out TikTok video's screenshot NOW, before TikTok's login dialog arrives. True when it was taken.
-
-    A logged-out video page shows the video and its caption, and five to eight seconds after it loads TikTok lays a
-    "Log in to TikTok" dialog over the middle of the video (measured 14 Nov 2026). The screenshot used to be the last
-    step, after the owner and the caption had been read, so every logged-out screenshot carried that dialog on top
-    of the post (rows 7338-7340) and the reviewer judged a half-covered picture. The dialog's own Skip leads to a
-    date-of-birth form, which this does not fill in, and nothing on the page is hidden or altered: the picture is
-    simply taken while the page still shows the post. If the dialog is already up, this returns False, the usual
-    screenshot is taken later and the log says it carries the dialog. A signed-in session never shows the dialog.
-    """
-    if _tiktok_login_dialog_up(page):
-        return False
-    try:
-        # The caption under the video and the video's cover picture, if they have not painted yet: a picture
-        # without the caption is half the evidence. Never long, because the dialog is on its way.
-        page.wait_for_function(
-            "() => { const c = document.querySelector(\"[data-e2e='video-desc'], [data-e2e='browse-video-desc']\");"
-            " const i = document.querySelector(\"#main-content-video_detail img, [class*='DivVideoDetailContainer'] img\");"
-            " return !!c && c.getBoundingClientRect().height > 0 && (!i || (i.complete && i.naturalWidth > 0)); }",
-            timeout=1500)
-    except Exception:
-        pass
-    if _tiktok_login_dialog_up(page):
-        return False
-    _save_screenshot(page, post, brand, "TikTok", url, out_dir)
-    if post.screenshot_path:
-        log.info("[%s/TikTok] screenshot taken before TikTok's login dialog%s", brand,
-                 " (it arrived while the picture was being taken)" if _tiktok_login_dialog_up(page) else "")
-    return bool(post.screenshot_path)
 
 
 _WALL_URL_PARTS = ("/login", "login.php", "/accounts/login", "/r.php", "/checkpoint")
@@ -960,6 +928,56 @@ class Scraper:
         ctx.route(re.compile(r".*\.(mp4|webm|m3u8|woff2?)(\?.*)?$"), lambda route: route.abort())
         return ctx
 
+    def _tiktok_embed_shot(self, ctx: BrowserContext, post: "Post", brand: str, url: str) -> bool:
+        """
+        Screenshot a TikTok video from TikTok's own embed player. True when the picture was taken.
+
+        A logged-out video page shows the video and its caption, and about three seconds after it loads TikTok lays
+        a "Log in to TikTok" dialog over the middle of the video (14 Nov 2026: rows 7338-7340 carry it, and the
+        reviewer was judging a half-covered picture). The dialog's Skip leads to a date-of-birth form, which nothing
+        here fills in, and taking the picture early loses the race on a runner (1 clean of 5, run 43592998221).
+        TikTok's embed player (tiktok.com/embed/v2/<id>, the widget any website may show) plays the same video with
+        no dialog: the account's name and handle, and the video's cover frame. It carries no caption; the caption
+        is the post's text, read from the video page as before. Nothing on either page is pressed, hidden or
+        altered. A signed-in session never reaches this.
+        """
+        vid = re.search(r"/(?:video|photo)/(\d{10,})", post.url or url)
+        browser = ctx.browser
+        if not vid or browser is None:
+            return False
+        fname = re.sub(r"[^a-z0-9]+", "_", f"{brand}_TikTok_{urlsplit(url).path}".lower()).strip("_")[:90]
+        path = os.path.join(self.out_dir, f"{fname}.png")
+        ectx = None
+        try:
+            # Its own small context, logged out by construction: the player is 325 px wide, so it is drawn at
+            # twice the density to keep the words on the frame readable.
+            ectx = browser.new_context(viewport={"width": 420, "height": 760}, device_scale_factor=2,
+                                       locale=self.run_cfg.get("locale", "en-MY"),
+                                       timezone_id=self.run_cfg.get("timezone", "Asia/Kuala_Lumpur"),
+                                       user_agent=self.run_cfg.get("user_agent"))
+            ectx.set_default_timeout(20000)
+            ectx.route(re.compile(r".*\.(mp4|webm|m3u8|woff2?)(\?.*)?$"), lambda route: route.abort())
+            ep = ectx.new_page()
+            ep.goto(f"https://www.tiktok.com/embed/v2/{vid.group(1)}", wait_until="domcontentloaded", timeout=30000)
+            ep.wait_for_function(
+                "() => { const i = document.querySelector(\"#embed-v3 img[class*='CoverImage']\");"
+                " return !!i && i.complete && i.naturalWidth > 0; }", timeout=12000)
+            ep.wait_for_timeout(500)
+            ep.locator("#embed-v3").first.screenshot(path=path, type="png")
+        except Exception as e:
+            log.info("[%s/TikTok] embed player not readable for the screenshot (%s)", brand, type(e).__name__)
+            return False
+        finally:
+            if ectx is not None:
+                try:
+                    ectx.close()
+                except Exception:
+                    pass
+        post.screenshot_path = path
+        log.info("[%s/TikTok] screenshot: TikTok embed player (the video page shows a login dialog to a "
+                 "logged-out visitor)", brand)
+        return True
+
     def run(self, brands: List[dict], platform_filter: Optional[str] = None,
             brand_filter: Optional[str] = None) -> List[TargetResult]:
         """Every target, scraped before the first one is looked at. See iter_run."""
@@ -1210,8 +1228,6 @@ class Scraper:
                 post.blocked = True
                 _save_screenshot(page, post, brand, platform, url, self.out_dir)
                 return post
-            # TikTok only: the picture first, while the page still shows the post (see _tiktok_shot_before_dialog).
-            tt_shot = platform == "TikTok" and _tiktok_shot_before_dialog(page, post, brand, url, self.out_dir)
             if platform == "Instagram" and handle:
                 # Only a real handle rejects a post: from the URL path, or an @handle in the page's
                 # own metadata. A display name ("Eucerin Malaysia" for @eucerin_my) is not a handle
@@ -1248,11 +1264,16 @@ class Scraper:
             post.posted_at = _extract_date(page)
             if platform == "TikTok":
                 post.posted_at = _tiktok_date(page.url) or _tiktok_date(url) or post.posted_at
-            if not tt_shot:
-                if platform == "TikTok" and _tiktok_login_dialog_up(page):
-                    log.warning("[%s/%s] TikTok's login dialog was already over the video; the screenshot carries it "
-                                "(a TikTok login in PW_STORAGE_STATE_SHOP_B64 removes it)", brand, platform)
+            # TikTok, logged out: the login dialog is over the video by now, so the picture comes from TikTok's
+            # embed player instead (see _tiktok_embed_shot). Everything else is the ordinary screenshot.
+            if not (platform == "TikTok" and _tiktok_login_dialog_up(page)
+                    and self._tiktok_embed_shot(ctx, post, brand, url)):
                 _save_screenshot(page, post, brand, platform, url, self.out_dir)
+                if platform == "TikTok" and _tiktok_login_dialog_up(page):
+                    # It was up and the embed could not be read, or it arrived while the picture was being taken.
+                    if not self._tiktok_embed_shot(ctx, post, brand, url):
+                        log.warning("[%s/%s] TikTok's login dialog is over the video and the embed player could not "
+                                    "be read; the screenshot carries the dialog", brand, platform)
             if not post.text:
                 post.errors.append("no text extracted")
         except PWTimeout:
