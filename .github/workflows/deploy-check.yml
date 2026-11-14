@@ -21,3 +21,4 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r scraper/requirements.txt
       - run: python tools/deploy_check.py
+      - run: python tools/targets_check.py
