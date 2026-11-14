@@ -888,6 +888,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         log.info("ledger: %d reviewed post(s) recorded as seen across %d target(s)",
                  report["marked_seen"], len(report["targets"]))
 
+    for plat, why in (getattr(scraper, "session_lost", None) or {}).items():
+        report["errors"].append(f"session: {plat}: {why}")
     report["finished_myt"] = datetime.now(MYT).isoformat()
     report["duration_s"] = round(time.time() - started.timestamp(), 1)
     _write_report(run_dir, report)
@@ -895,12 +897,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Findings that never reached the sheet must not end in a green run. The Apps Script can start
     # answering with a Google 404 page mid-run (a stale or replaced deployment); each failed batch is
     # kept in payload_failed.json and its posts stay out of the ledger, so the next run retries them.
+    # A platform whose recorded session was signed out was not swept, and must not end in a green run either.
+    session_lost = dict(getattr(scraper, "session_lost", None) or {})
     not_filed = [e for e in report["errors"] if str(e).startswith("insert")]
     if not_filed:
         _gh_error("Complaints not filed to the sheet",
                   f"{len(not_filed)} filing failure(s), first: {not_filed[0]}. The records are in "
                   f"payload_failed.json in this run's artefact; check the Apps Script deployment "
                   f"(Deploy > Manage deployments) and run again.")
+        return 1
+    if session_lost:
+        for plat, why in session_lost.items():
+            _gh_error(f"{plat} session signed out - {plat} was not swept", why)
         return 1
     return 0
 

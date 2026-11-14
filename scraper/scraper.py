@@ -753,6 +753,9 @@ class Scraper:
         # with dozens of posts ends cleanly instead of being killed by the job timeout with its
         # work unsaved (run 68 lost a 40-minute target that way).
         self.should_stop: Optional[Callable[[], bool]] = None
+        # platform -> why, once a recorded session turns out to be signed out (see _session_signed_out).
+        self.session_lost: Dict[str, str] = {}
+        self._recorded_ig_session: Optional[bool] = None
 
     @staticmethod
     def _report_session_age(raw: bytes) -> None:
@@ -859,6 +862,45 @@ class Scraper:
             log.warning("PW_STORAGE_STATE_SHOP_B64 unusable (%s); TikTok will be read logged out", type(e).__name__)
             return path
 
+    def _session_signed_out(self, ctx: BrowserContext, platform: str) -> Optional[str]:
+        """
+        Say so when Instagram has signed the recorded session out, instead of sweeping without it.
+
+        A signed-out Instagram still answers: a profile grid offers its newest 12 posts and then a
+        login prompt, so the target reads "posts=12 ok", nothing looks wrong, and a 350-deep sweep
+        quietly becomes a 12-deep one for every account (14 Nov 2026: the session recorded with 342
+        days left on its cookies was signed out by Instagram between two runs; the next run reported
+        dr.waninuuha as 12 posts, ok, where the one before had read 350). The cookie's expiry date
+        cannot show this. What does: Instagram clears `sessionid` in the browser the moment it
+        rejects it, so a state that was recorded with one and a context that no longer holds one
+        after a page load is a session that has ended.
+
+        Only ever true for a session that was recorded signed in, so a deliberately logged-out
+        setup (no storage state, or one without Instagram in it) behaves exactly as before.
+        """
+        if platform != "Instagram" or not self._storage_state_path:
+            return None
+        if self._recorded_ig_session is None:
+            try:
+                with open(self._storage_state_path, "r", encoding="utf-8") as f:
+                    state = json.load(f)
+                self._recorded_ig_session = any(
+                    c.get("name") == "sessionid" and c.get("value") and "instagram.com" in str(c.get("domain", ""))
+                    for c in state.get("cookies", []) or [])
+            except Exception:
+                self._recorded_ig_session = False
+        if not self._recorded_ig_session:
+            return None
+        try:
+            alive = any(c.get("name") == "sessionid" and c.get("value")
+                        for c in ctx.cookies("https://www.instagram.com/"))
+        except Exception:
+            return None   # cannot tell is not evidence of a dead session
+        if alive:
+            return None
+        return ("Instagram signed the recorded session out - not swept (a signed-out grid shows only its "
+                "newest 12 posts). Record the session again (GUIDE section 4) and update PW_STORAGE_STATE_B64")
+
     def _context(self, browser: Browser, use_storage: bool = True) -> BrowserContext:
         kwargs = dict(
             viewport={"width": 1280, "height": 1600},
@@ -940,6 +982,11 @@ class Scraper:
         profile_url = pcfg["profile_url"].format(handle=handle)
         res = TargetResult(brand=brand, platform=platform, profile_url=profile_url)
         limit = int(self.run_cfg.get("max_posts_per_profile", 6))
+        if platform in self.session_lost:
+            # Already established this run: do not knock on the same closed door once per account.
+            res.error = self.session_lost[platform]
+            res.truncated = True     # not reached, so the next run with a working session walks it
+            return res
         ctx = self._context(browser)
         page = ctx.new_page()
         t0 = time.time()
@@ -948,6 +995,13 @@ class Scraper:
             page.goto(profile_url, wait_until="domcontentloaded", timeout=45000)
             page.wait_for_timeout(2500)
             _dismiss_dialogs(page)
+            lost = self._session_signed_out(ctx, platform)
+            if lost:
+                self.session_lost[platform] = lost
+                res.error = lost
+                res.truncated = True
+                log.error("[%s/%s] %s", brand, platform, lost)
+                return res
             landed = _landed_handle(page.url)
             if landed and not _handles_match(landed, handle):
                 # The account answers to a different handle now. Its posts are still its own, so
