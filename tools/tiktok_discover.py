@@ -202,7 +202,10 @@ def choose(found: Dict[str, List[dict]], known_ids: set, min_date: str, cap: int
 
 
 def main() -> int:
-    cap = int(os.environ.get("TIKTOK_AUTO_MAX") or 20)
+    try:
+        cap = min(60, max(1, int((os.environ.get("TIKTOK_AUTO_MAX") or "20").strip())))
+    except ValueError:
+        cap = 20
     only = clean_handle(os.environ.get("INPUT_HANDLE") or "")
     targets, notes = tiktok_targets(call({"action": "targets"}).get("targets") or [])
     for n in notes:
