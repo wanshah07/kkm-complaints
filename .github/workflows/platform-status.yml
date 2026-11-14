@@ -78,12 +78,11 @@ jobs:
           PY
 
       - name: Probe the platforms
-        run: python tools/platform_status.py --out status.json --last-runs last_runs.json
+        run: python tools/platform_status.py --out /tmp/status_new.json --last-runs last_runs.json
 
       - name: Publish status.json to the status branch
         run: |
           set -e
-          mkdir -p /tmp/pub && cp status.json /tmp/pub/status.json
           git config user.name "kkm-status-bot"
           git config user.email "kkm-status-bot@users.noreply.github.com"
           if git ls-remote --exit-code --heads origin status >/dev/null 2>&1; then
@@ -93,7 +92,7 @@ jobs:
             git checkout -q --orphan status
             git rm -rf -q . || true
           fi
-          cp /tmp/pub/status.json status.json
+          cp /tmp/status_new.json status.json
           git add status.json
           git commit -q -m "status $(date -u +%Y-%m-%dT%H:%MZ)" || { echo "no change"; exit 0; }
           git push -q origin HEAD:status
