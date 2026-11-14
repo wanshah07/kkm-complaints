@@ -758,6 +758,15 @@ function handleApi_(action, body, p) {
                             return linksPending_();
       case 'links_update':  if (!machine) return deny;
                             return linksUpdate_(body.updates);
+      // --- Targets panel and per-account status (Targets.gs, 14 Nov 2026) ---
+      case 'targets_admin': if (!viewer) return deny;
+                            return targetsAdmin_();
+      case 'target_save':   if (!viewer) return deny;
+                            return targetSave_(body.target, body.original);
+      case 'target_remove': if (!viewer) return deny;
+                            return targetRemove_(body.name);
+      case 'target_status_update': if (!machine) return deny;
+                            return targetStatusUpdate_(body.updates);
       // --- Own brand segment (Wan, 11 Oct 2026) ---
       case 'own_brand_list': if (!viewer) return deny;
                             return ownBrandList_();

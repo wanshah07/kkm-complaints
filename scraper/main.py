@@ -895,6 +895,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     for plat, why in (getattr(scraper, "session_lost", None) or {}).items():
         report["errors"].append(f"session: {plat}: {why}")
+    if client is not None and not args.dry_run and not tt_mode and not web_mode:
+        _record_sweep_status(client, report, brands)
     report["finished_myt"] = datetime.now(MYT).isoformat()
     report["duration_s"] = round(time.time() - started.timestamp(), 1)
     _write_report(run_dir, report)
@@ -916,6 +918,41 @@ def main(argv: Optional[List[str]] = None) -> int:
             _gh_error(f"{plat} session signed out - {plat} was not swept", why)
         return 1
     return 0
+
+
+def sweep_status_updates(report: dict, brands: List[dict]) -> List[dict]:
+    """
+    One line per account this sweep REACHED, for the Targets panel's "last sweep" (Targets.gs,
+    target_status_update): when, how many posts were on the profile, and the sweep's note if it had one.
+    A target cut short by the run budget was not reached and is left out, and so is a platform whose
+    recorded session was signed out: neither says anything about the account.
+    """
+    handles = {(b.get("name"), plat): h for b in brands or [] for plat, h in (b.get("handles") or {}).items()}
+    renamed = {(c.get("brand"), c.get("platform")): c for c in report.get("handle_checks") or []}
+    at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    out = []
+    for t in report.get("targets") or []:
+        key = (t.get("brand"), t.get("platform"))
+        err = str(t.get("error") or "")
+        if t.get("truncated") or key not in handles or "signed" in err.lower():
+            continue
+        note = err.split(" — ")[0][:120]
+        if not note and key in renamed:
+            note = str(renamed[key].get("note") or "")[:160]
+        out.append({"brand": key[0], "platform": key[1], "handle": handles[key], "sweep_at": at,
+                    "sweep_posts": int(t.get("posts") or 0), "sweep_note": note})
+    return out
+
+
+def _record_sweep_status(client: AppsScriptClient, report: dict, brands: List[dict]) -> None:
+    """Never fails a run: the sweep's real work is filed by now, and a backend without Targets.gs just says no."""
+    try:
+        updates = sweep_status_updates(report, brands)
+        if updates:
+            client._post({"action": "target_status_update", "updates": updates}, retries=1)
+            log.info("account status: last sweep recorded for %d account(s)", len(updates))
+    except Exception as e:
+        log.info("account status not recorded (%s)", str(e)[:120])
 
 
 def selftest(query: str) -> int:
