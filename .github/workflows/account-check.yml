@@ -1,0 +1,97 @@
+# Account check: is every handle in the Targets tab live and readable? (Wan, 14 Nov 2026)
+#
+# Visits each account's PROFILE with the sweep's own code and login, opens no post, reviews nothing, files nothing,
+# and writes one line per account to the sheet's TargetStatus tab, which the dashboard's Targets panel shows
+# (tools/account_check.py). Accounts never checked go first, so a handle added today is tested by the next run.
+#
+# It uses the sweep's login, so it is in the sweep's concurrency group and never runs beside a sweep or the
+# platform status probe. The daily run is a 40-minute slice of the accounts checked longest ago; a full pass of
+# every account is a manual run with a larger max_minutes.
+
+name: Account check
+
+on:
+  schedule:
+    - cron: '13 20 * * *'
+  workflow_dispatch:
+    inputs:
+      max_minutes:
+        description: 'Stop starting new accounts after this many minutes (job limit is 175)'
+        type: string
+        default: '150'
+      limit:
+        description: 'Most accounts this run (0 = as many as the time allows)'
+        type: string
+        default: '0'
+      offset:
+        description: 'Skip this many accounts of the ordered list'
+        type: string
+        default: '0'
+      platform:
+        description: 'Only this platform (Instagram, Facebook, Threads, TikTok). Blank = all.'
+        type: string
+        default: ''
+      brand:
+        description: 'Only this Targets row (exact Brand name). Blank = all.'
+        type: string
+        default: ''
+      recheck_hours:
+        description: 'Leave out accounts checked within this many hours (0 = check all)'
+        type: string
+        default: '0'
+      dry_run:
+        description: 'Check and print, but store nothing in the sheet'
+        type: boolean
+        default: false
+
+concurrency:
+  group: kkm-complaint-scraper
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 175
+    env:
+      TZ: Asia/Kuala_Lumpur
+      PYTHONUNBUFFERED: '1'
+      APPS_SCRIPT_WEBHOOK_URL: ${{ secrets.APPS_SCRIPT_WEBHOOK_URL }}
+      APPS_SCRIPT_API_TOKEN: ${{ secrets.APPS_SCRIPT_API_TOKEN }}
+      PW_STORAGE_STATE_B64: ${{ secrets.PW_STORAGE_STATE_B64 }}
+      MAX_MINUTES: ${{ github.event.inputs.max_minutes || '40' }}
+      LIMIT: ${{ github.event.inputs.limit || '0' }}
+      OFFSET: ${{ github.event.inputs.offset || '0' }}
+      PLATFORM: ${{ github.event.inputs.platform }}
+      BRAND: ${{ github.event.inputs.brand }}
+      RECHECK_HOURS: ${{ github.event.inputs.recheck_hours || '144' }}
+      DRY_RUN: ${{ github.event.inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scraper/requirements.txt
+      - name: Install dependencies
+        working-directory: scraper
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('scraper/requirements.txt') }}
+      - name: Install Chromium
+        working-directory: scraper
+        run: python -m playwright install --with-deps chromium
+      - name: Check the accounts
+        run: |
+          ARGS=(--max-minutes "$MAX_MINUTES" --limit "$LIMIT" --offset "$OFFSET" --recheck-hours "$RECHECK_HOURS")
+          if [ -n "$PLATFORM" ]; then ARGS+=(--platform "$PLATFORM"); fi
+          if [ -n "$BRAND" ]; then ARGS+=(--brand "$BRAND"); fi
+          if [ "$DRY_RUN" = "true" ]; then ARGS+=(--dry-run); fi
+          python tools/account_check.py "${ARGS[@]}"
