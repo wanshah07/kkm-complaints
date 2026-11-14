@@ -1,5 +1,5 @@
 {
- "checked_at": "2026-11-14T10:59:57Z",
+ "checked_at": "2026-11-14T11:07:08Z",
  "platforms": [
   {
    "key": "instagram",
@@ -18,8 +18,8 @@
   {
    "key": "threads",
    "label": "Threads",
-   "state": "down",
-   "detail": "The saved login is no longer held after loading the page. Record the session again.",
+   "state": "live",
+   "detail": "Signed in and reading posts normally.",
    "links": 40
   },
   {
@@ -41,5 +41,5 @@
   "at": "2026-11-14T10:56:18Z",
   "title": "KKM complaint scraper"
  },
- "overall": "down"
+ "overall": "live"
 }
