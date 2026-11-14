@@ -40,7 +40,7 @@ except ImportError:
 from evaluator import ReviewInput, review
 from scraper import Scraper, canonical_url, date_allowed
 from webfeeds import WEB_TYPE_LABEL, WebCollector, load_web_rows
-from tiktok_links import TikTokLinks, parse_links
+from tiktok_links import TikTokLinks, link_meta, parse_links
 from uploader import AppsScriptClient, DriveUploader, attach_screenshot
 
 def _myt():
@@ -555,9 +555,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         class _AllKOL(dict):
             # A linked video is somebody's post, not a brand's own page: the person-promoting test applies
             # (endorsement, partnership, product shown). The account is only known once the page is read.
+            # The automatic discovery (tools/tiktok_discover.py) names the Targets row behind each link, so a
+            # brand's own TikTok page is judged as the brand's page, with the row's product hints. A pasted
+            # link carries no such row and is judged as before.
             def get(self, k, d=None):
-                return "KOL"
+                return _tt_rows[k]["type"] if k in _tt_rows else "KOL"
+        _tt_rows = {m["name"]: m for m in link_meta().values()}
         types = _AllKOL()
+        hints = {name: m["hints"] for name, m in _tt_rows.items()}
     spend = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0,
              "cache_creation_input_tokens": 0, "usd": 0.0, "models": {}}
     lookback = int(run_cfg.get("lookback_days", 0) or 0)

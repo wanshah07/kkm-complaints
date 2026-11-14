@@ -16,6 +16,7 @@ used: no stealth flags, no spoofed headers.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -60,6 +61,39 @@ def parse_links(raw: str) -> Tuple[List[str], List[Tuple[str, str]]]:
     return ok, bad
 
 
+def link_meta() -> Dict[str, dict]:
+    """
+    {handle lower: {name, type, hints}} from TIKTOK_LINK_META, or {} (the pasted-links run, where it is unset).
+
+    Only the automatic discovery (tools/tiktok_discover.py, 14 Nov 2026) sets it. Its links come from accounts in
+    the Targets tab, so the row is known before the video is opened: the sheet's Brand column carries the row's
+    name instead of the bare handle, and the reviewer is told the row's own Type and product hints instead of
+    treating a brand's own page as a person promoting something.
+    """
+    raw = (os.environ.get("TIKTOK_LINK_META") or "").strip()
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        log.warning("TIKTOK_LINK_META is not JSON; the links are reviewed as pasted links")
+        return {}
+    out: Dict[str, dict] = {}
+    for handle, m in (data.items() if isinstance(data, dict) else []):
+        name = str((m or {}).get("name") or "").strip() if isinstance(m, dict) else ""
+        if not name:
+            continue
+        out[str(handle).lstrip("@").lower()] = {
+            "name": name, "type": str(m.get("type") or "").strip(),
+            "hints": [str(x) for x in (m.get("hints") or []) if str(x).strip()]}
+    return out
+
+
+def _handle_in(url: str) -> str:
+    m = re.search(r"tiktok\.com/@([^/?#]+)/", url or "", re.I)
+    return m.group(1).lower() if m else ""
+
+
 class TikTokLinks(Scraper):
     """Reads the named TikTok videos and yields one TargetResult per owning account."""
 
@@ -67,6 +101,7 @@ class TikTokLinks(Scraper):
         super().__init__(cfg, out_dir, tiktok_session=True)
         self.links = links
         self.link_map: Dict[str, str] = {}   # the link as pasted -> the post URL it became (for the Links tab)
+        self.meta = link_meta()              # empty unless the automatic discovery named the Targets rows
 
     def plan(self, brands=None, platform_filter=None, brand_filter=None) -> List[Tuple[str, str, str]]:
         return [("TikTok link", "TikTok", u) for u in self.links]
@@ -104,10 +139,13 @@ class TikTokLinks(Scraper):
         by: Dict[str, List[Post]] = {}
         for p in posts:
             owner = p.owner or "unknown_tiktok_account"
-            p.brand = owner
+            # A discovered link belongs to a Targets row: file it under the row's name. The page's own owner
+            # decides; the handle in the link only stands in when the page could not be read at all.
+            row = self.meta.get((p.owner or _handle_in(p.url)).lower()) if self.meta else None
+            p.brand = row["name"] if row else owner
             by.setdefault(owner, []).append(p)
         for owner, ps in by.items():
-            tr = TargetResult(brand=owner, platform="TikTok", profile_url=f"https://www.tiktok.com/@{owner}", posts=ps)
+            tr = TargetResult(brand=ps[0].brand, platform="TikTok", profile_url=f"https://www.tiktok.com/@{owner}", posts=ps)
             if all(x.blocked for x in ps):
                 tr.error = "login wall / verification on every link (TikTok session expired?)"
             yield tr

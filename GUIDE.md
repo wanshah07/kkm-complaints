@@ -236,6 +236,16 @@ A Shopee link, an own-brand link (Valorith / Facerinna) or anything that is not 
 
 **If every link errors with "login wall"**, the TikTok cookies in the `PW_STORAGE_STATE_SHOP_B64` secret have expired; they have to be exported again. A link that was claimed by a run that then died is freed automatically after 90 minutes.
 
+### TikTok: accounts in the Targets tab are found automatically (14 Nov 2026)
+
+Pasting links is no longer the only way in. The *TikTok auto discovery* workflow reads TikTok's public **creator embed page** (`tiktok.com/embed/@handle`, the widget any website may show) for every active Targets row with a handle in the **TikTok** column. That page needs no login and names the account's pinned videos plus its **ten newest**. New ones are opened by the same link reader as a pasted link, screenshotted and reviewed.
+
+- **To watch an account:** put its TikTok handle in the Targets tab's `TikTok` column (`ceravemy`, `@ceravemy` or the profile link all work). Nothing else to do. A doctor or KOL row keeps its own Type, so it is judged as a person promoting a product; a brand row is judged as the brand's own page.
+- **What happens to a finding:** it is filed like a sweep post, straight into Complaints as **New** (Brand = the Targets row's name, Platform = TikTok), or into *To check* when it needs a look by eye. It does not wait in the Links panel; that panel is only for links you paste. Nothing is submitted to KKM by itself.
+- **Limits:** only the ten newest posts of an account are visible at a time, so there is no back-history; from the day a handle is added, the runs every few hours see everything it posts. A run reviews at most 20 new videos and leaves the rest for the next one. A video TikTok hides from a logged-out viewer is reported as not read, not as clean.
+- **It is separate from everything else:** its own workflow and queue, no Instagram / Facebook / Threads login loaded, `scraper.yml` untouched, the Links tab not written. Run it by hand from Actions → *TikTok auto discovery* → Run workflow (tick *dry_run* to review without filing, or name one handle).
+- **If the run goes red with "read no account at all"**, TikTok has changed or withdrawn the embed page; pasted links still work, and the dashboard's status strip shows *TikTok accounts* as down. A warning naming one account ("TikTok has no account @…") means the handle in the Targets tab is wrong.
+
 ### Watching a doctor or KOL account
 
 A cosmetic advertisement carried by a doctor is a Part 10 s.4.1 problem in itself, so these accounts are worth watching — but the row has to say what it is.
