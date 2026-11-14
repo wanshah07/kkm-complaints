@@ -1034,11 +1034,25 @@ class Scraper:
             # sit at the top of an Instagram grid however old they are.
             min_date = str(self.run_cfg.get("min_post_date") or "")
             lookback = int(self.run_cfg.get("lookback_days", 0) or 0)
-            opened = old_streak = 0
+            opened = old_streak = off_account = 0
             for link in links:
                 url = clean_post_url(link)
                 if canonical_url(url) in self.known_urls:
                     res.posts.append(Post(brand=brand, platform=platform, url=url, known=True))
+                    continue
+                # Another account's post is never opened either, when the link itself names that account
+                # (14 Nov 2026). A grid link reads /<owner>/p/<id>/, and a collab or shared post keeps its
+                # real owner there, so _scrape_post rejected it from the URL alone - after a page load and
+                # 8-25 s of pacing. It is never ledgered (it was never judged), so every pass paid again:
+                # the 25 runs of 12-13 Nov opened 2,294 such posts, about 12 of their 34.6 hours, and
+                # dr.waninuuha's Instagram alone (278 of 350 links are @nuuhabeauty's) ate a whole
+                # 100-minute run on each pass before one of its own posts was reached. The verdict, the
+                # wording main.py reports and _drift_note counts, and what is reviewed are all unchanged.
+                off = _owner_from_url(url, platform) if platform == "Instagram" and handle else None
+                if off and off not in _NOT_A_HANDLE and not _handles_match(off, handle):
+                    res.posts.append(Post(brand=brand, platform=platform, url=url, not_owned=True, owner=off,
+                                          errors=[f"different account: post is by @{off}, not @{handle} — not reviewed"]))
+                    off_account += 1
                     continue
                 stop = getattr(self, "should_stop", None)
                 if stop and stop():
@@ -1057,6 +1071,8 @@ class Scraper:
                         log.info("[%s/%s] four posts in a row before %s; the rest of the grid is older, stopping here",
                                  brand, platform, min_date or f"{lookback} days ago")
                         break
+            if off_account:
+                log.info("[%s/%s] %d link(s) name another account in the URL; not opened", brand, platform, off_account)
             if res.renamed_to is None:
                 res.drift_note = _drift_note([p for p in res.posts if not p.known], handle)
                 if res.drift_note:
