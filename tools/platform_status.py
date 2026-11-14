@@ -85,8 +85,11 @@ def probe_one(sc, browser, key, label, platform, handle, want_links):
         out["links"] = len(links)
         # The cookie that proves a signed-in browser, held AFTER the page loaded (a rejected one is cleared).
         names = {"Instagram": ("sessionid",), "Facebook": ("c_user", "xs"), "Threads": ("sessionid",)}[platform]
+        # All cookies of the platform's own domain family, not those matching the profile URL: Threads
+        # redirects threads.net to threads.com, and its login cookie lives on the domain it redirected to.
+        dom_word = {"Instagram": "instagram.com", "Facebook": "facebook.com", "Threads": "threads."}[platform]
         try:
-            held = {c.get("name") for c in ctx.cookies(url) if c.get("value")}
+            held = {c.get("name") for c in ctx.cookies() if c.get("value") and dom_word in str(c.get("domain", "")).lower()}
         except Exception:
             held = set()
         signed_in = all(n in held for n in names) if platform == "Facebook" else any(n in held for n in names)
