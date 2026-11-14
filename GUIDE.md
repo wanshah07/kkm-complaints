@@ -403,7 +403,7 @@ Ask me and I do part two in a few minutes. A column added without part two is ig
 
 ## 4. Refreshing the login session
 
-Instagram, Facebook and Threads hide most content from visitors who are not logged in. The scraper carries a recorded browser session to get past that. It expires every few weeks; you will know because the run log fills with `login wall`.
+Instagram, Facebook and Threads hide most content from visitors who are not logged in. The scraper carries a recorded browser session to get past that. It expires every few weeks; you will know because the run log fills with `login wall`. Instagram can also end a session early: the run then stops sweeping Instagram, ends red and says `Instagram signed the recorded session out` (section 8).
 
 On your Windows PC, in PowerShell:
 
@@ -633,6 +633,8 @@ Open the run: GitHub → **Actions** → click the run. The summary at the end o
 | Log says | Cause | Fix |
 |---|---|---|
 | `login wall` | Session expired or that platform was not logged in during recording | Section 4 |
+| `Instagram signed the recorded session out - not swept`, and the run ends red | Instagram ended the recorded session itself, even though its cookies had not expired (14 Nov 2026: 342 days were left). A signed-out grid shows only its newest 12 posts, so the run refuses to sweep Instagram rather than report `posts=12 ok` for every account. Facebook and Threads in the same run carry on | Record the session again (section 4). Nothing was lost: the Instagram targets are listed as not reached and the next run walks them |
+| `N link(s) name another account in the URL; not opened` | Working as intended (14 Nov 2026). A collab or shared post keeps its real owner in its link (`/<owner>/p/<id>/`), so it is skipped without being opened. Before this, such posts were opened on every pass and never remembered: about a third of a sweep's time | Nothing. If most of a grid belongs to one other account, the summary still says so, and that account may be worth its own Targets row |
 | `login wall on post page - not reviewed` | The platform served its gate instead of the post. The post is **not** reviewed and the run counts it as an error, so it will never be recorded as compliant | Refresh the session (section 4). Until then that post is unseen, not clean |
 | `no post links found — profile not available` | Handle wrong, or the platform is blocking the runner | Check the handle in your browser (section 2); if it loads for you, run from your PC instead (section 7) |
 | `no post links found — platform soft-block` | Too much traffic from that address | Wait a few hours, or run from your PC |
