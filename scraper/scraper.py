@@ -279,6 +279,49 @@ def _dismiss_dialogs(page: Page) -> None:
         pass
 
 
+_TIKTOK_LOGIN_DIALOG = "[data-e2e='login-modal'], #loginContainer"
+
+
+def _tiktok_login_dialog_up(page: Page) -> bool:
+    try:
+        return page.locator(_TIKTOK_LOGIN_DIALOG).first.is_visible()
+    except Exception:
+        return False
+
+
+def _tiktok_shot_before_dialog(page: Page, post: "Post", brand: str, url: str, out_dir: str) -> bool:
+    """
+    Take a logged-out TikTok video's screenshot NOW, before TikTok's login dialog arrives. True when it was taken.
+
+    A logged-out video page shows the video and its caption, and five to eight seconds after it loads TikTok lays a
+    "Log in to TikTok" dialog over the middle of the video (measured 14 Nov 2026). The screenshot used to be the last
+    step, after the owner and the caption had been read, so every logged-out screenshot carried that dialog on top
+    of the post (rows 7338-7340) and the reviewer judged a half-covered picture. The dialog's own Skip leads to a
+    date-of-birth form, which this does not fill in, and nothing on the page is hidden or altered: the picture is
+    simply taken while the page still shows the post. If the dialog is already up, this returns False, the usual
+    screenshot is taken later and the log says it carries the dialog. A signed-in session never shows the dialog.
+    """
+    if _tiktok_login_dialog_up(page):
+        return False
+    try:
+        # The caption under the video and the video's cover picture, if they have not painted yet: a picture
+        # without the caption is half the evidence. Never long, because the dialog is on its way.
+        page.wait_for_function(
+            "() => { const c = document.querySelector(\"[data-e2e='video-desc'], [data-e2e='browse-video-desc']\");"
+            " const i = document.querySelector(\"#main-content-video_detail img, [class*='DivVideoDetailContainer'] img\");"
+            " return !!c && c.getBoundingClientRect().height > 0 && (!i || (i.complete && i.naturalWidth > 0)); }",
+            timeout=1500)
+    except Exception:
+        pass
+    if _tiktok_login_dialog_up(page):
+        return False
+    _save_screenshot(page, post, brand, "TikTok", url, out_dir)
+    if post.screenshot_path:
+        log.info("[%s/TikTok] screenshot taken before TikTok's login dialog%s", brand,
+                 " (it arrived while the picture was being taken)" if _tiktok_login_dialog_up(page) else "")
+    return bool(post.screenshot_path)
+
+
 _WALL_URL_PARTS = ("/login", "login.php", "/accounts/login", "/r.php", "/checkpoint")
 
 # What a platform puts on the page instead of the post when it wants a session. Facebook's
@@ -1167,6 +1210,8 @@ class Scraper:
                 post.blocked = True
                 _save_screenshot(page, post, brand, platform, url, self.out_dir)
                 return post
+            # TikTok only: the picture first, while the page still shows the post (see _tiktok_shot_before_dialog).
+            tt_shot = platform == "TikTok" and _tiktok_shot_before_dialog(page, post, brand, url, self.out_dir)
             if platform == "Instagram" and handle:
                 # Only a real handle rejects a post: from the URL path, or an @handle in the page's
                 # own metadata. A display name ("Eucerin Malaysia" for @eucerin_my) is not a handle
@@ -1203,7 +1248,11 @@ class Scraper:
             post.posted_at = _extract_date(page)
             if platform == "TikTok":
                 post.posted_at = _tiktok_date(page.url) or _tiktok_date(url) or post.posted_at
-            _save_screenshot(page, post, brand, platform, url, self.out_dir)
+            if not tt_shot:
+                if platform == "TikTok" and _tiktok_login_dialog_up(page):
+                    log.warning("[%s/%s] TikTok's login dialog was already over the video; the screenshot carries it "
+                                "(a TikTok login in PW_STORAGE_STATE_SHOP_B64 removes it)", brand, platform)
+                _save_screenshot(page, post, brand, platform, url, self.out_dir)
             if not post.text:
                 post.errors.append("no text extracted")
         except PWTimeout:
