@@ -1,0 +1,45 @@
+{
+ "checked_at": "2026-11-14T10:59:57Z",
+ "platforms": [
+  {
+   "key": "instagram",
+   "label": "Instagram",
+   "state": "live",
+   "detail": "Signed in and reading posts normally.",
+   "links": 40
+  },
+  {
+   "key": "facebook",
+   "label": "Facebook",
+   "state": "live",
+   "detail": "Signed in and reading posts normally.",
+   "links": 2
+  },
+  {
+   "key": "threads",
+   "label": "Threads",
+   "state": "down",
+   "detail": "The saved login is no longer held after loading the page. Record the session again.",
+   "links": 40
+  },
+  {
+   "key": "tiktok",
+   "label": "TikTok links",
+   "links": null,
+   "state": "live",
+   "detail": "The link checker is running (last run 2026-11-14 10:59). Works on links you paste into the Links tab."
+  }
+ ],
+ "notes": [],
+ "session_days_left": {
+  "instagram": 365.0,
+  "facebook": 365.0,
+  "threads": 365.0
+ },
+ "last_sweep": {
+  "conclusion": "success",
+  "at": "2026-11-14T10:56:18Z",
+  "title": "KKM complaint scraper"
+ },
+ "overall": "down"
+}
