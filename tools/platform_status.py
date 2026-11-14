@@ -178,6 +178,20 @@ def main():
             tt["state"] = "degraded"
     result["platforms"].append(tt)
 
+    # TikTok accounts (14 Nov 2026): tools/tiktok_discover.py finds the newest videos of the Targets rows with a
+    # TikTok handle through TikTok's public embed page. It fails its run when no account could be read, so its last
+    # run IS the probe. No pill until it has run once.
+    ta = last.get("tiktok_auto") or {}
+    if ta.get("conclusion"):
+        ok = ta.get("conclusion") == "success"
+        result["platforms"].append({
+            "key": "tiktok_auto", "label": "TikTok accounts", "links": None, "state": "live" if ok else "down",
+            "detail": ("New videos of the accounts in the Targets tab's TikTok column are found and reviewed "
+                       "automatically (last run %s). Only an account's ten newest are visible at a time."
+                       % ta.get("at", "")[:16].replace("T", " ")) if ok else
+                      ("The automatic TikTok discovery's last run did not succeed (%s). TikTok may have changed its "
+                       "embed page, or a video hit a login wall; pasted links still work." % ta.get("conclusion"))})
+
     sc_last = last.get("scraper") or {}
     if sc_last:
         result["last_sweep"] = {"conclusion": sc_last.get("conclusion"), "at": sc_last.get("at"), "title": sc_last.get("title", "")}

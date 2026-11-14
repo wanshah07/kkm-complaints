@@ -73,7 +73,8 @@ jobs:
                   return {}
               rows = [r for r in rows if r.get("conclusion") in ("success", "failure")]
               return rows[0] if rows else {}
-          json.dump({"scraper": last("scraper.yml"), "tiktok": last("tiktok-links.yml")}, open("last_runs.json", "w"))
+          json.dump({"scraper": last("scraper.yml"), "tiktok": last("tiktok-links.yml"),
+                     "tiktok_auto": last("tiktok-auto.yml")}, open("last_runs.json", "w"))
           print(open("last_runs.json").read())
           PY
 
