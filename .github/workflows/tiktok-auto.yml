@@ -20,6 +20,11 @@
 name: TikTok auto discovery
 
 on:
+  # Every three hours. GitHub fires this repository's schedules late and not every time (the 15-minute link
+  # review lands a few times a day), so the interval is short on purpose: ten posts an account stay visible, and
+  # a run with nothing new is a ten-second job with no browser.
+  schedule:
+    - cron: '41 */3 * * *'
   workflow_dispatch:
     inputs:
       handle:
@@ -36,6 +41,11 @@ on:
         description: 'Read and review, but do not push to the sheet'
         type: boolean
         default: false
+      reshoot_ids:
+        description: 'Instead of a discovery run: take the screenshot of these TikTok complaint IDs again (comma separated)'
+        type: string
+        required: false
+        default: ''
 
 concurrency:
   group: kkm-tiktok-auto
@@ -46,6 +56,7 @@ permissions:
 
 jobs:
   discover:
+    if: ${{ !github.event.inputs.reshoot_ids }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -108,3 +119,35 @@ jobs:
           ARGS="--tiktok-links"
           if [ "$DRY_RUN" = "true" ]; then ARGS="$ARGS --dry-run"; fi
           python main.py $ARGS
+
+  # Not part of a discovery run: only when complaint IDs are named by hand. Writes one field, Screenshot Link, on
+  # open TikTok rows (tools/tiktok_reshoot.py).
+  reshoot:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.reshoot_ids }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TZ: Asia/Kuala_Lumpur
+      PYTHONUNBUFFERED: '1'
+      APPS_SCRIPT_WEBHOOK_URL: ${{ secrets.APPS_SCRIPT_WEBHOOK_URL }}
+      APPS_SCRIPT_API_TOKEN: ${{ secrets.APPS_SCRIPT_API_TOKEN }}
+      IDS: ${{ github.event.inputs.reshoot_ids }}
+      DRY_RUN: ${{ github.event.inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scraper/requirements.txt
+      - name: Install dependencies and Chromium
+        working-directory: scraper
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+      - name: Take the screenshots again
+        run: |
+          ARGS=(--ids "$IDS")
+          if [ "$DRY_RUN" = "true" ]; then ARGS+=(--dry-run); fi
+          python tools/tiktok_reshoot.py "${ARGS[@]}"
