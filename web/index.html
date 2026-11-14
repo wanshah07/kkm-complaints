@@ -105,7 +105,7 @@
   }
   /* Print = "Save as PDF" from any browser, Samsung Internet included. Only the active view prints. */
   @media print {
-    header, .bnav, #overlay, #drawer, #toast, .no-print, #linksModal, #adminModal, #ldModal, #modal, #connect, #exportMenu, #moreMenu { display: none !important; }
+    header, .bnav, #overlay, #drawer, #toast, .no-print, #linksModal, #tgModal, #adminModal, #ldModal, #modal, #connect, #exportMenu, #moreMenu { display: none !important; }
     body { background: #fff !important; color: #000 !important; }
     main { max-width: none !important; padding: 0 !important; }
     .view { display: none !important; } .view.on { display: block !important; }
@@ -136,6 +136,7 @@
       </div>
       <button id="btnRefresh" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">⟳ Refresh</button>
       <button id="btnLinks" title="Paste TikTok video links to be reviewed" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">TikTok links<span id="linksBadge" class="hidden ml-1 rounded-full bg-amber-100 text-amber-900 px-1.5 text-xs font-semibold"></span></button>
+      <button id="btnTargets" title="The accounts the sweep watches: add, change, pause or remove one, and see whether each is live" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">Targets<span id="tgBadge" class="hidden ml-1 rounded-full bg-red-100 text-red-800 px-1.5 text-xs font-semibold"></span></button>
       <button id="btnNew" class="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">+ Manual entry</button>
       <button id="btnAdmin" title="Reviewer API key and model" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">Admin</button>
       <button id="btnSettings" title="Backend connection" class="hidden inline-flex items-center rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm hover:bg-slate-50">⚙</button>
@@ -493,6 +494,57 @@
         </table>
         <div id="lEmpty" class="hidden p-6 text-center text-slate-500 text-sm">No links yet.</div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Targets panel (14 Nov 2026): the accounts the sweep watches, and whether each one is live. Targets.gs. -->
+<div id="tgModal" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-slate-900/40" data-tgclose></div>
+  <div class="sheet absolute inset-x-0 top-0 sm:top-6 mx-auto max-w-5xl bg-white rounded-none sm:rounded-2xl shadow-2xl overflow-y-auto">
+    <div class="px-4 sm:px-5 py-4 border-b border-slate-200 flex items-start gap-3" style="padding-top:calc(1rem + var(--sa-top))">
+      <div class="min-w-0">
+        <h2 class="font-semibold">Targets</h2>
+        <p class="text-xs text-slate-500">The accounts the sweep watches. Add, change, pause or remove one here; the sweep reads this list at the start of every run. Each account is tested by the account check (profile only, nothing is filed): a new or changed handle shows "Not checked yet" until the next check.</p>
+      </div>
+      <button data-tgclose aria-label="Close" class="tap ml-auto shrink-0 rounded-lg border border-slate-300 px-3 text-sm hover:bg-slate-50">✕</button>
+    </div>
+    <div class="p-4 sm:p-5 space-y-4">
+      <div id="tgMsg" class="hidden rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"></div>
+      <div id="tgChips" class="flex flex-wrap gap-2 text-xs"></div>
+      <div class="flex flex-wrap items-center gap-2">
+        <input id="tgSearch" type="search" placeholder="Search a name or handle" class="rounded-lg border border-slate-300 text-sm py-2 px-3 w-full sm:w-64">
+        <select id="tgKind" class="rounded-lg border border-slate-300 text-sm py-2 px-2 bg-white"><option value="social">Social accounts</option><option value="web">Websites</option><option value="all">Everything</option></select>
+        <select id="tgPlat" class="rounded-lg border border-slate-300 text-sm py-2 px-2 bg-white"></select>
+        <select id="tgState" class="rounded-lg border border-slate-300 text-sm py-2 px-2 bg-white">
+          <option value="">Any status</option><option value="live">Live</option><option value="attention">Needs attention</option><option value="unchecked">Not checked yet</option><option value="blocked">Could not check</option><option value="paused">Paused</option></select>
+        <button id="tgAdd" class="sm:ml-auto rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">+ Add account</button>
+      </div>
+      <form id="tgForm" class="hidden rounded-xl border border-slate-300 bg-slate-50 p-3 sm:p-4 space-y-3" autocomplete="off">
+        <div class="flex items-center gap-2"><h3 id="tgFormTitle" class="font-semibold text-sm"></h3><span id="tgFormHint" class="text-xs text-slate-500"></span></div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <label class="block text-xs font-medium text-slate-600">Name<input id="tgName" maxlength="80" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white" placeholder="Brand, or the person's account"></label>
+          <label class="block text-xs font-medium text-slate-600">Type<input id="tgType" list="tgTypes" maxlength="80" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white" placeholder="Blank = a brand's own page"><datalist id="tgTypes"></datalist></label>
+          <label class="flex items-center gap-2 text-sm text-slate-700 sm:mt-6"><input id="tgActive" type="checkbox" class="h-4 w-4"> Active (watched by the sweep)</label>
+        </div>
+        <div id="tgHandles" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label class="block text-xs font-medium text-slate-600">Product hints (comma separated)<input id="tgHints" maxlength="1000" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white"></label>
+          <label class="block text-xs font-medium text-slate-600">Notes<input id="tgNotes" maxlength="1000" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white"></label>
+        </div>
+        <div id="tgFeeds" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label class="block text-xs font-medium text-slate-600">Website feed<input id="tgWeb" maxlength="1000" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white"></label>
+          <label class="block text-xs font-medium text-slate-600">Product feed<input id="tgProd" maxlength="1000" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white"></label>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="tgSave" type="submit" class="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">Save</button>
+          <button id="tgCancel" type="button" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50">Cancel</button>
+          <span id="tgFormMsg" class="text-xs text-red-700"></span>
+        </div>
+      </form>
+      <div id="tgList" class="rounded-xl border border-slate-200 divide-y divide-slate-100"></div>
+      <div id="tgEmpty" class="hidden p-6 text-center text-slate-500 text-sm">Nothing matches.</div>
+      <p id="tgFoot" class="text-xs text-slate-500"></p>
     </div>
   </div>
 </div>
@@ -1398,12 +1450,12 @@ $('btnExport').onclick = e => { e.stopPropagation(); $('exportMenu').innerHTML =
 $('btnMore').onclick = e => {
   e.stopPropagation();
   const item = (act, label) => `<button data-more="${act}" class="block w-full text-left rounded-lg px-3 py-2.5 hover:bg-slate-50">${label}</button>`;
-  $('moreMenu').innerHTML = item('refresh', '⟳ Refresh') + item('new', '+ Manual entry') + item('kkm', 'Open KKM form ↗') + item('admin', 'Admin · reviewer key and model') + `<div class="border-t border-slate-200 my-1"></div><div class="px-3 pt-1 text-[11px] text-slate-500">Export the current filter</div>` +
+  $('moreMenu').innerHTML = item('refresh', '⟳ Refresh') + item('new', '+ Manual entry') + item('kkm', 'Open KKM form ↗') + item('targets', 'Targets · accounts watched') + item('admin', 'Admin · reviewer key and model') + `<div class="border-t border-slate-200 my-1"></div><div class="px-3 pt-1 text-[11px] text-slate-500">Export the current filter</div>` +
     item('csv', 'CSV') + item('pdf', 'PDF register') + item('docx', 'Word register') + item('gdoc', 'Google Doc register') + item('print', 'Print / Save as PDF') + `<div class="border-t border-slate-200 my-1"></div>` + item('faq', 'FAQ / guide ↗');
   toggleMenu('moreMenu');
   $('moreMenu').querySelectorAll('[data-more]').forEach(b => b.onclick = ev => {
     toggleMenu('moreMenu', false); const a = b.dataset.more;
-    if (a === 'refresh') refresh(false); else if (a === 'new') showModal(true); else if (a === 'kkm') openKkmForm(ev); else if (a === 'admin') showAdmin(true); else if (a === 'faq') window.open($('faqLink').href, '_blank', 'noopener'); else runExport(a);
+    if (a === 'refresh') refresh(false); else if (a === 'new') showModal(true); else if (a === 'kkm') openKkmForm(ev); else if (a === 'admin') showAdmin(true); else if (a === 'targets') showTargets(true); else if (a === 'faq') window.open($('faqLink').href, '_blank', 'noopener'); else runExport(a);
   });
 };
 document.addEventListener('click', () => { toggleMenu('exportMenu', false); toggleMenu('moreMenu', false); });
@@ -1931,7 +1983,7 @@ $('fType').onchange = e => { state.filter.type = e.target.value; renderTable(); 
 $('fPlatform').onchange = e => { state.filter.platform = e.target.value; renderTable(); };
 $('fRoute').onchange = e => { state.filter.route = e.target.value; renderAll(); };
 $('fSearch').oninput = e => { state.filter.q = e.target.value; renderTable(); };
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('ldModal').classList.contains('hidden')) { closeDetail(); return; } showDrawer(false); showModal(false); showLinks(false); showAdmin(false); toggleMenu('exportMenu', false); toggleMenu('moreMenu', false); if (cfg.key) showConnect(false); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('ldModal').classList.contains('hidden')) { closeDetail(); return; } showDrawer(false); showModal(false); showLinks(false); showTargets(false); showAdmin(false); toggleMenu('exportMenu', false); toggleMenu('moreMenu', false); if (cfg.key) showConnect(false); } });
 // ---------------------------------------------------------------------------
 // TikTok links (Links.gs): paste here, a scheduled run reads them, the outcome comes back here.
 // ---------------------------------------------------------------------------
@@ -2077,6 +2129,156 @@ async function dismissHeld(link, btn) {
 $('ldFile').onclick = () => fileHeld(ldLink, $('ldFile'));
 $('ldDismiss').onclick = () => dismissHeld(ldLink, $('ldDismiss'));
 document.querySelectorAll('[data-ldclose]').forEach(b => b.onclick = closeDetail);
+// ---- Targets panel (14 Nov 2026). Backend: apps-script/Targets.gs. Status: tools/account_check.py and the sweep. ----
+const TG_STATE = {
+  live: ['Live', 'bg-emerald-100 text-emerald-800'], renamed: ['Handle changed', 'bg-amber-100 text-amber-900'],
+  empty: ['No posts seen', 'bg-amber-100 text-amber-900'], not_found: ['Not found', 'bg-red-100 text-red-800'],
+  private: ['Private', 'bg-red-100 text-red-800'], blocked: ['Could not check', 'bg-slate-200 text-slate-700'],
+  error: ['Check failed', 'bg-slate-200 text-slate-700'], '': ['Not checked yet', 'bg-slate-100 text-slate-600'] };
+const TG_ATTENTION = ['renamed', 'empty', 'not_found', 'private'];
+const TG_PROFILE = { Instagram: h => `https://www.instagram.com/${h}/`, Facebook: h => `https://www.facebook.com/${h}`,
+  Threads: h => `https://www.threads.net/@${h}`, TikTok: h => `https://www.tiktok.com/@${h}` };
+let tg = { platforms: [], targets: [], status: {}, types: [], has: {}, canEdit: false, editing: null };
+const tgKey = (brand, plat) => (String(brand).trim() + '\u0001' + String(plat).trim()).toLowerCase();
+function tgWhen(iso) {
+  if (!iso) return '';
+  const d = new Date(iso); if (isNaN(d)) return '';
+  return d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+function tgStatusOf(t, plat) {
+  const s = tg.status[tgKey(t.name, plat)];
+  // A status recorded for another handle does not describe this one.
+  return (s && String(s.handle || '').toLowerCase() === String(t.handles[plat] || '').toLowerCase()) ? s : null;
+}
+function tgStateOf(t, plat) { const s = tgStatusOf(t, plat); return s ? (s.state || '') : ''; }
+function showTargets(open) {
+  $('tgModal').classList.toggle('hidden', !open);
+  if (open) { tgForm(null, false); loadTargets(); }
+}
+async function loadTargets() {
+  const msg = (m) => { $('tgMsg').textContent = m || ''; $('tgMsg').classList.toggle('hidden', !m); };
+  try {
+    const d = await api('targets_admin', {}, 60000);
+    tg = Object.assign(tg, { platforms: d.platforms || [], targets: d.targets || [], status: d.status || {}, types: d.types || [], has: d.has || {}, canEdit: true });
+    msg('');
+  } catch (e) {
+    if (!/Unknown action/.test(e.message)) { msg(e.message); return; }
+    // An Apps Script deployed before Targets.gs: show the list it can give, read only.
+    try {
+      const d = await api('targets', {}, 60000);
+      const plats = []; (d.targets || []).forEach(t => Object.keys(t.handles || {}).forEach(p => { if (!plats.includes(p)) plats.push(p); }));
+      tg = Object.assign(tg, { platforms: plats, targets: d.targets || [], status: {}, types: [], has: {}, canEdit: false });
+      msg('Read only for now: the backend does not have the Targets update yet. In the Apps Script editor add Targets.gs, re-paste Code.gs, then Deploy → Manage deployments → New version. After that you can add, change and remove accounts here and each account shows its status.');
+    } catch (e2) { msg(e2.message); return; }
+  }
+  $('tgAdd').classList.toggle('hidden', !tg.canEdit);
+  const cur = $('tgPlat').value;
+  $('tgPlat').innerHTML = '<option value="">Any platform</option>' + tg.platforms.map(p => `<option>${esc(p)}</option>`).join('');
+  $('tgPlat').value = tg.platforms.includes(cur) ? cur : '';
+  $('tgTypes').innerHTML = tg.types.map(x => `<option value="${esc(x)}">`).join('');
+  renderTargets();
+}
+function renderTargets() {
+  const q = $('tgSearch').value.trim().toLowerCase(), kind = $('tgKind').value, plat = $('tgPlat').value, want = $('tgState').value;
+  const count = { live: 0, attention: 0, unchecked: 0, blocked: 0, paused: 0, accounts: 0 };
+  const bucket = st => st === 'live' ? 'live' : TG_ATTENTION.includes(st) ? 'attention' : st === '' ? 'unchecked' : 'blocked';
+  tg.targets.forEach(t => {
+    if (!t.active) { count.paused++; return; }
+    Object.keys(t.handles || {}).forEach(p => { count.accounts++; count[bucket(tgStateOf(t, p))]++; });
+  });
+  const chip = (label, n, cls, v) => `<button type="button" data-tgchip="${v}" class="rounded-full px-2.5 py-1 font-semibold ${cls} ${want === v && v ? 'ring-2 ring-slate-900' : ''}">${label} ${n}</button>`;
+  $('tgChips').innerHTML = chip('Accounts watched', count.accounts, 'bg-slate-100 text-slate-700', '') + chip('Live', count.live, 'bg-emerald-100 text-emerald-800', 'live') +
+    chip('Needs attention', count.attention, 'bg-red-100 text-red-800', 'attention') + chip('Not checked yet', count.unchecked, 'bg-slate-100 text-slate-600', 'unchecked') +
+    chip('Could not check', count.blocked, 'bg-slate-200 text-slate-700', 'blocked') + chip('Paused rows', count.paused, 'bg-slate-100 text-slate-600', 'paused');
+  $('tgChips').querySelectorAll('[data-tgchip]').forEach(b => b.onclick = () => { $('tgState').value = b.dataset.tgchip; renderTargets(); });
+  ['tgBadge'].forEach(id => { $(id).textContent = count.attention; $(id).classList.toggle('hidden', !count.attention); });
+
+  const rows = tg.targets.filter(t => {
+    const hs = Object.keys(t.handles || {});
+    if (kind === 'social' && !hs.length) return false;
+    if (kind === 'web' && hs.length) return false;
+    if (plat && !t.handles[plat]) return false;
+    if (q && !(t.name + ' ' + (t.type || '') + ' ' + hs.map(p => t.handles[p]).join(' ')).toLowerCase().includes(q)) return false;
+    if (want === 'paused') return !t.active;
+    if (want) return t.active && hs.filter(p => !plat || p === plat).some(p => bucket(tgStateOf(t, p)) === want);
+    return true;
+  });
+  $('tgEmpty').classList.toggle('hidden', rows.length > 0);
+  $('tgList').classList.toggle('hidden', rows.length === 0);
+  $('tgList').innerHTML = rows.map(t => {
+    const lines = tg.platforms.filter(p => t.handles[p]).map(p => {
+      const h = t.handles[p], s = tgStatusOf(t, p) || {}, st = s.state || '', [label, cls] = TG_STATE[st] || TG_STATE[''];
+      const url = TG_PROFILE[p] ? TG_PROFILE[p](encodeURIComponent(h).replace(/%40/g, '@')) : '';
+      const bits = [];
+      if (s.checked_at) bits.push('checked ' + tgWhen(s.checked_at) + (st === 'live' || st === 'renamed' ? ` · ${esc(s.posts || 0)} post(s) seen` : ''));
+      if (s.sweep_at) bits.push('last sweep ' + tgWhen(s.sweep_at) + ` · ${esc(s.sweep_posts || 0)} post(s)` + (s.sweep_note ? ' · ' + esc(s.sweep_note) : ''));
+      const why = (st && st !== 'live' && s.detail) ? `<div class="text-[11px] text-slate-600">${esc(s.detail)}</div>` : '';
+      const use = (st === 'renamed' && s.suggest && tg.canEdit) ? ` <button type="button" class="tgUse text-[11px] rounded border border-amber-300 text-amber-900 px-1.5 py-0.5 hover:bg-amber-50" data-name="${esc(t.name)}" data-plat="${esc(p)}" data-h="${esc(s.suggest)}">Use @${esc(s.suggest)}</button>` : '';
+      return `<div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 py-0.5"><span class="w-20 shrink-0 text-xs font-medium text-slate-500">${esc(p)}</span>
+        ${url ? `<a class="text-sm text-blue-700 hover:underline break-all" href="${esc(url)}" target="_blank" rel="noopener">@${esc(h)}</a>` : `<span class="text-sm break-all">@${esc(h)}</span>`}
+        <span class="badge ${cls}">${esc(label)}</span>${use}
+        <span class="text-[11px] text-slate-500">${bits.join(' · ')}</span>${why ? `<div class="basis-full sm:pl-[5.5rem]">${why}</div>` : ''}</div>`;
+    }).join('');
+    const web = !Object.keys(t.handles || {}).length ? `<div class="text-xs text-slate-500 break-all">Website row${t.website_feed ? ' · ' + esc(t.website_feed) : ''}</div>` : '';
+    const acts = tg.canEdit ? `<div class="flex gap-1 shrink-0"><button type="button" class="tgEdit text-xs rounded border border-slate-300 px-2 py-1 hover:bg-slate-50" data-name="${esc(t.name)}">Edit</button><button type="button" class="tgToggle text-xs rounded border border-slate-300 px-2 py-1 hover:bg-slate-50" data-name="${esc(t.name)}">${t.active ? 'Pause' : 'Resume'}</button><button type="button" class="tgDel text-xs rounded border border-red-200 text-red-700 px-2 py-1 hover:bg-red-50" data-name="${esc(t.name)}">Remove</button></div>` : '';
+    return `<div class="p-3 ${t.active ? '' : 'bg-slate-50 opacity-80'}"><div class="flex flex-wrap items-center gap-2">
+        <span class="font-semibold text-sm break-all">${esc(t.name)}</span>${t.type ? `<span class="text-xs text-slate-500">${esc(t.type)}</span>` : ''}
+        ${t.active ? '' : '<span class="badge bg-slate-200 text-slate-700">Paused</span>'}<span class="ml-auto"></span>${acts}</div>
+      <div class="mt-1">${lines}${web}</div>${t.notes ? `<div class="mt-1 text-[11px] text-slate-500">${esc(t.notes)}</div>` : ''}</div>`;
+  }).join('');
+  $('tgFoot').textContent = `${rows.length} of ${tg.targets.length} row(s) shown. Status comes from the account check (profile only) and from each sweep.`;
+  const find = n => tg.targets.find(t => t.name === n);
+  $('tgList').querySelectorAll('.tgEdit').forEach(b => b.onclick = () => tgForm(find(b.dataset.name), true));
+  $('tgList').querySelectorAll('.tgUse').forEach(b => b.onclick = () => { tgForm(find(b.dataset.name), true); const i = document.querySelector(`#tgHandles input[data-plat="${CSS.escape(b.dataset.plat)}"]`); if (i) { i.value = b.dataset.h; i.focus(); } });
+  $('tgList').querySelectorAll('.tgToggle').forEach(b => b.onclick = async () => {
+    const t = find(b.dataset.name); if (!t) return; b.disabled = true;
+    try { await api('target_save', { original: t.name, target: { name: t.name, active: !t.active, handles: {} } }); toast(t.active ? 'Paused: the sweep skips it' : 'Resumed'); loadTargets(); }
+    catch (e) { toast(e.message, 5000); b.disabled = false; }
+  });
+  $('tgList').querySelectorAll('.tgDel').forEach(b => b.onclick = async () => {
+    const t = find(b.dataset.name); if (!t) return;
+    if (!confirm(`Remove "${t.name}" from the Targets tab?\n\nThe sweep stops watching it. Complaints already filed for it stay as they are. To stop watching without deleting the row, use Pause.`)) return;
+    b.disabled = true;
+    try { await api('target_remove', { name: t.name }); toast('Removed'); loadTargets(); } catch (e) { toast(e.message, 5000); b.disabled = false; }
+  });
+}
+function tgForm(t, open) {
+  tg.editing = open ? (t ? t.name : '') : null;
+  $('tgForm').classList.toggle('hidden', !open);
+  if (!open) return;
+  $('tgFormTitle').textContent = t ? 'Edit ' + t.name : 'Add an account';
+  $('tgFormHint').textContent = t ? 'The name cannot be changed: filed complaints carry it.' : 'A handle, an @handle or the profile link all work.';
+  $('tgName').value = t ? t.name : ''; $('tgName').disabled = !!t;
+  $('tgType').value = t ? (t.type || '') : ''; $('tgActive').checked = t ? !!t.active : true;
+  $('tgHints').value = t ? (t.product_hints || []).join(', ') : ''; $('tgNotes').value = t ? (t.notes || '') : '';
+  $('tgWeb').value = t ? (t.website_feed || '') : ''; $('tgProd').value = t ? (t.product_feed || '') : '';
+  $('tgFeeds').classList.toggle('hidden', !(t && (t.website_feed || t.product_feed)));
+  $('tgHandles').innerHTML = tg.platforms.map(p => `<label class="block text-xs font-medium text-slate-600">${esc(p)}<input data-plat="${esc(p)}" maxlength="300" value="${esc(t ? (t.handles[p] || '') : '')}" placeholder="handle or profile link" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white font-mono"></label>`).join('');
+  $('tgFormMsg').textContent = '';
+  $('tgForm').scrollIntoView({ block: 'nearest' });
+  if (window.matchMedia('(min-width: 640px)').matches) (t ? $('tgType') : $('tgName')).focus();
+}
+async function tgSave(ev) {
+  ev.preventDefault();
+  const handles = {}; $('tgHandles').querySelectorAll('input[data-plat]').forEach(i => { handles[i.dataset.plat] = i.value.trim(); });
+  const target = { name: $('tgName').value.trim(), active: $('tgActive').checked, type: $('tgType').value.trim(), handles,
+    product_hints: $('tgHints').value.trim(), notes: $('tgNotes').value.trim() };
+  if (!$('tgFeeds').classList.contains('hidden')) { target.website_feed = $('tgWeb').value.trim(); target.product_feed = $('tgProd').value.trim(); }
+  $('tgSave').disabled = true; $('tgFormMsg').textContent = '';
+  try {
+    const d = await api('target_save', { target, original: tg.editing || '' });
+    toast(d.added ? 'Added. It is tested by the next account check.' : (d.changed && d.changed.length ? 'Saved. The changed handle is tested by the next account check.' : 'Saved'), 4000);
+    tgForm(null, false); loadTargets();
+  } catch (e) { $('tgFormMsg').textContent = e.message; }
+  finally { $('tgSave').disabled = false; }
+}
+$('btnTargets').onclick = () => showTargets(true);
+$('tgAdd').onclick = () => tgForm(null, true);
+$('tgCancel').onclick = () => tgForm(null, false);
+$('tgForm').addEventListener('submit', tgSave);
+['tgSearch', 'tgKind', 'tgPlat', 'tgState'].forEach(id => $(id).addEventListener('input', renderTargets));
+document.querySelectorAll('[data-tgclose]').forEach(b => b.onclick = () => showTargets(false));
+
 $('btnLinks').onclick = () => showLinks(true);
 $('btnAdmin').onclick = () => showAdmin(true);
 $('aSave').onclick = adminSave;

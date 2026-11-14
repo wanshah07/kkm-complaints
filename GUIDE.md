@@ -155,6 +155,31 @@ Risky rows only appear because `push_risky` is on. Turn it off in `scraper/confi
 
 **Adding a column is not free-form.** Every column that is not `Brand`, `Active`, `Type`, `Product hints` or `Notes` is read as a *platform*, and a platform with no entry in `scraper/config.yaml` is skipped with a warning. Add notes to the `Notes` column; ask me before adding any other column.
 
+### Targets in the dashboard, and each account's status (14 Nov 2026)
+
+You no longer have to open the sheet to manage who is watched. Press **Targets** in the dashboard (on a phone: **⋯ → Targets**).
+
+- **Add account**: a name, then a handle for each platform it has (Instagram, Facebook, Threads, TikTok). A bare handle, an `@handle` or the profile link all work. Leave *Type* blank for a brand's own page; for a person choose their kind (General Doctor, Dermatologist, Pharmacist…), because the reviewer judges a person promoting a product differently from a brand.
+- **Edit**: change handles, type, product hints, notes. The name cannot be changed, because filed complaints carry it; to rename, add a new row and remove the old one.
+- **Pause / Resume**: the row stays, the sweep skips it. **Remove** deletes the row from the Targets tab; complaints already filed for it are not touched.
+- An own-brand name or handle is refused. The sweep reads the list at the start of every run, so a change counts from the next run.
+
+**Status.** Every account carries one badge:
+
+| Badge | Meaning | What to do |
+| --- | --- | --- |
+| Live | The profile opens and posts are visible | Nothing |
+| Handle changed | Live, but the account now answers to another handle | Press **Use @newhandle**, then Save |
+| No posts seen | The profile opens but shows no posts | Check it by hand; it may be new, empty or hidden from our login |
+| Not found | The platform says there is no such profile | Correct the handle, or remove the row |
+| Private | The profile is private to our login | Remove it, or follow it from the recorded account |
+| Could not check | A login wall or soft block, not the account's fault | Nothing; the next check tries again |
+| Not checked yet | Added or changed since the last check | Nothing; the next check takes these first |
+
+The line beside the badge says when it was checked and how many posts were seen, and when a sweep last reached the account. The status is written by the **Account check** (Actions → *Account check*): it opens each account's profile with the sweep's own code and login, opens **no post**, reviews nothing and files nothing. A 40-minute slice of the accounts checked longest ago runs every day; **Run workflow** with *max_minutes* 150 checks about 250 accounts in one go, and *brand* checks one row straight away. It uses the sweep's login, so it queues behind a running sweep. Each sweep also records when it last reached an account.
+
+**One-time deploy:** add `apps-script/Targets.gs` as a new file in the Apps Script editor, re-paste `Code.gs` (it carries four new routes), then Deploy → Manage deployments → New version. Until then the panel shows the list read only and says so, and the account check prints its results in its run log instead of storing them. Status is kept in its own sheet tab, `TargetStatus`; do not add status columns to the Targets tab, because every extra column there is read as a platform.
+
 ### The same post is never reviewed twice
 
 The Complaints tab only holds posts that turned out non-compliant. Everything judged clean left no trace, so every week the same compliant posts were scraped, screenshotted and paid for again — and a complaint you had already dealt with could come back around.
