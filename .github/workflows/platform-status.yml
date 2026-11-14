@@ -1,0 +1,102 @@
+# Is Instagram / Facebook / Threads / TikTok live right now? (14 Nov 2026)
+#
+# Opens one stable public profile per platform with the saved login (PW_STORAGE_STATE_B64), writes
+# status.json to the orphan branch `status`, and asks the Pages workflow to redeploy so the dashboard
+# header shows it. Runs every 6 hours and on demand. It joins the scraper's concurrency group, so it never
+# opens an account while a sweep is using the same login, and waits its turn behind a running sweep.
+#
+# Why a separate branch: a bot commit to main every 6 hours would bury the real history, and Pages only
+# needs the file at deploy time (see pages.yml). The file holds platform names and plain-English states only:
+# no handles of people, no cookie values, no secrets. This repository is PUBLIC.
+
+name: Platform status
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: kkm-complaint-scraper
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TZ: Asia/Kuala_Lumpur
+      PYTHONUNBUFFERED: '1'
+      PW_STORAGE_STATE_B64: ${{ secrets.PW_STORAGE_STATE_B64 }}
+      PW_STORAGE_STATE_SHOP_B64: ${{ secrets.PW_STORAGE_STATE_SHOP_B64 }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scraper/requirements.txt
+
+      - name: Install dependencies
+        working-directory: scraper
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('scraper/requirements.txt') }}
+
+      - name: Install Chromium
+        working-directory: scraper
+        run: python -m playwright install --with-deps chromium
+
+      - name: Last runs of the scraper and the TikTok checker
+        run: |
+          python3 - <<'PY'
+          import json, subprocess
+          def last(workflow, only_conclusive=True):
+              out = subprocess.run(["gh", "api", "repos/${{ github.repository }}/actions/workflows/%s/runs?per_page=10&status=completed" % workflow,
+                                    "--jq", "[.workflow_runs[] | {conclusion, at: .updated_at, title: .display_title}]"],
+                                   capture_output=True, text=True)
+              try:
+                  rows = json.loads(out.stdout)
+              except Exception:
+                  return {}
+              rows = [r for r in rows if r.get("conclusion") in ("success", "failure")]
+              return rows[0] if rows else {}
+          json.dump({"scraper": last("scraper.yml"), "tiktok": last("tiktok-links.yml")}, open("last_runs.json", "w"))
+          print(open("last_runs.json").read())
+          PY
+
+      - name: Probe the platforms
+        run: python tools/platform_status.py --out status.json --last-runs last_runs.json
+
+      - name: Publish status.json to the status branch
+        run: |
+          set -e
+          mkdir -p /tmp/pub && cp status.json /tmp/pub/status.json
+          git config user.name "kkm-status-bot"
+          git config user.email "kkm-status-bot@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin status >/dev/null 2>&1; then
+            git fetch origin status --depth=1
+            git checkout -q -B status FETCH_HEAD
+          else
+            git checkout -q --orphan status
+            git rm -rf -q . || true
+          fi
+          cp /tmp/pub/status.json status.json
+          git add status.json
+          git commit -q -m "status $(date -u +%Y-%m-%dT%H:%MZ)" || { echo "no change"; exit 0; }
+          git push -q origin HEAD:status
+
+      - name: Redeploy the dashboard so it shows the new status
+        run: gh workflow run pages.yml --ref main

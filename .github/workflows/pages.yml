@@ -43,6 +43,15 @@ jobs:
             echo "No PAGES_CUSTOM_DOMAIN set; serving at the github.io URL"
           fi
 
+      - name: Fetch the latest platform status (branch `status`, written by platform-status.yml)
+        run: |
+          if git ls-remote --exit-code --heads origin status >/dev/null 2>&1; then
+            git fetch -q origin status --depth=1
+            git show FETCH_HEAD:status.json > web/status.json && echo "status.json added" || rm -f web/status.json
+          else
+            echo "no status branch yet"
+          fi
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
