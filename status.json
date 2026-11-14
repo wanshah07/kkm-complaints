@@ -1,5 +1,5 @@
 {
- "checked_at": "2026-11-14T11:07:08Z",
+ "checked_at": "2026-11-14T18:15:03Z",
  "platforms": [
   {
    "key": "instagram",
@@ -11,9 +11,9 @@
   {
    "key": "facebook",
    "label": "Facebook",
-   "state": "live",
-   "detail": "Signed in and reading posts normally.",
-   "links": 2
+   "state": "down",
+   "detail": "The saved login is no longer held after loading the page. Record the session again.",
+   "links": 3
   },
   {
    "key": "threads",
@@ -27,19 +27,26 @@
    "label": "TikTok links",
    "links": null,
    "state": "live",
-   "detail": "The link checker is running (last run 2026-11-14 10:59). Works on links you paste into the Links tab."
+   "detail": "The link checker is running (last run 2026-11-14 16:59). Works on links you paste into the Links tab."
+  },
+  {
+   "key": "tiktok_auto",
+   "label": "TikTok accounts",
+   "links": null,
+   "state": "live",
+   "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-14 13:03). Only an account's ten newest are visible at a time."
   }
  ],
  "notes": [],
  "session_days_left": {
-  "instagram": 365.0,
-  "facebook": 365.0,
-  "threads": 365.0
+  "instagram": 364.7,
+  "facebook": 364.7,
+  "threads": 364.7
  },
  "last_sweep": {
   "conclusion": "success",
-  "at": "2026-11-14T10:56:18Z",
+  "at": "2026-11-14T12:53:39Z",
   "title": "KKM complaint scraper"
  },
- "overall": "live"
+ "overall": "down"
 }
