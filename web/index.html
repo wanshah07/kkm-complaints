@@ -154,6 +154,15 @@
     <button data-nav="own" class="tab py-2">Own brand <span id="navOwnCount" class="text-xs text-slate-500"></span></button>
     <button data-nav="check" class="tab py-2">To check <span id="navCheckCount" class="text-xs text-slate-500"></span></button>
   </nav>
+  <!-- Platform status (14 Nov 2026): written by .github/workflows/platform-status.yml, shown as pills. -->
+  <div id="platStatus" class="max-w-7xl mx-auto px-4 sm:px-6 pb-2 hidden">
+    <div class="flex items-center gap-2 overflow-x-auto whitespace-nowrap text-xs" role="status" aria-live="polite">
+      <span class="text-slate-500 shrink-0">Scraper</span>
+      <span id="platPills" class="flex items-center gap-1.5"></span>
+      <span id="platWhen" class="text-slate-500 shrink-0"></span>
+    </div>
+    <p id="platDetail" class="hidden mt-1 text-xs text-slate-600"></p>
+  </div>
 </header>
 
 <main class="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-5 sm:space-y-6">
@@ -2214,6 +2223,43 @@ async function checkAct(h, what, card, btn) {
 }
 
 setInterval(() => { if (cfg.key && $('drawer').classList.contains('translate-x-full') && $('modal').classList.contains('hidden') && $('connect').classList.contains('hidden')) refresh(true); }, 180000);
+// Platform status pills. status.json is deployed beside this page; a missing or unreadable file hides the strip
+// rather than showing anything that could read as "all live". Older than 14 h is shown as old, never as live.
+let platDetailKey = '';
+async function loadPlatStatus() {
+  const box = $('platStatus');
+  try {
+    const r = await fetch('status.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    const ageH = (Date.now() - Date.parse(d.checked_at)) / 3600000;
+    const stale = !(ageH >= 0) || ageH > 14;
+    const cls = { live: 'bg-emerald-100 text-emerald-800', degraded: 'bg-amber-100 text-amber-900', down: 'bg-red-100 text-red-800', unknown: 'bg-slate-100 text-slate-700' };
+    const word = { live: 'live', degraded: 'limited', down: 'down', unknown: 'unknown' };
+    const dot = { live: '\u25CF', degraded: '\u25D0', down: '\u2715', unknown: '?' };
+    const pills = $('platPills'); pills.textContent = '';
+    (d.platforms || []).forEach((p) => {
+      const st = stale ? 'unknown' : (cls[p.state] ? p.state : 'unknown');
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'rounded-full px-2.5 py-1 font-medium shrink-0 ' + cls[st];
+      b.textContent = dot[st] + ' ' + p.label + ' ' + (stale ? 'old' : word[st]);
+      b.title = p.detail || '';
+      b.addEventListener('click', () => {
+        const el = $('platDetail');
+        const same = platDetailKey === p.key && !el.classList.contains('hidden');
+        platDetailKey = p.key;
+        el.textContent = same ? '' : p.label + ': ' + (p.detail || 'No detail.');
+        el.classList.toggle('hidden', same);
+      });
+      pills.appendChild(b);
+    });
+    const when = new Date(d.checked_at);
+    $('platWhen').textContent = isNaN(when) ? '' : (stale ? 'last check ' : 'checked ') + when.toLocaleString('en-MY', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    box.classList.remove('hidden');
+  } catch (e) { box.classList.add('hidden'); }
+}
+loadPlatStatus(); setInterval(loadPlatStatus, 600000);
 if (cfg.key) { loadLinks(); loadChecks(); }
 showView(VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'home');
 boot();
