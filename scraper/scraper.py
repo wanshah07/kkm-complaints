@@ -77,6 +77,15 @@ class TargetResult:
     # Set when no redirect happened but most of the grid belongs to one other account, which is
     # what a stale handle looks like when the platform does not redirect.
     drift_note: Optional[str] = None
+    # Post links the profile showed (15 Nov 2026). The account check reads this instead of patching
+    # _collect_links from outside.
+    links_found: int = 0
+    # The links came from the retry with NO stored session: our login was not accepted for this page,
+    # so what was read is the public, signed-out view (on Facebook that is usually a single post).
+    signed_out_view: bool = False
+    # The visit stopped at run.max_new_posts_per_visit: the newest posts were judged and older unjudged
+    # ones remain for a later visit. Not "truncated": the target WAS reached.
+    capped: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -663,8 +672,12 @@ def _diagnose_empty(page: Page, out_dir: str, tag: str) -> str:
         hint = "profile not available (handle wrong or region-blocked)"
     elif "something went wrong" in low or "try again later" in low:
         hint = "platform soft-block, try again later or slow the run down"
-    elif "private" in low:
+    elif re.search(r"\b(account|profile) is private\b", low):
+        # The platform's own sentence. The bare word matched a bio ("private practice", "private clinic"),
+        # and that account was then reported as private (audit 15 Nov 2026).
         hint = "profile is private to this account"
+    elif re.search(r"no (posts|threads|replies) yet|hasn.t posted|nothing here yet", low):
+        hint = "profile has no posts yet"
     try:
         path = os.path.join(out_dir, f"EMPTY_{re.sub(r'[^a-z0-9]+', '_', tag.lower())}.png")
         page.screenshot(path=path, full_page=False, type="png")
@@ -1125,6 +1138,7 @@ class Scraper:
                 except Exception as e:
                     log.info("[%s/%s] signed-out retry failed: %s", brand, platform, e)
                 if links:
+                    res.signed_out_view = True
                     # Keep browsing in the context that actually worked, posts included.
                     try:
                         ctx.close()
@@ -1137,6 +1151,7 @@ class Scraper:
                     except Exception:
                         pass
 
+            res.links_found = len(links)
             if not links:
                 hint = _diagnose_empty(page, self.out_dir, f"{brand}_{platform}")
                 res.error = "no post links found" + (f" — {hint}" if hint else " (layout change or restricted profile)")
@@ -1150,6 +1165,11 @@ class Scraper:
             min_date = str(self.run_cfg.get("min_post_date") or "")
             lookback = int(self.run_cfg.get("lookback_days", 0) or 0)
             opened = old_streak = off_account = 0
+            # A first visit to a busy brand page is hundreds of unjudged posts: one account took 51 minutes
+            # of a 100-minute run (Uriage, 14 Nov 2026) while a hundred others waited. With a cap, a visit
+            # judges the newest N unjudged posts and moves on; the ledger remembers them, so the next
+            # visit starts where this one stopped. 0 = no cap, the behaviour before 15 Nov 2026.
+            max_open = int(self.run_cfg.get("max_new_posts_per_visit", 0) or 0)
             for link in links:
                 url = clean_post_url(link)
                 if canonical_url(url) in self.known_urls:
@@ -1174,6 +1194,11 @@ class Scraper:
                     res.truncated = True
                     log.warning("[%s/%s] run budget reached after %d post(s) opened; the rest of this "
                                 "profile is left for the next run", brand, platform, opened)
+                    break
+                if max_open and opened >= max_open:
+                    res.capped = True
+                    log.info("[%s/%s] %d new post(s) opened this visit (the cap); older unjudged posts wait "
+                             "for the next visit", brand, platform, opened)
                     break
                 if opened:  # no wait before the first post opened on a profile
                     _pace(self.run_cfg.get("pause_between_posts"), "the next post")

@@ -4,6 +4,10 @@
 
 run:
   max_posts_per_profile: 350      # newest posts examined per brand × platform (posts already in the sheet are not opened)
+  # Unjudged posts opened per account in one visit (newest first); 0 = no cap. With a cap the visit moves on and
+  # the ledger lets the account's next visit continue where this one stopped, so one busy page cannot take half
+  # a run (Uriage Instagram: 159 posts, 51 of 100 minutes, 14 Nov 2026). The workflow input max_open overrides it.
+  max_new_posts_per_visit: 0
   lookback_days: 0                # 0 = off; otherwise skip posts older than N days when a date is known
   min_post_date: "2024-06-01"     # review only posts published on/after this date (YYYY-MM-DD); "" = off
   push_risky: true                # also push "Risky" verdicts (status New, type prefixed "Risky:")

@@ -2,8 +2,13 @@
 #
 # Opens one stable public profile per platform with the saved login (PW_STORAGE_STATE_B64), writes
 # status.json to the orphan branch `status`, and asks the Pages workflow to redeploy so the dashboard
-# header shows it. Runs every 6 hours and on demand. It joins the scraper's concurrency group, so it never
-# opens an account while a sweep is using the same login, and waits its turn behind a running sweep.
+# header shows it. Runs every 6 hours and on demand.
+#
+# It uses the sweep's login, so it must never run a browser beside a sweep or an account check. Until 15 Nov 2026
+# it did that by sharing their concurrency group, which had a cost: GitHub keeps ONE waiting run per group, so a
+# waiting status run could be replaced by, or replace, a waiting sweep. It now has its own group and looks first:
+# if a sweep or an account check is running it does not probe, and republishes each platform's last real result
+# with the time that result was measured (tools/platform_status.py --carry).
 #
 # Why a separate branch: a bot commit to main every 6 hours would bury the real history, and Pages only
 # needs the file at deploy time (see pages.yml). The file holds platform names and plain-English states only:
@@ -17,7 +22,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: kkm-complaint-scraper
+  group: kkm-platform-status
   cancel-in-progress: false
 
 permissions:
@@ -37,6 +42,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Is the login in use by a sweep or an account check?
+        id: busy
+        run: |
+          N=0
+          for wf in scraper.yml account-check.yml; do
+            for st in in_progress queued; do
+              C=$(gh api "repos/${{ github.repository }}/actions/workflows/$wf/runs?status=$st&per_page=1" --jq '.total_count' 2>/dev/null || echo 0)
+              N=$((N + ${C:-0}))
+            done
+          done
+          if [ "$N" -gt 0 ] && git fetch -q origin status --depth=1 2>/dev/null && git show FETCH_HEAD:status.json > /tmp/status_prev.json 2>/dev/null; then
+            echo "busy=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::a sweep or an account check is using the login: the last real result is republished, nothing is probed"
+          else
+            echo "busy=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -44,18 +66,21 @@ jobs:
           cache-dependency-path: scraper/requirements.txt
 
       - name: Install dependencies
+        if: steps.busy.outputs.busy != 'true'
         working-directory: scraper
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Cache Playwright browsers
+        if: steps.busy.outputs.busy != 'true'
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: pw-${{ runner.os }}-${{ hashFiles('scraper/requirements.txt') }}
 
       - name: Install Chromium
+        if: steps.busy.outputs.busy != 'true'
         working-directory: scraper
         run: python -m playwright install --with-deps chromium
 
@@ -79,7 +104,12 @@ jobs:
           PY
 
       - name: Probe the platforms
-        run: python tools/platform_status.py --out /tmp/status_new.json --last-runs last_runs.json
+        run: |
+          if [ "${{ steps.busy.outputs.busy }}" = "true" ]; then
+            python tools/platform_status.py --out /tmp/status_new.json --last-runs last_runs.json --carry /tmp/status_prev.json
+          else
+            python tools/platform_status.py --out /tmp/status_new.json --last-runs last_runs.json
+          fi
 
       - name: Publish status.json to the status branch
         run: |
