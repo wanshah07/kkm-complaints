@@ -56,7 +56,12 @@
     #questLink, #btnRewrite { display: inline-flex; align-items: center; min-height: 40px; }
     /* A row that scrolls sideways says so: its right edge fades out. */
     #routeTabs, #statusChips { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); padding-right: 28px; }
-    .stRow { display: grid; grid-template-columns: 1fr 1fr; }
+    /* #drawer in front: Tailwind's own .flex is injected after this block and would otherwise win, which is why the
+       2x2 grid shipped on 15 Nov never showed. */
+    #drawer .stRow { display: grid; grid-template-columns: 1fr 1fr; }
+    #drawer .stRow > button { min-height: 44px; }
+    /* Screenshot first in the drawer, and short enough that the status buttons still show under it. */
+    #dShot img { max-height: min(420px, 44vh); }
   }
   /* Views */
   .view { display: none; } .view.on { display: block; }
@@ -123,7 +128,7 @@
   }
   /* Print = "Save as PDF" from any browser, Samsung Internet included. Only the active view prints. */
   @media print {
-    header, .bnav, #overlay, #drawer, #toast, .no-print, #linksModal, #tgModal, #adminModal, #ldModal, #modal, #connect, #exportMenu, #moreMenu { display: none !important; }
+    header, .bnav, #overlay, #drawer, #toast, .no-print, #linksModal, #tgModal, #adminModal, #ldModal, #modal, #connect, #exportMenu, #moreMenu, #manageMenu { display: none !important; }
     body { background: #fff !important; color: #000 !important; }
     main { max-width: none !important; padding: 0 !important; }
     .view { display: none !important; } .view.on { display: block !important; }
@@ -153,10 +158,16 @@
         <div id="exportMenu" class="hidden absolute right-0 mt-1 w-72 rounded-xl border border-slate-200 bg-white shadow-xl p-1 text-sm z-40 whitespace-normal"></div>
       </div>
       <button id="btnRefresh" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">⟳ Refresh</button>
-      <button id="btnLinks" title="Paste TikTok video links to be reviewed" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">TikTok links<span id="linksBadge" class="hidden ml-1 rounded-full bg-amber-100 text-amber-900 px-1.5 text-xs font-semibold"></span></button>
-      <button id="btnTargets" title="The accounts the sweep watches: add, change, pause or remove one, and see whether each is live" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">Targets<span id="tgBadge" class="hidden ml-1 rounded-full bg-red-100 text-red-800 px-1.5 text-xs font-semibold"></span></button>
+      <!-- Audit U8 (15 Nov 2026): Targets, TikTok links and Admin are one menu, so the header carries six buttons, not eight. -->
+      <div class="relative">
+        <button id="btnManage" aria-haspopup="true" aria-expanded="false" aria-controls="manageMenu" title="Targets, TikTok links and reviewer settings" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">Manage ▾<span id="manageBadge" class="hidden ml-1 rounded-full bg-amber-100 text-amber-900 px-1.5 text-xs font-semibold"></span></button>
+        <div id="manageMenu" class="hidden absolute right-0 mt-1 w-72 rounded-xl border border-slate-200 bg-white shadow-xl p-1 text-sm z-40 whitespace-normal">
+          <button id="btnTargets" class="block w-full text-left rounded-lg px-3 py-2 hover:bg-slate-50"><div class="font-medium">Targets<span id="tgBadge" class="hidden ml-1.5 rounded-full bg-red-100 text-red-800 px-1.5 text-xs font-semibold"></span></div><div class="text-[11px] text-slate-500">The accounts the sweep watches: add, change, pause or remove one, and see whether each is live</div></button>
+          <button id="btnLinks" class="block w-full text-left rounded-lg px-3 py-2 hover:bg-slate-50"><div class="font-medium">TikTok links<span id="linksBadge" class="hidden ml-1.5 rounded-full bg-amber-100 text-amber-900 px-1.5 text-xs font-semibold"></span></div><div class="text-[11px] text-slate-500">Paste a video link to be reviewed</div></button>
+          <button id="btnAdmin" class="block w-full text-left rounded-lg px-3 py-2 hover:bg-slate-50"><div class="font-medium">Admin</div><div class="text-[11px] text-slate-500">Reviewer API key and model</div></button>
+        </div>
+      </div>
       <button id="btnNew" class="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">+ Manual entry</button>
-      <button id="btnAdmin" title="Reviewer API key and model" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">Admin</button>
       <button id="btnSettings" title="Backend connection" class="hidden inline-flex items-center rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm hover:bg-slate-50">⚙</button>
     </div>
     <!-- Phone actions: one menu -->
@@ -337,7 +348,7 @@
     </div>
   </div>
 
-  <div class="p-4 sm:p-5 space-y-5" style="padding-bottom:calc(2rem + var(--sa-bottom))">
+  <div id="dBody" class="p-4 sm:p-5 space-y-5" style="padding-bottom:calc(2rem + var(--sa-bottom))">
     <!-- Status actions -->
     <div class="stRow flex flex-wrap gap-2">
       <button data-status="In-Progress" class="stBtn rounded-lg bg-amber-100 text-amber-900 px-3 py-2 text-sm font-medium hover:bg-amber-200">Mark In-Progress</button>
@@ -355,14 +366,15 @@
       <span id="dossierHint" class="text-xs text-slate-500"></span>
     </div>
 
-    <!-- Screenshot -->
-    <div>
+    <!-- Screenshot. On a phone placeShot() moves this block to the top of the drawer (audit U7): the picture is the
+         thing being judged, and it used to sit below four buttons and the dossier row. -->
+    <div id="dShotWrap">
       <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Screenshot</div>
       <div id="dShot" class="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden"></div>
     </div>
 
     <!-- Post + text -->
-    <div class="grid sm:grid-cols-2 gap-4">
+    <div id="dAfterShot" class="grid sm:grid-cols-2 gap-4">
       <div class="sm:col-span-2">
         <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Post URL</div>
         <a id="dUrl" target="_blank" rel="noopener" class="text-sm text-blue-700 underline break-all"></a>
@@ -1482,7 +1494,7 @@ function runExport(act) {
   if (act === 'csv') exportCsv(); else if (act === 'print') window.print(); else exportDoc('register', act);
 }
 function toggleMenu(id, open) { const m = $(id); m.classList.toggle('hidden', open === undefined ? !m.classList.contains('hidden') : !open); }
-$('btnExport').onclick = e => { e.stopPropagation(); $('exportMenu').innerHTML = exportMenuHtml(); toggleMenu('exportMenu'); $('exportMenu').querySelectorAll('[data-export]').forEach(b => b.onclick = () => { toggleMenu('exportMenu', false); runExport(b.dataset.export); }); };
+$('btnExport').onclick = e => { e.stopPropagation(); closeManage(); $('exportMenu').innerHTML = exportMenuHtml(); toggleMenu('exportMenu'); $('exportMenu').querySelectorAll('[data-export]').forEach(b => b.onclick = () => { toggleMenu('exportMenu', false); runExport(b.dataset.export); }); };
 $('btnMore').onclick = e => {
   e.stopPropagation();
   const item = (act, label) => `<button data-more="${act}" class="block w-full text-left rounded-lg px-3 py-2.5 hover:bg-slate-50">${label}</button>`;
@@ -1494,7 +1506,18 @@ $('btnMore').onclick = e => {
     if (a === 'refresh') refresh(false); else if (a === 'new') showModal(true); else if (a === 'kkm') openKkmForm(ev); else if (a === 'admin') showAdmin(true); else if (a === 'targets') showTargets(true); else if (a === 'faq') window.open($('faqLink').href, '_blank', 'noopener'); else runExport(a);
   });
 };
-document.addEventListener('click', () => { toggleMenu('exportMenu', false); toggleMenu('moreMenu', false); });
+// Manage menu (desktop header): Targets, TikTok links, Admin. Its badge is the two counts added together, red when an
+// account needs attention and amber when only pasted links are waiting.
+function closeManage() { toggleMenu('manageMenu', false); $('btnManage').setAttribute('aria-expanded', 'false'); }
+function syncManageBadge() {
+  const n = (id) => $(id).classList.contains('hidden') ? 0 : (parseInt($(id).textContent, 10) || 0);
+  const tgN = n('tgBadge'), total = tgN + n('linksBadge'), b = $('manageBadge');
+  b.textContent = total; b.classList.toggle('hidden', !total);
+  b.className = b.className.replace(/bg-\S+|text-(amber|red)-\S+/g, '').replace(/\s+/g, ' ').trim() + (tgN ? ' bg-red-100 text-red-800' : ' bg-amber-100 text-amber-900');
+  b.title = total ? [tgN ? tgN + ' account(s) need attention' : '', n('linksBadge') ? n('linksBadge') + ' TikTok link(s) open' : ''].filter(Boolean).join(' · ') : '';
+}
+$('btnManage').onclick = e => { e.stopPropagation(); toggleMenu('exportMenu', false); toggleMenu('manageMenu'); $('btnManage').setAttribute('aria-expanded', String(!$('manageMenu').classList.contains('hidden'))); };
+document.addEventListener('click', () => { toggleMenu('exportMenu', false); toggleMenu('moreMenu', false); closeManage(); });
 document.querySelectorAll('[data-dossier]').forEach(b => b.onclick = () => { if (state.current) exportDoc('dossier', b.dataset.dossier, { ids: [state.current['ID']] }, $('dossierHint')); });
 
 // ---------------------------------------------------------------------------
@@ -2027,7 +2050,7 @@ function syncFilterToggle() {
 }
 $('fToggle').onclick = () => { const open = $('fMore').classList.toggle('hidden') === false; $('fToggle').setAttribute('aria-expanded', open ? 'true' : 'false'); };
 ['fBrand', 'fType', 'fPlatform'].forEach(id => $(id).addEventListener('change', syncFilterToggle));
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('ldModal').classList.contains('hidden')) { closeDetail(); return; } showDrawer(false); showModal(false); showLinks(false); showTargets(false); showAdmin(false); toggleMenu('exportMenu', false); toggleMenu('moreMenu', false); if (cfg.key) showConnect(false); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('ldModal').classList.contains('hidden')) { closeDetail(); return; } showDrawer(false); showModal(false); showLinks(false); showTargets(false); showAdmin(false); toggleMenu('exportMenu', false); toggleMenu('moreMenu', false); closeManage(); if (cfg.key) showConnect(false); } });
 // ---------------------------------------------------------------------------
 // TikTok links (Links.gs): paste here, a scheduled run reads them, the outcome comes back here.
 // ---------------------------------------------------------------------------
@@ -2116,7 +2139,7 @@ async function loadLinks() {
       try { await api('links_retry', { link: b.dataset.link }); toast('Back in the queue'); loadLinks(); } catch (e) { toast(e.message); b.disabled = false; }
     });
     const open = rows.filter(o => { const k = linkState(o.status)[0]; return k === 'waiting' || k === 'working' || k === 'decide'; }).length;
-    ['linksBadge', 'linksBadge2'].forEach(id => { $(id).textContent = open; $(id).classList.toggle('hidden', !open); });
+    ['linksBadge', 'linksBadge2'].forEach(id => { $(id).textContent = open; $(id).classList.toggle('hidden', !open); }); syncManageBadge();
   } catch (e) {
     $('lMsg').textContent = /Unknown action/.test(e.message)
       ? 'The backend does not have the Links update yet (Apps Script needs the new Links.gs and a new version).' : e.message;
@@ -2232,12 +2255,12 @@ function renderTargets() {
     if (!t.active) { count.paused++; return; }
     Object.keys(t.handles || {}).forEach(p => { count.accounts++; count[bucket(tgStateOf(t, p))]++; });
   });
-  const chip = (label, n, cls, v) => `<button type="button" data-tgchip="${v}" class="rounded-full px-2.5 py-1 font-semibold ${cls} ${want === v && v ? 'ring-2 ring-slate-900' : ''}">${label} ${n}</button>`;
+  const chip = (label, n, cls, v) => `<button type="button" data-tgchip="${v}" aria-pressed="${want === v}" class="rounded-full px-2.5 py-1 font-semibold ${cls} ${want === v && v ? 'ring-2 ring-slate-900' : ''}">${label} ${n}</button>`;
   $('tgChips').innerHTML = chip('Accounts watched', count.accounts, 'bg-slate-100 text-slate-700', '') + chip('Live', count.live, 'bg-emerald-100 text-emerald-800', 'live') +
     chip('Needs attention', count.attention, 'bg-red-100 text-red-800', 'attention') + chip('Not checked yet', count.unchecked, 'bg-slate-100 text-slate-600', 'unchecked') +
     chip('Could not check', count.blocked, 'bg-slate-200 text-slate-700', 'blocked') + chip('Paused rows', count.paused, 'bg-slate-100 text-slate-600', 'paused');
   $('tgChips').querySelectorAll('[data-tgchip]').forEach(b => b.onclick = () => { $('tgState').value = b.dataset.tgchip; renderTargets(); });
-  ['tgBadge'].forEach(id => { $(id).textContent = count.attention; $(id).classList.toggle('hidden', !count.attention); });
+  ['tgBadge'].forEach(id => { $(id).textContent = count.attention; $(id).classList.toggle('hidden', !count.attention); }); syncManageBadge();
 
   const worst = (t) => { const o = { attention: 0, blocked: 1, unchecked: 2, live: 3 }; const b = Object.keys(t.handles || {}).map(p => o[bucket(tgStateOf(t, p))]); return !t.active ? 9 : (b.length ? Math.min(...b) : 8); };
   const oldest = (t) => { const a = Object.keys(t.handles || {}).map(p => (tgStatusOf(t, p) || {}).checked_at || ''); return a.length ? a.sort()[0] : '~'; };
@@ -2543,6 +2566,13 @@ loadPlatStatus(); setInterval(loadPlatStatus, 600000);
 // Dialogs (audit 15 Nov 2026): none of the drawers and pop-ups said it was a dialog, held keyboard focus, or gave
 // focus back on closing. Done here in one place by watching each one open and close, so no open/close function
 // had to change. Topmost first.
+// Audit U7: the node is moved, not re-ordered with CSS, so the Tab order matches what is on screen.
+const mqPhone = window.matchMedia('(max-width: 639px)');
+function placeShot() {
+  const body = $('dBody'), shot = $('dShotWrap'), before = mqPhone.matches ? body.firstElementChild : $('dAfterShot');
+  if (before !== shot && shot.nextElementSibling !== before) body.insertBefore(shot, before);
+}
+placeShot(); (mqPhone.addEventListener ? mqPhone.addEventListener('change', placeShot) : mqPhone.addListener(placeShot));
 const DIALOGS = [['ldModal', 'Why this was flagged'], ['connect', 'Connect to the backend'], ['modal', 'Manual entry'], ['adminModal', 'Admin: reviewer settings'],
                  ['tgModal', 'Targets'], ['linksModal', 'TikTok links'], ['drawer', 'Complaint details']];
 const dlgOpen = (el) => el.id === 'drawer' ? !el.classList.contains('translate-x-full') : !el.classList.contains('hidden');
@@ -2558,7 +2588,8 @@ DIALOGS.forEach(([id, label]) => {
       dlgReturn[id] = document.activeElement;
       setTimeout(() => { if (dlgOpen(el) && !el.contains(document.activeElement)) { const f = dlgFocusable(el)[0]; if (f) f.focus({ preventScroll: true }); } }, 60);
     } else {
-      const back = dlgReturn[id]; dlgReturn[id] = null;
+      let back = dlgReturn[id]; dlgReturn[id] = null;
+      if (back && back.closest && back.closest('#manageMenu')) back = $('btnManage');
       if (back && document.contains(back) && back.offsetParent !== null) back.focus({ preventScroll: true });
     }
   }).observe(el, { attributes: true, attributeFilter: ['class'] });

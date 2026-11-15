@@ -40,7 +40,7 @@ jobs:
       PW_STORAGE_STATE_SHOP_B64: ${{ secrets.PW_STORAGE_STATE_SHOP_B64 }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Is the login in use by a sweep or an account check?
         id: busy
@@ -59,7 +59,7 @@ jobs:
             echo "busy=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip

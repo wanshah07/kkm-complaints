@@ -76,6 +76,30 @@ function freshTargets() {
   await p.keyboard.press('Escape'); await p.waitForTimeout(300);
   check('drawer: focus returns to where it was', await p.evaluate(() => document.activeElement && document.activeElement.id === 'btnRefresh'), await p.evaluate(() => document.activeElement && (document.activeElement.id || document.activeElement.tagName)));
 
+  check('desktop drawer: status buttons first, then the screenshot', await p.evaluate(() => { const k = [...document.getElementById('dBody').children]; return k[0].classList.contains('stRow') && k.indexOf(document.getElementById('dShotWrap')) === k.indexOf(document.getElementById('dAfterShot')) - 1; }));
+
+  // ============ Manage menu (desktop header)
+  const vis = (sel) => p.evaluate(s => { const e = document.querySelector(s); return !!e && e.offsetParent !== null; }, sel);
+  check('header: Targets, TikTok links and Admin are not loose buttons', !(await vis('#btnTargets')) && !(await vis('#btnLinks')) && !(await vis('#btnAdmin')) && await vis('#btnManage'));
+  check('header: six buttons, on one line', await p.evaluate(() => { const b = [...document.querySelectorAll('header div.ml-auto.sm\\:flex > a, header div.ml-auto.sm\\:flex > button, header div.ml-auto.sm\\:flex > div > button')].filter(e => e.offsetParent !== null); const tops = new Set(b.map(e => Math.round(e.getBoundingClientRect().top / 8))); return b.length === 6 && tops.size === 1; }), await p.evaluate(() => [...document.querySelectorAll('header div.ml-auto.sm\\:flex > a, header div.ml-auto.sm\\:flex > button, header div.ml-auto.sm\\:flex > div > button')].filter(e => e.offsetParent !== null).map(e => e.textContent.trim())));
+  await p.click('#btnManage'); await p.waitForTimeout(100);
+  check('Manage opens its three items and says so', await vis('#btnTargets') && await vis('#btnLinks') && await vis('#btnAdmin') && (await p.getAttribute('#btnManage', 'aria-expanded')) === 'true');
+  await p.click('#btnExport'); await p.waitForTimeout(100);
+  check('opening Export closes Manage', !(await vis('#btnTargets')) && await vis('#exportMenu') && (await p.getAttribute('#btnManage', 'aria-expanded')) === 'false');
+  await p.click('#btnManage'); await p.waitForTimeout(100);
+  check('opening Manage closes Export', await vis('#btnTargets') && !(await vis('#exportMenu')));
+  await p.keyboard.press('Escape'); await p.waitForTimeout(100);
+  check('Escape closes Manage', !(await vis('#btnTargets')));
+  await p.click('#btnManage'); await p.waitForTimeout(100); await p.click('#btnTargets'); await p.waitForTimeout(600);
+  check('a menu item opens its panel and the menu closes', await p.evaluate(() => !document.getElementById('tgModal').classList.contains('hidden') && document.getElementById('manageMenu').classList.contains('hidden')));
+  check('Manage badge adds up what needs a look, in red for accounts', await p.evaluate(() => { const b = document.getElementById('manageBadge'); return b.textContent.trim() === '2' && b.offsetParent !== null && b.classList.contains('bg-red-100') && b.classList.contains('text-xs') && /2 account\(s\) need attention/.test(b.title); }), await p.evaluate(() => document.getElementById('manageBadge').outerHTML));
+  check('chips: only the one in use is pressed', await p.evaluate(() => { const c = [...document.querySelectorAll('#tgChips [data-tgchip]')]; return c.length === 6 && c.filter(x => x.getAttribute('aria-pressed') === 'true').length === 1 && c[0].getAttribute('aria-pressed') === 'true'; }));
+  await click(p, '#tgChips [data-tgchip="attention"]'); await p.waitForTimeout(100);
+  check('chips: pressing one moves the pressed state', await p.evaluate(() => [...document.querySelectorAll('#tgChips [data-tgchip]')].filter(x => x.getAttribute('aria-pressed') === 'true').map(x => x.dataset.tgchip).join() === 'attention'));
+  await click(p, '#tgChips [data-tgchip=""]'); await p.waitForTimeout(100);
+  await p.keyboard.press('Escape'); await p.waitForTimeout(300);
+  check('closing the panel returns focus to Manage', await p.evaluate(() => document.activeElement && document.activeElement.id === 'btnManage'), await p.evaluate(() => document.activeElement && (document.activeElement.id || document.activeElement.tagName)));
+
   // ============ Targets panel
   await click(p, '#btnTargets'); await p.waitForTimeout(600);
   let chips = await text(p, '#tgChips'), list = (await text(p, '#tgList')).replace(/\n+/g, ' ');
@@ -130,6 +154,12 @@ function freshTargets() {
   await p.screenshot({ path: 'phone_list.png' });
   await p.evaluate(() => document.querySelector('#cards > *').click()); await p.waitForTimeout(500);
   check('phone drawer: confirm box keeps its size', await p.evaluate(() => { const e = document.getElementById('kkmConfirm'); const r = e.getBoundingClientRect(); return !e.offsetParent || r.width >= 19; }), await p.evaluate(() => document.getElementById('kkmConfirm').getBoundingClientRect().width));
+  check('phone drawer: the screenshot comes first, the status buttons after it', await p.evaluate(() => { const k = [...document.getElementById('dBody').children]; const a = document.getElementById('dShotWrap').getBoundingClientRect(), b = document.querySelector('#dBody .stRow').getBoundingClientRect(); return k[0].id === 'dShotWrap' && k[1].classList.contains('stRow') && a.bottom <= b.top; }));
+  check('phone drawer: the four status buttons are a 2x2 grid', await p.evaluate(() => { const b = [...document.querySelectorAll('#dBody .stRow > button')].map(e => e.getBoundingClientRect()); return b.length === 4 && Math.abs(b[0].top - b[1].top) < 2 && Math.abs(b[2].top - b[3].top) < 2 && b[2].top > b[0].top && Math.abs(b[0].width - b[1].width) < 2; }));
+  check('phone drawer: the status buttons are still on the first screen', await p.evaluate(() => document.querySelector('#dBody .stRow').getBoundingClientRect().bottom <= window.innerHeight), await p.evaluate(() => Math.round(document.querySelector('#dBody .stRow').getBoundingClientRect().bottom)));
+  await p.setViewportSize({ width: 1024, height: 760 }); await p.waitForTimeout(150);
+  check('widening the window puts the screenshot back under the buttons', await p.evaluate(() => { const k = [...document.getElementById('dBody').children]; return k[0].classList.contains('stRow') && document.getElementById('dShotWrap').nextElementSibling.id === 'dAfterShot'; }));
+  await p.setViewportSize({ width: 360, height: 760 }); await p.waitForTimeout(150);
   await p.screenshot({ path: 'phone_drawer.png' });
   await p.keyboard.press('Escape');
   await click(p, '#btnMore'); await p.waitForTimeout(100); await click(p, '[data-more="targets"]'); await p.waitForTimeout(600);

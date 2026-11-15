@@ -69,8 +69,8 @@ jobs:
       RECHECK_HOURS: ${{ github.event.inputs.recheck_hours || '144' }}
       DRY_RUN: ${{ github.event.inputs.dry_run }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip

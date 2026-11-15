@@ -157,7 +157,7 @@ Risky rows only appear because `push_risky` is on. Turn it off in `scraper/confi
 
 ### Targets in the dashboard, and each account's status (14 Nov 2026)
 
-You no longer have to open the sheet to manage who is watched. Press **Targets** in the dashboard (on a phone: **⋯ → Targets**).
+You no longer have to open the sheet to manage who is watched. Press **Manage ▾ → Targets** in the dashboard (on a phone: **⋯ → Targets**). The number on **Manage** is how many accounts need attention plus how many pasted TikTok links are still open; it is red when an account needs attention.
 
 - **Add account**: a name, then a handle for each platform it has (Instagram, Facebook, Threads, TikTok). A bare handle, an `@handle` or the profile link all work. Leave *Type* blank for a brand's own page; for a person choose their kind (General Doctor, Dermatologist, Pharmacist…), because the reviewer judges a person promoting a product differently from a brand.
 - **Edit**: change handles, type, product hints, notes. The name cannot be changed, because filed complaints carry it; to rename, add a new row and remove the old one.
@@ -252,7 +252,7 @@ Two things that are *not* handle problems, and that no amount of editing will fi
 
 TikTok cannot be swept by account: a runner is shown an empty post list (measured 5 Oct, and nothing here tries to get round it). A single video page does load, so TikTok works **by link**.
 
-1. Open the dashboard and press **TikTok links**. Paste video links, one per line (`tiktok.com/@handle/video/…`, or a `vm.tiktok.com` / `vt.tiktok.com` short link) and press **Add links**.
+1. Open the dashboard and press **Manage ▾ → TikTok links** (on a phone: the **TikTok** tab in the bottom bar). Paste video links, one per line (`tiktok.com/@handle/video/…`, or a `vm.tiktok.com` / `vt.tiktok.com` short link) and press **Add links**.
 2. Within about 15 minutes the scheduled *TikTok link review* workflow claims what is waiting (up to ten at a time), reads each video, screenshots it and reviews it.
 3. **Nothing is filed by itself.** The panel shows each link as *Waiting → Queued → Reading now* and then:
    - **Unacceptable or Risky** → *Your decision*, with the verdict and product. **Add to database** files it in the main table as a KOL row (Brand = the account's handle, the screenshot included); **Dismiss** drops it.
