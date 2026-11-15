@@ -174,7 +174,8 @@ _TABLE_ROW = re.compile(r"\s{2,}(?P<brand>.+?)\s{2,}(?P<plat>Instagram|Facebook|
 def evidence_from_log(text):
     """Per platform, from a sweep's log: accounts read (ok / partial) and walls, and whether the session was ended."""
     out = {}
-    for line in (text or "").splitlines():
+    text = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text or "")
+    for line in text.splitlines():
         m = _TABLE_ROW.search(line)
         if m:
             e = out.setdefault(m.group("plat"), {"ok": 0, "wall": 0, "signed_out": False})
@@ -214,10 +215,28 @@ def last_sweep_evidence(repo, runs=5):
     """{platform: (evidence, finished_at)} from the newest finished scraper runs that read that platform, each with its
     own run's time. {} on any trouble; the reason is printed so the workflow log says why."""
     def gh(path):
-        r = subprocess.run(["gh", "api", path], capture_output=True, text=True, timeout=120)
-        if r.returncode != 0:
-            print("sweep evidence: gh api %s failed: %s" % (path.split("?")[0], (r.stderr or "").strip()[:200]), flush=True)
-        return r.stdout if r.returncode == 0 else ""
+        # A job log carries colour codes, and newer gh refuses to print those unless told it may. Older gh has no
+        # such flag, so it is asked with the flag first and without it if the flag is unknown.
+        r = subprocess.run(["gh", "api", "--allow-escape-sequences", path], capture_output=True, text=True, timeout=120)
+        if r.returncode != 0 and "unknown flag" in (r.stderr or ""):
+            r = subprocess.run(["gh", "api", path], capture_output=True, text=True, timeout=120)
+        if r.returncode == 0:
+            return r.stdout
+        # Last resort, with no gh in the way: the same call with the job's own token (the log address redirects to a
+        # signed one, which urllib follows without sending the token on).
+        token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
+        if token:
+            try:
+                import urllib.request
+                req = urllib.request.Request("https://api.github.com/" + path, headers={
+                    "Authorization": "Bearer " + token, "Accept": "application/vnd.github+json", "User-Agent": "kkm-status"})
+                with urllib.request.urlopen(req, timeout=120) as resp:
+                    return resp.read().decode("utf-8", "replace")
+            except Exception as e:
+                print("sweep evidence: %s failed through gh (%s) and directly (%s)" % (path.split("?")[0], (r.stderr or "").strip()[:120], type(e).__name__), flush=True)
+                return ""
+        print("sweep evidence: gh api %s failed: %s" % (path.split("?")[0], (r.stderr or "").strip()[:200]), flush=True)
+        return ""
     if not repo:
         print("sweep evidence: GITHUB_REPOSITORY is not set", flush=True)
         return {}

@@ -23,6 +23,10 @@ class Evidence(unittest.TestCase):
         self.assertEqual(e["Threads"]["ok"], 2)           # ok and PARTIAL both prove the login reads
         self.assertEqual(e["Facebook"]["wall"], 1)
 
+    def test_colour_codes_in_a_job_log_do_not_hide_the_table(self):
+        coloured = "\x1b[36;1m2026-11-15T12:53:30.3Z   SimplySiti       Instagram  posts=54  ok\x1b[0m\n"
+        self.assertEqual(ps.evidence_from_log(coloured)["Instagram"]["ok"], 1)
+
     def test_signed_out_line(self):
         e = ps.evidence_from_log("ERROR Instagram signed the recorded session out - not swept\n")
         self.assertTrue(e["Instagram"]["signed_out"])
