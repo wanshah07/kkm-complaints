@@ -208,6 +208,70 @@ def clean_url(u):
     return re.sub(r"[?#].*$", "", u or "")
 
 
+SEARCH_JS = """() => {
+  const out = [];
+  const leaves = [...document.querySelectorAll('span,div')].filter(e => e.childElementCount === 0 && /^Library ID:\\s*\\d+/.test((e.textContent || '').trim()));
+  for (const s of leaves) {
+    let el = s, hops = 0;
+    while (el.parentElement && el.parentElement !== document.body && !/Sponsored/.test(el.innerText || '') && hops < 14) { el = el.parentElement; hops++; }
+    const lines = (el.innerText || '').split('\\n').map(x => x.trim()).filter(Boolean);
+    const at = lines.findIndex(x => x === 'Sponsored');
+    const name = at > 0 ? lines[at - 1] : '';
+    const links = [...el.querySelectorAll('a[href]')].map(a => ({ t: (a.innerText || '').trim().slice(0, 40), h: a.href.replace(/[?&](__cft__|__tn__|ref|eav|paipv)[^&]*/g, '').slice(0, 160) }));
+    out.push({ id: s.textContent.match(/\\d+/)[0], name, links: links.filter(l => l.t === name || /facebook\\.com\\/(\\d{5,}|[A-Za-z0-9.]+)\\/?$/.test(l.h)).slice(0, 4), all: links.length });
+  }
+  return out;
+}"""
+
+
+def resolve_test(handles, words):
+    """Which public route gives a page's numeric id, and what an Ad Library card says about its advertiser."""
+    import yaml
+    from urllib.parse import quote
+    from playwright.sync_api import sync_playwright
+    from scraper import facebook_page_id
+    with open(os.path.join(HERE, "..", "scraper", "config.yaml"), "r", encoding="utf-8") as f:
+        run_cfg = (yaml.safe_load(f) or {}).get("run", {}) or {}
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
+        try:
+            ctx = browser.new_context(viewport={"width": 1280, "height": 1600}, locale=run_cfg.get("locale", "en-MY"),
+                                      timezone_id=run_cfg.get("timezone", "Asia/Kuala_Lumpur"), user_agent=run_cfg.get("user_agent"))
+            ctx.set_default_timeout(20000)
+            pg = ctx.new_page()
+            for h in [x.strip() for x in handles.split(",") if x.strip()]:
+                row = []
+                for name, url in (("page", "https://www.facebook.com/%s" % h),
+                                  ("plugin", "https://www.facebook.com/plugins/page.php?href=%s&tabs=&width=340&height=130&small_header=true" % quote("https://www.facebook.com/%s" % h, safe="")),
+                                  ("page2", "https://www.facebook.com/%s" % h)):
+                    try:
+                        r = pg.goto(url, wait_until="domcontentloaded", timeout=45000)
+                        pg.wait_for_timeout(2500)
+                        html = pg.content()
+                        row.append("%s: http=%s login=%s id=%s chars=%d" % (name, r.status if r else "?", "/login" in pg.url.lower(), facebook_page_id(html), len(html)))
+                    except Exception as e:
+                        row.append("%s: %s" % (name, type(e).__name__))
+                    time.sleep(3)
+                print("RESOLVE %-22s %s" % (h, " | ".join(row)))
+            for w in [x.strip() for x in words.split(",") if x.strip()]:
+                try:
+                    pg.goto("https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=MY&q=%s&search_type=keyword_unordered&media_type=all" % quote(w),
+                            wait_until="domcontentloaded", timeout=45000)
+                    pg.wait_for_timeout(7000)
+                    cards = pg.evaluate(SEARCH_JS)
+                    names = {}
+                    for c in cards:
+                        names.setdefault(c["name"], []).append(c)
+                    print("SEARCH %-12s cards=%d advertisers=%s" % (w, len(cards), {k: len(v) for k, v in names.items()}))
+                    for k, v in list(names.items())[:5]:
+                        print("SEARCH %-12s advertiser=%r links=%s all_links_in_card=%s" % (w, k, json.dumps(v[0]["links"], ensure_ascii=False), v[0]["all"]))
+                except Exception as e:
+                    print("SEARCH %-12s could not read: %s" % (w, type(e).__name__))
+                time.sleep(4)
+        finally:
+            browser.close()
+
+
 def sweep_test(spec, out_dir):
     """The sweep's own Facebook route (Scraper._scrape_target) on a few pages. Prints, files nothing."""
     import yaml
@@ -260,11 +324,17 @@ def main():
     ap.add_argument("--ads-page", default="cetaphilmalaysia", help="a Facebook page handle whose own ads are listed ('' to skip)")
     ap.add_argument("--sweep-test", default="", help="Brand=handle[,Brand=handle]: run the sweep's own Facebook code on these and print what it would hand the reviewer; nothing is filed")
     ap.add_argument("--only-sweep-test", action="store_true", help="skip the login and public-page probes")
+    ap.add_argument("--resolve", default="", help="handles, comma separated: which public route gives each page's numeric id (page, page plugin)")
+    ap.add_argument("--search", default="", help="words, comma separated: Ad Library keyword search, printing each card's advertiser and where its name links")
     args = ap.parse_args()
+    if args.resolve or args.search:
+        resolve_test(args.resolve, args.search)
     if args.sweep_test:
         code = sweep_test(args.sweep_test, args.out)
         if args.only_sweep_test:
             return code
+    elif args.only_sweep_test:
+        return 0
     raw_b64 = (os.environ.get("PW_STORAGE_STATE_B64") or "").strip()
     if not raw_b64:
         print("RESULT no_session  PW_STORAGE_STATE_B64 is empty")
