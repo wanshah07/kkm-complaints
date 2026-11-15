@@ -30,7 +30,8 @@ class Evidence(unittest.TestCase):
     def test_sweep_that_read_accounts_makes_it_live_and_current(self):
         carried = [entry("instagram", "Instagram", "live", "2026-11-14T22:35:28Z"), entry("facebook", "Facebook", "live", "2026-11-15T12:06:07Z"),
                    entry("threads", "Threads", "live", "2026-11-14T22:35:28Z")]
-        out = ps.apply_sweep_evidence(carried, ps.evidence_from_log(LOG), "2026-11-15T12:53:30Z")
+        e = ps.evidence_from_log(LOG)
+        out = ps.apply_sweep_evidence(carried, {"Instagram": (e["Instagram"], "2026-11-15T12:53:30Z"), "Threads": (e["Threads"], "2026-11-15T12:53:30Z")})
         ig, fb, th = out
         self.assertEqual((ig["state"], ig["at"], ig["carried"]), ("live", "2026-11-15T12:53:30Z", False))
         self.assertIn("read 2 account(s) on Instagram", ig["detail"])
@@ -39,17 +40,17 @@ class Evidence(unittest.TestCase):
 
     def test_signed_out_wins_even_when_some_accounts_read(self):
         carried = [entry("instagram", "Instagram", "live", "2026-11-14T22:35:28Z")]
-        ev = {"Instagram": {"ok": 3, "wall": 0, "signed_out": True}}
-        self.assertEqual(ps.apply_sweep_evidence(carried, ev, "2026-11-15T12:53:30Z")[0]["state"], "down")
+        ev = {"Instagram": ({"ok": 3, "wall": 0, "signed_out": True}, "2026-11-15T12:53:30Z")}
+        self.assertEqual(ps.apply_sweep_evidence(carried, ev)[0]["state"], "down")
 
     def test_no_evidence_keeps_the_old_result_and_its_time(self):
         carried = [entry("threads", "Threads", "live", "2026-11-14T22:35:28Z")]
-        self.assertEqual(ps.apply_sweep_evidence(carried, {}, "2026-11-15T12:53:30Z"), carried)
-        self.assertEqual(ps.apply_sweep_evidence(carried, {"Threads": {"ok": 0, "wall": 4, "signed_out": False}}, "2026-11-15T12:53:30Z"), carried)
+        self.assertEqual(ps.apply_sweep_evidence(carried, {}), carried)
+        self.assertEqual(ps.apply_sweep_evidence(carried, {"Threads": ({"ok": 0, "wall": 4, "signed_out": False}, "2026-11-15T12:53:30Z")}), carried)
 
     def test_an_older_sweep_never_overwrites_a_newer_probe(self):
         carried = [entry("instagram", "Instagram", "down", "2026-11-15T13:00:00Z")]
-        self.assertEqual(ps.apply_sweep_evidence(carried, {"Instagram": {"ok": 5, "wall": 0, "signed_out": False}}, "2026-11-15T12:53:30Z"), carried)
+        self.assertEqual(ps.apply_sweep_evidence(carried, {"Instagram": ({"ok": 5, "wall": 0, "signed_out": False}, "2026-11-15T12:53:30Z")}), carried)
 
 
 if __name__ == "__main__":

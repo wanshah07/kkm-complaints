@@ -188,15 +188,17 @@ def evidence_from_log(text):
     return out
 
 
-def apply_sweep_evidence(carried, evidence, run_at, run_title=""):
-    """Replace a carried Instagram / Threads entry with what the last finished sweep showed, when that is newer."""
-    when = (run_at or "")[:16].replace("T", " ")
+def apply_sweep_evidence(carried, found):
+    """Replace a carried Instagram / Threads entry with what a finished sweep showed, when that is newer.
+    `found` is {platform: (evidence, finished_at)}."""
     out = []
     for c in carried:
-        ev = evidence.get({"instagram": "Instagram", "threads": "Threads"}.get(c.get("key"), ""))
-        if not ev or not run_at or (c.get("at") or "") >= run_at:
+        hit = found.get({"instagram": "Instagram", "threads": "Threads"}.get(c.get("key"), ""))
+        if not hit or not hit[1] or (c.get("at") or "") >= hit[1]:
             out.append(c)
             continue
+        ev, run_at = hit
+        when = run_at[:16].replace("T", " ")
         q = dict(c)
         if ev["signed_out"]:
             q.update(state="down", at=run_at, carried=False, links=None,
@@ -208,33 +210,40 @@ def apply_sweep_evidence(carried, evidence, run_at, run_title=""):
     return out
 
 
-def last_sweep_evidence(repo, runs=4):
-    """(evidence, finished_at) from the newest finished scraper runs that read each platform. ({}, "") on any trouble."""
+def last_sweep_evidence(repo, runs=5):
+    """{platform: (evidence, finished_at)} from the newest finished scraper runs that read that platform, each with its
+    own run's time. {} on any trouble; the reason is printed so the workflow log says why."""
     def gh(path):
         r = subprocess.run(["gh", "api", path], capture_output=True, text=True, timeout=120)
+        if r.returncode != 0:
+            print("sweep evidence: gh api %s failed: %s" % (path.split("?")[0], (r.stderr or "").strip()[:200]), flush=True)
         return r.stdout if r.returncode == 0 else ""
+    if not repo:
+        print("sweep evidence: GITHUB_REPOSITORY is not set", flush=True)
+        return {}
     try:
         listing = json.loads(gh("repos/%s/actions/workflows/scraper.yml/runs?per_page=%d&status=completed" % (repo, runs)) or "{}")
-    except Exception:
-        return {}, ""
-    best, best_at = {}, ""
+    except Exception as e:
+        print("sweep evidence: unreadable run list: %s" % type(e).__name__, flush=True)
+        return {}
+    found = {}
     for run in (listing.get("workflow_runs") or []):
         if run.get("conclusion") not in ("success", "failure"):
             continue
         try:
             jobs = json.loads(gh("repos/%s/actions/runs/%s/jobs" % (repo, run["id"])) or "{}").get("jobs") or []
             log = gh("repos/%s/actions/jobs/%s/logs" % (repo, jobs[0]["id"])) if jobs else ""
-        except Exception:
+        except Exception as e:
+            print("sweep evidence: run %s unreadable: %s" % (run.get("id"), type(e).__name__), flush=True)
             continue
         ev = evidence_from_log(log)
-        if ev and not best:
-            best, best_at = ev, run.get("updated_at") or ""
-        elif ev:
-            for k, v in ev.items():
-                best.setdefault(k, v)
-        if all(k in best for k in ("Instagram", "Threads")):
+        print("sweep evidence: run %s finished %s: %s" % (run.get("id"), run.get("updated_at"), {k: v["ok"] for k, v in ev.items()} or "no platform table"), flush=True)
+        for plat, e in ev.items():
+            if plat not in found and (e["ok"] or e["signed_out"]):
+                found[plat] = (e, run.get("updated_at") or "")
+        if all(k in found for k in ("Instagram", "Threads")):
             break
-    return best, best_at
+    return found
 
 
 def main():
@@ -278,9 +287,9 @@ def main():
             if not any(c.get("key") == "facebook" for c in carried):
                 carried.insert(1, r)
             print("%-10s %-9s links=%s  %s" % (r["label"], r["state"], r["links"], r["detail"]), flush=True)
-        evidence, evidence_at = last_sweep_evidence(os.environ.get("GITHUB_REPOSITORY", ""))
+        found = last_sweep_evidence(os.environ.get("GITHUB_REPOSITORY", ""))
         before = [(c.get("key"), c.get("state"), c.get("at")) for c in carried]
-        carried = apply_sweep_evidence(carried, evidence, evidence_at)
+        carried = apply_sweep_evidence(carried, found)
         from_sweep = [c for c, b in zip(carried, before) if (c.get("key"), c.get("state"), c.get("at")) != b]
         result["platforms"].extend(carried)
         result["notes"].append("%s not probed: a sweep or an account check was using the login.%s" % (
