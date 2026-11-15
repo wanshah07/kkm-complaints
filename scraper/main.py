@@ -92,6 +92,8 @@ def build_record(post, verdict: dict, run_cfg: dict, drive: Optional[DriveUpload
         remarks += f"; {verdict['notes']}"
     if post.errors:
         remarks += "; scrape: " + "; ".join(post.errors)
+    if getattr(post, "notes", None):
+        remarks += "; note: " + "; ".join(post.notes)
     rec = {
         "date": (post.posted_at or now_my.strftime("%Y-%m-%d")),
         "brand": post.brand,
