@@ -90,7 +90,9 @@ class AccountStatus(unittest.TestCase):
 
     def test_no_ads_is_still_a_page_that_reads(self):
         out = ac.classify(self.res(ads_how="looked up in the Ad Library by the name 'QV', matched on the handle @QVSkincareMY: none of 30 advertisement(s) under that name is by this page"), 0)
-        self.assertEqual(out["state"], "live"); self.assertIn("No advertisement by this page", out["detail"]); self.assertIn("none of 30", out["detail"])
+        self.assertEqual(out["state"], "empty"); self.assertIn("Check the handle", out["detail"]); self.assertIn("none of 30", out["detail"])
+        out = ac.classify(self.res(ads_how="page number read from the page's public address"), 0)
+        self.assertEqual(out["state"], "live"); self.assertIn("No advertisement by this page is running", out["detail"])
 
     def test_wrong_handle_and_login(self):
         self.assertEqual(ac.classify(self.res(error="the page's id could not be read from its public page — profile not available (handle wrong or region-blocked)"), 0)["state"], "not_found")

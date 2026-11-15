@@ -122,6 +122,12 @@ def classify(res, links: int, signed_in: bool = True) -> dict:
     if getattr(res, "via_ads", False):
         # Facebook is read through Meta's Ad Library. A page running no advertisement is still a page that reads.
         how = str(getattr(res, "ads_how", "") or "")
+        if not links and "none of" in how:
+            # Looked up by name and nothing links to this handle. That is a page running nothing here, or a handle
+            # that is not the page's own; the two cannot be told apart from the Library, so it is not called Live.
+            return {"state": "empty", "detail": "No advertisement by this page was found in Malaysia's Ad Library, and the page itself "
+                                                "could not be opened to confirm the handle. Check the handle if this page does advertise. ("
+                                                + how[:200] + ")"}
         return {"state": "live", "detail": ((f"{links} advertisement(s) running in Malaysia (Meta Ad Library)." if links
                                              else "No advertisement by this page is running in Malaysia right now (Meta Ad Library).")
                                             + (" Found: " + how[:220] + "." if how else ""))}

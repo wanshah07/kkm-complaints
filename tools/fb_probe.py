@@ -272,7 +272,7 @@ def resolve_test(handles, words):
             browser.close()
 
 
-def sweep_test(spec, out_dir):
+def sweep_test(spec, out_dir, try_public=True):
     """The sweep's own Facebook route (Scraper._scrape_target) on a few pages. Prints, files nothing."""
     import yaml
     from playwright.sync_api import sync_playwright
@@ -280,6 +280,7 @@ def sweep_test(spec, out_dir):
     with open(os.path.join(HERE, "..", "scraper", "config.yaml"), "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     os.makedirs(out_dir, exist_ok=True)
+    cfg.setdefault("run", {})["facebook_try_public_page"] = bool(try_public)
     saved = os.environ.pop("PW_STORAGE_STATE_B64", None)  # this route presents no login; prove it needs none
     try:
         sc = Scraper(cfg, out_dir)
@@ -325,13 +326,14 @@ def main():
     ap.add_argument("--ads-page", default="cetaphilmalaysia", help="a Facebook page handle whose own ads are listed ('' to skip)")
     ap.add_argument("--sweep-test", default="", help="Brand=handle[,Brand=handle]: run the sweep's own Facebook code on these and print what it would hand the reviewer; nothing is filed")
     ap.add_argument("--only-sweep-test", action="store_true", help="skip the login and public-page probes")
+    ap.add_argument("--no-public-page", action="store_true", help="sweep test: do not try the page's public address, so the lookup by name is what gets tested")
     ap.add_argument("--resolve", default="", help="handles, comma separated: which public route gives each page's numeric id (page, page plugin)")
     ap.add_argument("--search", default="", help="words, comma separated: Ad Library keyword search, printing each card's advertiser and where its name links")
     args = ap.parse_args()
     if args.resolve or args.search:
         resolve_test(args.resolve, args.search)
     if args.sweep_test:
-        code = sweep_test(args.sweep_test, args.out)
+        code = sweep_test(args.sweep_test, args.out, try_public=not args.no_public_page)
         if args.only_sweep_test:
             return code
     elif args.only_sweep_test:

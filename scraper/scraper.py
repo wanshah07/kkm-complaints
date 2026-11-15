@@ -1050,10 +1050,10 @@ class Scraper:
         return ("Instagram signed the recorded session out - not swept (a signed-out grid shows only its "
                 "newest 12 posts). Record the session again (GUIDE section 4) and update PW_STORAGE_STATE_B64")
 
-    def _context(self, browser: Browser, use_storage: bool = True, block_media: bool = True) -> BrowserContext:
+    def _context(self, browser: Browser, use_storage: bool = True, block_media: bool = True, scale: int = 1) -> BrowserContext:
         kwargs = dict(
             viewport={"width": 1280, "height": 1600},
-            device_scale_factor=1,
+            device_scale_factor=scale,
             locale=self.run_cfg.get("locale", "en-MY"),
             timezone_id=self.run_cfg.get("timezone", "Asia/Kuala_Lumpur"),
             user_agent=self.run_cfg.get("user_agent"),
@@ -1414,7 +1414,7 @@ class Scraper:
         page_id, how = facebook_page_id("", handle), "the Facebook column holds the page's number"
         if not page_id and key in cache:
             page_id, how = cache[key], "page number found earlier in this run"
-        if not page_id:
+        if not page_id and self.run_cfg.get("facebook_try_public_page", True):
             try:
                 page.goto("https://www.facebook.com/%s" % handle, wait_until="domcontentloaded", timeout=45000)
                 page.wait_for_timeout(2500)
@@ -1485,7 +1485,9 @@ class Scraper:
         platform = "Facebook"
         t0 = time.time()
         res.via_ads = True
-        ctx = self._context(browser, use_storage=False, block_media=False)     # no login is presented to Facebook at all
+        # No login is presented to Facebook at all. Drawn at twice the density: an advertisement card is 392 px
+        # wide, and the words inside its picture are what the reviewer and the officer have to read.
+        ctx = self._context(browser, use_storage=False, block_media=False, scale=2)
         page = None
         try:
             limit = min(int(self.run_cfg.get("max_posts_per_profile", 60) or 60), int(self.run_cfg.get("max_ads_per_page", 60) or 60))

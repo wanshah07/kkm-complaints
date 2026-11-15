@@ -26,6 +26,10 @@ on:
       search:
         description: "Words, comma separated: Ad Library keyword search, printing each advertiser"
         default: ''
+      no_public_page:
+        description: "Sweep test: skip the page's public address, so the lookup by name is tested"
+        type: boolean
+        default: false
       only_sweep_test:
         description: Skip the login and public-page probes
         type: boolean
@@ -76,7 +80,8 @@ jobs:
           RESOLVE: ${{ inputs.resolve }}
           SEARCH: ${{ inputs.search }}
           ONLY: ${{ inputs.only_sweep_test && '--only-sweep-test' || '' }}
-        run: python tools/fb_probe.py --handle "$HANDLE" --public "$PUBLIC" --adq "$ADQ" --ads-page "$ADS_PAGE" --sweep-test "$SWEEP_TEST" --resolve "$RESOLVE" --search "$SEARCH" $ONLY --out fb_probe_out
+          NOPUB: ${{ inputs.no_public_page && '--no-public-page' || '' }}
+        run: python tools/fb_probe.py --handle "$HANDLE" --public "$PUBLIC" --adq "$ADQ" --ads-page "$ADS_PAGE" --sweep-test "$SWEEP_TEST" --resolve "$RESOLVE" --search "$SEARCH" $ONLY $NOPUB --out fb_probe_out
       - name: Upload the pictures
         if: always()
         uses: actions/upload-artifact@v4
