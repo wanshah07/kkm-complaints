@@ -133,6 +133,77 @@ def close_dialog(page):
     return 0
 
 
+PAGE_ID_PATTERNS = (("pageID", r'"pageID":"(\d{5,})"'), ("delegate_page", r'"delegate_page":\{[^}]*?"id":"(\d{5,})"'),
+                    ("fb_page_url", r"fb://page/\?id=(\d{5,})"), ("fb_profile_url", r"fb://profile/(\d{5,})"),
+                    ("userID", r'"userID":"(\d{5,})"'), ("page_id", r'"page_id":"(\d{5,})"'),
+                    ("associated_page_id", r'"associated_page_id":"(\d{5,})"'))
+
+CARDS_JS = """() => {
+  const out = [];
+  const leaves = [...document.querySelectorAll('span,div')].filter(e => e.childElementCount === 0 && /^Library ID:\\s*\\d+/.test((e.textContent || '').trim()));
+  for (const s of leaves) {
+    let el = s, hops = 0;
+    while (el.parentElement && el.parentElement !== document.body && !/Sponsored/.test(el.innerText || '') && hops < 14) { el = el.parentElement; hops++; }
+    const r = el.getBoundingClientRect();
+    out.push({ id: s.textContent.match(/\\d+/)[0], hops, w: Math.round(r.width), h: Math.round(r.height), tag: el.tagName,
+               sponsored: /Sponsored/.test(el.innerText || ''), ids_inside: ((el.innerText || '').match(/Library ID:/g) || []).length, text: (el.innerText || '') });
+  }
+  return out;
+}"""
+
+
+def ads_probe(ctx, handle, out_dir):
+    pg = ctx.new_page()
+    try:
+        pg.goto("https://www.facebook.com/%s" % handle, wait_until="domcontentloaded", timeout=45000)
+        pg.wait_for_timeout(3000)
+        html = pg.content()
+        found = {}
+        for name, pat in PAGE_ID_PATTERNS:
+            vals = re.findall(pat, html)
+            if vals:
+                found[name] = sorted(set(vals), key=vals.count, reverse=True)[:3]
+        print("ADPAGE %s id candidates: %s" % (handle, found))
+        page_id = next((found[k][0] for k in ("pageID", "delegate_page", "fb_page_url", "associated_page_id", "page_id", "fb_profile_url", "userID") if k in found), "")
+        if not page_id:
+            print("ADPAGE no page id found in the public page")
+            return
+        url = "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=MY&view_all_page_id=%s" % page_id
+        pg.goto(url, wait_until="domcontentloaded", timeout=45000)
+        pg.wait_for_timeout(7000)
+        series = []
+        for i in range(8):
+            series.append(len(pg.evaluate(CARDS_JS)))
+            pg.mouse.wheel(0, 3000)
+            pg.wait_for_timeout(1800)
+        cards = pg.evaluate(CARDS_JS)
+        body = pg.locator("body").inner_text(timeout=4000) or ""
+        res = re.search(r"~?([\d,]+)\s+results?", body)
+        print("ADLIST page_id=%s redirected_to_login=%s results_line=%s cards_by_scroll=%s final=%d" % (page_id, "/login" in pg.url, res.group(0) if res else "none", series, len(cards)))
+        for c in cards[:3]:
+            print("ADLIST card id=%s hops=%s box=%sx%s tag=%s sponsored=%s ids_inside=%s text_chars=%d" % (c["id"], c["hops"], c["w"], c["h"], c["tag"], c["sponsored"], c["ids_inside"], len(c["text"])))
+            print("ADLIST card text: %s" % json.dumps(c["text"][:900], ensure_ascii=False))
+        if not cards:
+            print("ADLIST page text head: %s" % json.dumps(body[:500], ensure_ascii=False))
+            return
+        one = pg.context.new_page()
+        one.goto("https://www.facebook.com/ads/library/?id=%s" % cards[0]["id"], wait_until="domcontentloaded", timeout=45000)
+        one.wait_for_timeout(7000)
+        oc = one.evaluate(CARDS_JS)
+        obody = one.locator("body").inner_text(timeout=4000) or ""
+        print("ADONE url=%s redirected_to_login=%s cards=%d body_chars=%d dialogs=%d" % (clean_url(one.url) + "?id=" + cards[0]["id"], "/login" in one.url, len(oc), len(obody), one.locator("div[role='dialog']").count()))
+        for c in oc[:2]:
+            print("ADONE card id=%s hops=%s box=%sx%s sponsored=%s ids_inside=%s text_chars=%d same_text_as_list=%s" % (c["id"], c["hops"], c["w"], c["h"], c["sponsored"], c["ids_inside"], len(c["text"]), c["text"] == cards[0]["text"]))
+            print("ADONE card text: %s" % json.dumps(c["text"][:1200], ensure_ascii=False))
+        print("ADONE body head: %s" % json.dumps(obody[:700], ensure_ascii=False))
+        one.screenshot(path=os.path.join(out_dir, "ad_one.png"), full_page=False)
+        pg.screenshot(path=os.path.join(out_dir, "ad_list.png"), full_page=False)
+    except Exception as e:
+        print("ADPAGE could not finish: %s %s" % (type(e).__name__, str(e)[:200]))
+    finally:
+        pg.close()
+
+
 def clean_url(u):
     return re.sub(r"[?#].*$", "", u or "")
 
@@ -144,6 +215,7 @@ def main():
     ap.add_argument("--public", default="cetaphilmalaysia,larocheposaymalaysia", help="pages to read with no cookies at all, comma separated")
     ap.add_argument("--scrolls", type=int, default=10)
     ap.add_argument("--adq", default="cetaphil", help="a word to look up in Meta's Ad Library (Malaysia)")
+    ap.add_argument("--ads-page", default="cetaphilmalaysia", help="a Facebook page handle whose own ads are listed ('' to skip)")
     args = ap.parse_args()
     raw_b64 = (os.environ.get("PW_STORAGE_STATE_B64") or "").strip()
     if not raw_b64:
@@ -276,6 +348,10 @@ def main():
                 ap_.screenshot(path=os.path.join(args.out, "adlib.png"), full_page=False)
             except Exception as e:
                 print("ADLIB could not read: %s" % type(e).__name__)
+
+            # ---- One brand page's own ads: resolve the page id from the public page, list its ads, open one.
+            if args.ads_page:
+                ads_probe(pub, args.ads_page, args.out)
             pub.close()
         finally:
             browser.close()
