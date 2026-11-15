@@ -61,6 +61,7 @@ class Post:
     blocked: bool = False    # the platform served a login wall, not the post; never sent for review
     known: bool = False      # already in the sheet or the Reviewed ledger: never opened, main.py skips it
     owner: Optional[str] = None   # the account the post turned out to belong to (read off the page), when known
+    notes: List[str] = field(default_factory=list)   # things the row's Remarks should say that are not errors
 
 
 @dataclass
@@ -987,6 +988,9 @@ class Scraper:
                 except Exception:
                     pass
         post.screenshot_path = path
+        # Said on the row itself: whoever files it should know what the picture does and does not show.
+        post.notes.append("screenshot is the video's cover frame from TikTok's embed player; wording that only "
+                          "appears later in the video is not in it")
         log.info("[%s/TikTok] screenshot: TikTok embed player (the video page shows a login dialog to a "
                  "logged-out visitor)", brand)
         return True

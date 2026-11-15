@@ -84,6 +84,15 @@ class Reader(unittest.TestCase):
         self.assertEqual(sc._diagnose_empty(Page("Dr X · Private practice dermatologist, KL"), d, "t"), "")
         self.assertIn("no posts yet", sc._diagnose_empty(Page("drx Threads No threads yet"), d, "t"))
 
+    def test_notes_reach_the_remarks(self):
+        import inspect
+        src = inspect.getsource(m)
+        self.assertIn('"; note: " + "; ".join(post.notes)', src)
+        p = sc.Post(brand="b", platform="TikTok", url="https://www.tiktok.com/@a/video/1")
+        self.assertEqual(p.notes, [])
+        p.notes.append("x")
+        self.assertEqual(sc.Post(brand="b", platform="TikTok", url="u").notes, [])        # not shared between posts
+
     def test_target_result_defaults(self):
         r = sc.TargetResult(brand="b", platform="Instagram", profile_url="u")
         self.assertEqual((r.links_found, r.signed_out_view, r.capped), (0, False, False))
