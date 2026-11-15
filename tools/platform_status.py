@@ -60,8 +60,36 @@ def cookie_days_left(raw_b64, site_words, name_words):
     return None if best is None else round(best, 1)
 
 
+def facebook_by_ads(sc):
+    return str(sc.run_cfg.get("facebook_source", "ads")).lower() == "ads"
+
+
+def probe_facebook_ads(sc, browser, key, label, handle):
+    """Facebook is read through Meta's Ad Library, with no login: can the test page's advertisements be listed?"""
+    out = {"key": key, "label": label, "state": "unknown", "detail": "", "links": None}
+    ctx = sc._context(browser, use_storage=False)
+    try:
+        _page, page_id, cards, err = sc.facebook_ads_listing(ctx, handle, 12)
+        if err:
+            out.update(state="down" if "login" in err.lower() else "degraded",
+                       detail="Meta's Ad Library could not be read for the test page: %s." % err)
+        else:
+            out.update(state="live", links=len(cards),
+                       detail="Read through Meta's Ad Library, which needs no login: %d advertisement(s) listed for the test page." % len(cards))
+    except Exception as e:
+        out.update(state="unknown", detail="Could not check: %s" % type(e).__name__)
+    finally:
+        try:
+            ctx.close()
+        except Exception:
+            pass
+    return out
+
+
 def probe_one(sc, browser, key, label, platform, handle, want_links):
     from scraper import _collect_links, _dismiss_dialogs, _is_login_wall, _wait_for_posts
+    if platform == "Facebook" and facebook_by_ads(sc):
+        return probe_facebook_ads(sc, browser, key, label, handle)
     from playwright.sync_api import TimeoutError as PWTimeout
     pcfg = sc.platforms[platform]
     url = pcfg["profile_url"].format(handle=handle)
@@ -149,20 +177,40 @@ def main():
     shop_b64 = os.environ.get("PW_STORAGE_STATE_SHOP_B64", "")
 
     carried = carry_previous(args.carry) if args.carry else None
-    if carried is not None:
-        # The probe uses the same login as the sweep. Two browsers on one session at once is what gets a session
-        # signed out, so while a sweep or an account check runs the last real result is kept, with its own time.
-        result["platforms"].extend(carried)
-        result["notes"].append("Instagram, Facebook and Threads were not re-tested: a sweep or an account check was using the login.")
-        for r in carried:
-            print("%-10s %-9s carried from %s" % (r["label"], r["state"], r.get("at", "")), flush=True)
-    elif not args.no_browser:
+    sc = None
+    if not args.no_browser:
         import yaml
         from playwright.sync_api import sync_playwright
         from scraper import Scraper
         with open(os.path.join(HERE, "..", "scraper", "config.yaml"), "r", encoding="utf-8") as f:
             cfg = yaml.safe_load(f)
         sc = Scraper(cfg, os.path.join(HERE, "status_tmp"))
+    if carried is not None:
+        # The probe uses the same login as the sweep. Two browsers on one session at once is what gets a session
+        # signed out, so while a sweep or an account check runs the last real result is kept, with its own time.
+        # Facebook is the exception since 15 Nov 2026: it is read through the Ad Library with no login at all, so
+        # it is tested every time. Otherwise a day of back-to-back sweeps would show its last result all day.
+        fresh_fb = sc is not None and facebook_by_ads(sc)
+        if fresh_fb:
+            fb = next(p for p in PROBES if p[0] == "facebook")
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
+                try:
+                    r = probe_facebook_ads(sc, browser, fb[0], fb[1], fb[3])
+                finally:
+                    browser.close()
+            r["at"] = now_iso()
+            carried = [r if c.get("key") == "facebook" else c for c in carried]
+            if not any(c.get("key") == "facebook" for c in carried):
+                carried.insert(1, r)
+            print("%-10s %-9s links=%s  %s" % (r["label"], r["state"], r["links"], r["detail"]), flush=True)
+        result["platforms"].extend(carried)
+        result["notes"].append("%s not re-tested: a sweep or an account check was using the login." % (
+            "Instagram and Threads were" if fresh_fb else "Instagram, Facebook and Threads were"))
+        for r in carried:
+            if not (fresh_fb and r.get("key") == "facebook"):
+                print("%-10s %-9s carried from %s" % (r["label"], r["state"], r.get("at", "")), flush=True)
+    elif sc is not None:
         if not sc._storage_state_path:
             result["notes"].append("No saved login is configured (PW_STORAGE_STATE_B64 empty or invalid): every platform is read signed out.")
         with sync_playwright() as pw:
@@ -172,7 +220,7 @@ def main():
                     if i:
                         time.sleep(8)
                     r = probe_one(sc, browser, key, label, platform, handle, want)
-                    if not sc._storage_state_path and r["state"] == "live":
+                    if not sc._storage_state_path and r["state"] == "live" and not (platform == "Facebook" and facebook_by_ads(sc)):
                         r["state"], r["detail"] = "degraded", "Reading posts, but no saved login is configured."
                     r["at"] = now_iso()
                     result["platforms"].append(r)
@@ -182,7 +230,8 @@ def main():
 
     days = cookie_days_left(raw_b64, ("instagram.com",), ("sessionid",))
     result["session_days_left"] = {"instagram": days,
-                                   "facebook": cookie_days_left(raw_b64, ("facebook.com",), ("xs",)),
+                                   # No Facebook login is used when it is read through the Ad Library.
+                                   "facebook": None if (sc is not None and facebook_by_ads(sc)) else cookie_days_left(raw_b64, ("facebook.com",), ("xs",)),
                                    "threads": cookie_days_left(raw_b64, ("threads.",), ("sessionid",))}
     tt_days = cookie_days_left(shop_b64, ("tiktok.",), ("sessionid", "sessionid_ss", "sid_tt"))
 

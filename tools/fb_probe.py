@@ -208,6 +208,48 @@ def clean_url(u):
     return re.sub(r"[?#].*$", "", u or "")
 
 
+def sweep_test(spec, out_dir):
+    """The sweep's own Facebook route (Scraper._scrape_target) on a few pages. Prints, files nothing."""
+    import yaml
+    from playwright.sync_api import sync_playwright
+    from scraper import Scraper, canonical_url
+    with open(os.path.join(HERE, "..", "scraper", "config.yaml"), "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+    os.makedirs(out_dir, exist_ok=True)
+    saved = os.environ.pop("PW_STORAGE_STATE_B64", None)  # this route presents no login; prove it needs none
+    try:
+        sc = Scraper(cfg, out_dir)
+    finally:
+        if saved is not None:
+            os.environ["PW_STORAGE_STATE_B64"] = saved
+    bad = 0
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
+        try:
+            for pair in [x for x in spec.split(",") if "=" in x]:
+                brand, handle = [v.strip() for v in pair.split("=", 1)]
+                t0 = time.time()
+                res = sc._scrape_target(browser, brand, "Facebook", handle)
+                new = [p for p in res.posts if not p.known]
+                print("SWEEP %-16s handle=%s via_ads=%s ads_listed=%s new=%d error=%s capped=%s secs=%.0f" % (
+                    brand, handle, res.via_ads, res.links_found, len(new), res.error, res.capped, time.time() - t0))
+                if res.error:
+                    bad += 1
+                for p in new[:4]:
+                    size = os.path.getsize(p.screenshot_path) if p.screenshot_path and os.path.exists(p.screenshot_path) else 0
+                    print("SWEEP   ad url=%s started=%s text_chars=%d shot_bytes=%d current=%s errors=%s" % (p.url, p.posted_at, len(p.text or ""), size, p.always_current, p.errors))
+                    print("SWEEP   canonical=%s note=%s" % (canonical_url(p.url), p.notes))
+                    print("SWEEP   text: %s" % json.dumps((p.text or "")[:500], ensure_ascii=False))
+                # a second visit with the first one's ads known must open none of them
+                sc.known_urls = set(sc.known_urls) | {canonical_url(p.url) for p in new}
+                again = sc._scrape_target(browser, brand, "Facebook", handle)
+                print("SWEEP %-16s second visit: listed=%s new=%d (expect 0)" % (brand, again.links_found, len([p for p in again.posts if not p.known])))
+                time.sleep(5)
+        finally:
+            browser.close()
+    return 1 if bad else 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--handle", default="cetaphilmalaysia")
@@ -216,7 +258,13 @@ def main():
     ap.add_argument("--scrolls", type=int, default=10)
     ap.add_argument("--adq", default="cetaphil", help="a word to look up in Meta's Ad Library (Malaysia)")
     ap.add_argument("--ads-page", default="cetaphilmalaysia", help="a Facebook page handle whose own ads are listed ('' to skip)")
+    ap.add_argument("--sweep-test", default="", help="Brand=handle[,Brand=handle]: run the sweep's own Facebook code on these and print what it would hand the reviewer; nothing is filed")
+    ap.add_argument("--only-sweep-test", action="store_true", help="skip the login and public-page probes")
     args = ap.parse_args()
+    if args.sweep_test:
+        code = sweep_test(args.sweep_test, args.out)
+        if args.only_sweep_test:
+            return code
     raw_b64 = (os.environ.get("PW_STORAGE_STATE_B64") or "").strip()
     if not raw_b64:
         print("RESULT no_session  PW_STORAGE_STATE_B64 is empty")

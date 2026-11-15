@@ -174,7 +174,7 @@ You no longer have to open the sheet to manage who is watched. Press **Manage �
 | Not found | The platform says there is no such profile | Correct the handle, or remove the row |
 | Private | The profile is private to our login | Remove it, or follow it from the recorded account |
 | Could not check | A login wall or soft block, not the account's fault | Nothing; the next check tries again |
-| Login refused | Only the public, signed-out view could be read (on Facebook that is usually one post). Our saved login was not accepted for that page | If many accounts on one platform show it, record the session again (section 4) |
+| Login refused | Only the public, signed-out view could be read. Our saved login was not accepted for that page (Instagram or Threads; Facebook uses no login, see *Facebook is read through Meta's Ad Library*) | If many accounts on one platform show it, record the session again (section 4) |
 | Not checked yet | Added or changed since the last check | Nothing; the next check takes these first |
 
 The line beside the badge says when it was checked and how many posts were seen, and when a sweep last reached the account. The status is written by the **Account check** (Actions → *Account check*): it opens each account's profile with the sweep's own code and login, opens **no post**, reviews nothing and files nothing. A 40-minute slice of the accounts checked longest ago runs every day; **Run workflow** with *max_minutes* 150 checks about 250 accounts in one go, and *brand* checks one row straight away. It uses the sweep's login, so it queues behind a running sweep. Each sweep also records when it last reached an account.
@@ -246,7 +246,7 @@ A doctor sharing a clinic's or a brand's post is the ordinary case and is never 
 Two things that are *not* handle problems, and that no amount of editing will fix:
 
 - **"profile is private to this account"** — the handle is right; the account has not accepted us. Nothing to change in the sheet.
-- **"page shows a login prompt"** (Facebook) — the platform is blocking the runner's IP, not rejecting the handle.
+- **"the page's id could not be read from its public page"** (Facebook): the handle is wrong or the page is gone. Open `facebook.com/<handle>` in your browser. A numeric page ID in the Facebook column also works and skips this step.
 
 ### TikTok: paste video links in the dashboard (5 Oct 2026)
 
@@ -443,6 +443,31 @@ A **redeploy** (Apps Script → Deploy → Manage deployments → New version) i
 
 ---
 
+### Facebook is read through Meta's Ad Library (15 Nov 2026)
+
+**Facebook pages are no longer opened with a login, and Facebook does not need to be in the recorded session.**
+
+What happened: Facebook ends a recorded login the moment one of GitHub's servers presents it. The cookies were in date (364 days left, recorded the day before) and the first page load cleared them; the page then offered *Continue as <name>*. Recording the session again ends the same way, and a signed-out visit to a brand page offers one to six post links, the first usually a pinned post years old. The check that proved this is **Actions → Facebook login probe** (`tools/fb_probe.py`): it prints cookie names and dates only, never a value.
+
+What is read instead: **Meta's Ad Library**, the public register Meta keeps of every advertisement a page is running. For each Facebook handle in Targets the sweep
+
+1. opens the page's public address once, to read its numeric page ID (a numeric ID in the Facebook column skips this);
+2. lists that page's **active advertisements in Malaysia**;
+3. hands each advertisement to the reviewer: its full words, the day it started running, and a picture of the advertisement card.
+
+What you get in the sheet:
+
+- **Platform** is still `Facebook`. **Post URL** is `https://www.facebook.com/ads/library/?id=<Library ID>`, which opens for anyone, with no Facebook account. That is the link to give KKM.
+- **Date** is the day the advertisement started running. An advertisement that is running today is always reviewed, even if it started before `min_post_date`.
+- **Remarks** carry `note: Meta Ad Library: an advertisement <advertiser> is running since <date>, Library ID <n>`.
+- Many of these advertisements also run on Instagram: the Library lists one advertisement once, whatever it runs on.
+
+What this does not cover, on purpose: a page's ordinary (unpaid) Facebook posts. Brands post the same material on Instagram, which is swept in full, and an advertising complaint is stronger with proof that the item is a paid advertisement.
+
+The Targets panel shows a Facebook account as **Live** with `N advertisement(s) running in Malaysia`, or `running no advertisement in Malaysia right now`, which is an ordinary answer and not a fault. The status strip's Facebook pill tests the Ad Library, and it is tested even while a sweep is running, because no login is involved.
+
+Settings, in `scraper/config.yaml` under `run:`: `facebook_source: ads` (`page` brings back the old login route, which only works from a machine Facebook accepts the login on), `ad_library_country: MY`, `max_ads_per_page: 60`.
+
 ## 3. Adding a platform
 
 Instagram, Facebook and Threads work today. Anything else is a three-part job:
@@ -457,7 +482,7 @@ Ask me and I do part two in a few minutes. A column added without part two is ig
 
 ## 4. Refreshing the login session
 
-Instagram, Facebook and Threads hide most content from visitors who are not logged in. The scraper carries a recorded browser session to get past that. It expires every few weeks; you will know because the run log fills with `login wall`. Instagram can also end a session early: the run then stops sweeping Instagram, ends red and says `Instagram signed the recorded session out` (section 8).
+Instagram and Threads hide most content from visitors who are not logged in. The scraper carries a recorded browser session to get past that. **Facebook is not part of it any more**: it is read through Meta's Ad Library with no login (section 2), so do not log into Facebook while recording. A Facebook login in the file does nothing useful, and a personal one should not sit in an automated scraper. It expires every few weeks; you will know because the run log fills with `login wall`. Instagram can also end a session early: the run then stops sweeping Instagram, ends red and says `Instagram signed the recorded session out` (section 8).
 
 On your Windows PC, in PowerShell:
 
@@ -468,10 +493,9 @@ py -m playwright codegen --save-storage=storage_state.json https://www.instagram
 A browser window opens. In that one window, in order:
 
 1. Log into **Instagram** with the throwaway account.
-2. Address bar → `facebook.com` → log in → wait for the feed.
-3. Address bar → `threads.net` → log in → wait for it to load.
-4. Visit each brand profile once, so the session looks used.
-5. **Close the window.** Closing is what writes the file.
+2. Address bar → `threads.net` → log in → wait for it to load.
+3. Visit each brand profile once, so the session looks used.
+4. **Close the window.** Closing is what writes the file.
 
 Then convert and upload:
 
@@ -687,14 +711,15 @@ Open the run: GitHub → **Actions** → click the run. The summary at the end o
 | Log says | Cause | Fix |
 |---|---|---|
 | `login wall` | Session expired or that platform was not logged in during recording | Section 4 |
-| `N post links signed out` after `0 post links` (Facebook) | The saved Facebook login is not being accepted, so only the public view is read, usually one post. The Targets panel shows these pages as **Login refused** and the status strip shows Facebook down | Record the session again (section 4). Instagram and Threads can be fine at the same time |
+| `N active ad(s) in the Ad Library` (Facebook) | Working as intended: Facebook is read through Meta's Ad Library, with no login (section 2) | Nothing. `0 active ad(s)` means the page is running no advertisement in Malaysia today |
+| `the Ad Library opened but showed no list` or `the Ad Library asked for a login` | Meta changed the page, or slowed the runner down for a while | Run **Actions → Facebook login probe**; if it repeats, tell me and I adjust the reader |
 | Status strip pill says `old` while a sweep is running | The status probe does not test while a sweep or an account check is using the login; it republishes the last real result with its own time, and a result older than 14 hours reads `old` | Nothing; it tests again when the login is free |
 | `Instagram signed the recorded session out - not swept`, and the run ends red | Instagram ended the recorded session itself, even though its cookies had not expired (14 Nov 2026: 342 days were left). A signed-out grid shows only its newest 12 posts, so the run refuses to sweep Instagram rather than report `posts=12 ok` for every account. Facebook and Threads in the same run carry on | Record the session again (section 4). Nothing was lost: the Instagram targets are listed as not reached and the next run walks them |
 | `N link(s) name another account in the URL; not opened` | Working as intended (14 Nov 2026). A collab or shared post keeps its real owner in its link (`/<owner>/p/<id>/`), so it is skipped without being opened. Before this, such posts were opened on every pass and never remembered: about a third of a sweep's time | Nothing. If most of a grid belongs to one other account, the summary still says so, and that account may be worth its own Targets row |
 | `login wall on post page - not reviewed` | The platform served its gate instead of the post. The post is **not** reviewed and the run counts it as an error, so it will never be recorded as compliant | Refresh the session (section 4). Until then that post is unseen, not clean |
 | `no post links found — profile not available` | Handle wrong, or the platform is blocking the runner | Check the handle in your browser (section 2); if it loads for you, run from your PC instead (section 7) |
 | `no post links found — platform soft-block` | Too much traffic from that address | Wait a few hours, or run from your PC |
-| `retrying via mbasic…` then still nothing | Facebook handle wrong, or the page has no public posts | Open `mbasic.facebook.com/<handle>` in your browser and see what it shows |
+| `the page's id could not be read from its public page` | Facebook handle wrong, or the page is gone | Open `facebook.com/<handle>` in your browser; correct the handle, or put the page's numeric ID in the Facebook column |
 | Instagram fails from GitHub but works in your browser | Instagram blocks datacenter addresses | Run from your own PC (section 7); GitHub cannot fix this |
 | A row's Post URL is on an account you didn't configure (e.g. a global/US handle you never set) | Instagram's profile page can surface "Suggested for you" or related-account content; the scraper now checks the actual poster of each post against the Targets handle and skips a mismatch, but a row filed before that check went in is real content from the wrong account | Dismiss the row — it is not the Malaysian brand's own post |
 | `posted <date>, outside on/after 2025-09-01` | Working as intended | Widen `min_post_date` if you want older posts |
@@ -710,8 +735,8 @@ Open the run: GitHub → **Actions** → click the run. The summary at the end o
 | `webhook did not return JSON (200): the deployment is asking for a Google sign-in…` | The run now reads the page Apps Script served and names the cause; the message carries the fix | Follow what the message says — it is one of the five causes below |
 | `APPS_SCRIPT_WEBHOOK_URL does not look like a deployed Web app URL` | The secret holds an editor, `/dev` or shortened URL | Deploy → Manage deployments → copy the **Web app** URL; it ends in `/exec` |
 | `browser session has expired (N cookies, none still valid)` | The recorded login is dead; every profile will hit a wall and report 0 posts | Re-record it, section 4 |
-| `browser session for facebook.com expires in 2.3 day(s)` | Working as intended — early warning | Re-record before it lapses |
-| `browser session carries no dated cookie for facebook.com` | That platform was not logged in when the session was recorded | Re-record with all three platforms signed in |
+| `browser session for instagram.com expires in 2.3 day(s)` | Working as intended — early warning | Re-record before it lapses |
+| `browser session carries no dated cookie for instagram.com` (or `threads`) | That platform was not logged in when the session was recorded | Re-record with Instagram and Threads signed in (Facebook is not needed) |
 
 ### When the reviewer never sees the screenshot at all
 

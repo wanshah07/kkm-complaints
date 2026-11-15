@@ -62,6 +62,7 @@ class Post:
     known: bool = False      # already in the sheet or the Reviewed ledger: never opened, main.py skips it
     owner: Optional[str] = None   # the account the post turned out to belong to (read off the page), when known
     notes: List[str] = field(default_factory=list)   # things the row's Remarks should say that are not errors
+    always_current: bool = False   # an advertisement running today: the date window never sets it aside
 
 
 @dataclass
@@ -72,6 +73,7 @@ class TargetResult:
     posts: List[Post] = field(default_factory=list)
     error: Optional[str] = None
     truncated: bool = False  # the run budget ended before every post of this target was opened
+    via_ads: bool = False    # Facebook read through Meta's Ad Library: links_found counts running advertisements
     # Set when the sheet's handle is not the one the account actually answers to. The run keeps
     # going on the handle it landed on; the summary says so, so the Targets tab can be corrected.
     renamed_to: Optional[str] = None
@@ -98,6 +100,92 @@ DISMISS_SELECTORS = [
     "[aria-label='Close']", "div[role='dialog'] button:has-text('Not now')",
     "button:has-text('Not now')", "button:has-text('Not Now')",
 ]
+
+
+# ---------------------------------------------------------------------------------------------------------
+# Facebook, read through Meta's Ad Library (15 Nov 2026)
+#
+# Facebook ends a recorded login the moment a GitHub runner presents it: the cookies are in date, and the first
+# page load clears them (tools/fb_probe.py, run 43708... "rejected"). Recording the session again ends the same
+# way, and a signed-out visit to a brand page offers one to six post links, the first of them usually a pinned
+# post years old. So Facebook pages are not read at all any more. What is read is the Ad Library, which Meta
+# publishes for exactly this: every advertisement a page is running, with its full text, the day it started,
+# where it runs (Facebook, Instagram, Messenger...) and a public address for each one. No login is involved,
+# nothing is pressed, and for an advertising complaint it is the better evidence: it proves the item is a paid
+# advertisement and gives the officer a link that opens without an account.
+AD_LIBRARY_LIST = ("https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country={country}"
+                   "&view_all_page_id={page_id}")
+AD_LIBRARY_AD = "https://www.facebook.com/ads/library/?id={ad_id}"
+# Where a public page states its own numeric id. "delegate_page" and its siblings are the PAGE; "userID" and the
+# fb://profile address are the profile that fronts it, which the Ad Library does not know, so they come last.
+_FB_PAGE_ID_PATTERNS = (
+    r'"delegate_page":\{[^}]*?"id":"(\d{5,})"',
+    r'"associated_page_id":"(\d{5,})"',
+    r'"page_id":"(\d{5,})"',
+    r'"pageID":"(\d{5,})"',
+    r"fb://page/\?id=(\d{5,})",
+    r'"userID":"(\d{5,})"',
+    r"fb://profile/(\d{5,})",
+)
+_AD_MONTHS = {m: i + 1 for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"))}
+# Lines of an ad card that are the Library's own furniture, not the advertisement.
+_AD_CHROME = re.compile(r"^(active|inactive|platforms|open dropdown|see ad details|see summary details|sponsored|"
+                        r"this ad has multiple versions|eu transparency|\d+ ads? use this creative and text\.?|"
+                        r"\d+:\d\d\s*/\s*\d+:\d\d)$", re.I)
+# Finds each ad card without relying on Facebook's generated class names: the leaf that reads "Library ID: N",
+# then up to the first ancestor that also holds the word "Sponsored" (the header and the advert are siblings
+# inside the card). Each card is tagged so it can be photographed by itself.
+_AD_CARDS_JS = """() => {
+  const out = [];
+  const leaves = [...document.querySelectorAll('span,div')].filter(e => e.childElementCount === 0 && /^Library ID:\\s*\\d+/.test((e.textContent || '').trim()));
+  for (const s of leaves) {
+    let el = s, hops = 0;
+    while (el.parentElement && el.parentElement !== document.body && !/Sponsored/.test(el.innerText || '') && hops < 14) { el = el.parentElement; hops++; }
+    const text = el.innerText || '';
+    if (!/Sponsored/.test(text) || (text.match(/Library ID:/g) || []).length !== 1) continue;
+    const id = s.textContent.match(/\\d+/)[0];
+    el.setAttribute('data-kkm-ad', id);
+    out.push({ id, text });
+  }
+  return out;
+}"""
+
+
+def facebook_page_id(html: str, handle: str = "") -> Optional[str]:
+    """The numeric id of a Facebook page, from its public page's own HTML; a numeric handle is already one."""
+    if re.fullmatch(r"\d{5,}", (handle or "").strip()):
+        return handle.strip()
+    for pat in _FB_PAGE_ID_PATTERNS:
+        vals = re.findall(pat, html or "")
+        if vals:
+            return max(set(vals), key=vals.count)
+    return None
+
+
+def parse_ad_card(text: str) -> dict:
+    """One Ad Library card, from its visible text: id, the day it started (ISO), the advertiser, the advert's words."""
+    lines = [ln.strip().strip("\u200b").strip() for ln in (text or "").splitlines()]
+    lines = [ln for ln in lines if ln]
+    out = {"id": "", "started": None, "advertiser": "", "body": "", "active": False}
+    m = re.search(r"Library ID:\s*(\d+)", text or "")
+    if m:
+        out["id"] = m.group(1)
+    out["active"] = any(ln.lower() == "active" for ln in lines[:3])
+    d = re.search(r"Started running on\s+([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),\s*(\d{4})", text or "")
+    if d and d.group(1).lower() in _AD_MONTHS:
+        out["started"] = "%04d-%02d-%02d" % (int(d.group(3)), _AD_MONTHS[d.group(1).lower()], int(d.group(2)))
+    else:
+        d = re.search(r"Started running on\s+(\d{1,2})\s+([A-Za-z]{3})[a-z]*\.?,?\s*(\d{4})", text or "")
+        if d and d.group(2).lower() in _AD_MONTHS:
+            out["started"] = "%04d-%02d-%02d" % (int(d.group(3)), _AD_MONTHS[d.group(2).lower()], int(d.group(1)))
+    try:
+        at = next(i for i, ln in enumerate(lines) if ln.lower() == "sponsored")
+    except StopIteration:
+        return out
+    if at > 0:
+        out["advertiser"] = lines[at - 1]
+    out["body"] = "\n".join(ln for ln in lines[at + 1:] if not _AD_CHROME.match(ln)).strip()
+    return out
 
 
 def canonical_url(u: str) -> str:
@@ -797,7 +885,10 @@ class Scraper:
         for c in state.get("cookies", []) or []:
             exp = c.get("expires")
             domain = str(c.get("domain", "")).lstrip(".").replace("www.", "")
-            site = next((s for s in ("facebook.com", "instagram.com", "threads.net", "tiktok.com") if s in domain), None)
+            # By family, not by exact host: Threads keeps its login on threads.com, and matching "threads.net" alone
+            # made every run warn that Threads was never logged in.
+            site = next((name for name, word in (("facebook.com", "facebook."), ("instagram.com", "instagram."),
+                                                 ("threads", "threads."), ("tiktok.com", "tiktok.")) if word in domain), None)
             # -1 is a session cookie: it has no expiry to check, so it is not evidence either way.
             if exp is None or exp <= 0:
                 continue
@@ -817,7 +908,9 @@ class Scraper:
                 log.warning("browser session for %s expires in %.1f day(s) - re-record it soon", site, days)
             else:
                 log.info("browser session for %s valid for %.0f more day(s)", site, days)
-        missing = [s for s in ("facebook.com", "instagram.com", "threads.net") if s not in per_site]
+        # Facebook needs no login when it is read through the Ad Library, so its absence is not worth a warning.
+        fb_login_used = str((getattr(self, "run_cfg", None) or {}).get("facebook_source", "ads")).lower() != "ads"
+        missing = [s for s in (("facebook.com",) if fb_login_used else ()) + ("instagram.com", "threads") if s not in per_site]
         if missing:
             log.warning("browser session carries no dated cookie for %s - that platform was "
                         "probably not logged in when the session was recorded", ", ".join(missing))
@@ -1065,6 +1158,8 @@ class Scraper:
             res.error = self.session_lost[platform]
             res.truncated = True     # not reached, so the next run with a working session walks it
             return res
+        if platform == "Facebook" and str(self.run_cfg.get("facebook_source", "ads")).lower() == "ads":
+            return self._scrape_facebook_ads(browser, brand, handle, res)
         ctx = self._context(browser)
         page = ctx.new_page()
         t0 = time.time()
@@ -1221,6 +1316,121 @@ class Scraper:
                 res.drift_note = _drift_note([p for p in res.posts if not p.known], handle)
                 if res.drift_note:
                     log.warning("[%s/%s] %s", brand, platform, res.drift_note)
+        except PWTimeout as e:
+            res.error = f"timeout: {e}"
+            log.error("[%s/%s] %s", brand, platform, res.error)
+        except Exception as e:  # keep the run alive
+            res.error = f"{type(e).__name__}: {e}"
+            log.error("[%s/%s] %s", brand, platform, res.error)
+        finally:
+            try:
+                ctx.close()
+            except Exception:
+                pass
+        log.info("[%s/%s] done in %.1fs", brand, platform, time.time() - t0)
+        return res
+
+    def facebook_ads_listing(self, ctx: BrowserContext, handle: str, limit: int = 60):
+        """
+        The advertisements a Facebook page is running in Malaysia, from Meta's Ad Library, with no login.
+
+        Returns (page, page_id, cards, error). `page` is left open on the listing so a caller can photograph the
+        cards, each of which carries data-kkm-ad="<Library ID>"; `cards` is a list of parse_ad_card() dicts in the
+        order the Library shows them (newest first). An empty list with no error is a page that is running no
+        advertisement here, which is an ordinary answer and not a fault.
+        """
+        page = ctx.new_page()
+        page_id = facebook_page_id("", handle)
+        if not page_id:
+            page.goto("https://www.facebook.com/%s" % handle, wait_until="domcontentloaded", timeout=45000)
+            page.wait_for_timeout(2500)
+            if "/login" in page.url.lower():
+                return page, None, [], "Facebook asked for a login before showing the page, so its id could not be read"
+            page_id = facebook_page_id(page.content(), handle)
+            if not page_id:
+                hint = _diagnose_empty(page, self.out_dir, "facebook_page_%s" % re.sub(r"[^a-z0-9]+", "_", handle.lower()))
+                return page, None, [], "the page's id could not be read from its public page" + (f" — {hint}" if hint else " (handle wrong, or the page is gone)")
+        country = str(self.run_cfg.get("ad_library_country", "MY")).upper()
+        page.goto(AD_LIBRARY_LIST.format(country=country, page_id=page_id), wait_until="domcontentloaded", timeout=45000)
+        page.wait_for_timeout(6000)
+        if "/login" in page.url.lower():
+            return page, page_id, [], "the Ad Library asked for a login"
+        raw, stale = [], 0
+        for _ in range(max(6, limit // 4)):
+            now = page.evaluate(_AD_CARDS_JS)
+            stale = stale + 1 if len(now) <= len(raw) else 0
+            raw = now if len(now) >= len(raw) else raw
+            if len(raw) >= limit or stale >= 3:
+                break
+            page.mouse.wheel(0, 3000)
+            page.wait_for_timeout(1700)
+        cards, seen = [], set()
+        for c in raw:
+            card = parse_ad_card(c.get("text", ""))
+            if card["id"] and card["id"] not in seen:
+                seen.add(card["id"])
+                cards.append(card)
+        if not cards:
+            try:
+                body = page.locator("body").inner_text(timeout=3000) or ""
+            except Exception:
+                body = ""
+            if not re.search(r"\b0 results\b|no ads match|didn.t (find|return) any", body, re.I) and not re.search(r"~?\d[\d,]*\s+results?", body):
+                return page, page_id, [], "the Ad Library opened but showed no list (layout change, or a short block)"
+        return page, page_id, cards[:limit], None
+
+    def _scrape_facebook_ads(self, browser: Browser, brand: str, handle: str, res: TargetResult) -> TargetResult:
+        """A Facebook target: every advertisement its page is running, one Post per ad. See the note above
+        AD_LIBRARY_LIST for why the page itself is not read."""
+        platform = "Facebook"
+        t0 = time.time()
+        res.via_ads = True
+        ctx = self._context(browser, use_storage=False)     # no login is presented to Facebook at all
+        page = None
+        try:
+            limit = min(int(self.run_cfg.get("max_posts_per_profile", 60) or 60), int(self.run_cfg.get("max_ads_per_page", 60) or 60))
+            log.info("[%s/%s] Ad Library for page %s", brand, platform, handle)
+            page, page_id, cards, err = self.facebook_ads_listing(ctx, handle, limit)
+            res.profile_url = AD_LIBRARY_LIST.format(country=str(self.run_cfg.get("ad_library_country", "MY")).upper(), page_id=page_id) if page_id else res.profile_url
+            res.links_found = len(cards)
+            if err:
+                res.error = err
+                log.warning("[%s/%s] %s", brand, platform, err)
+                return res
+            log.info("[%s/%s] %d active ad(s) in the Ad Library (page id %s)", brand, platform, len(cards), page_id)
+            max_open = int(self.run_cfg.get("max_new_posts_per_visit", 0) or 0)
+            opened = 0
+            for card in cards:
+                url = AD_LIBRARY_AD.format(ad_id=card["id"])
+                if canonical_url(url) in self.known_urls:
+                    res.posts.append(Post(brand=brand, platform=platform, url=url, known=True))
+                    continue
+                stop = getattr(self, "should_stop", None)
+                if stop and stop():
+                    res.truncated = True
+                    log.warning("[%s/%s] run budget reached after %d ad(s) read; the rest are left for the next run", brand, platform, opened)
+                    break
+                if max_open and opened >= max_open:
+                    res.capped = True
+                    log.info("[%s/%s] %d new ad(s) read this visit (the cap); the rest wait for the next visit", brand, platform, opened)
+                    break
+                post = Post(brand=brand, platform=platform, url=url, text=card["body"], posted_at=card["started"], always_current=True)
+                post.notes.append("Meta Ad Library: an advertisement %s is running%s, Library ID %s" % (
+                    card["advertiser"] or brand, (" since " + card["started"]) if card["started"] else "", card["id"]))
+                fname = re.sub(r"[^a-z0-9]+", "_", f"{brand}_facebook_ad_{card['id']}".lower()).strip("_")[:90]
+                path = os.path.join(self.out_dir, f"{fname}.png")
+                try:
+                    el = page.locator('[data-kkm-ad="%s"]' % card["id"]).first
+                    el.scroll_into_view_if_needed(timeout=5000)
+                    page.wait_for_timeout(900)          # the advert's picture loads when it comes into view
+                    el.screenshot(path=path, timeout=15000)
+                    post.screenshot_path = path
+                except Exception as e:
+                    post.errors.append(f"screenshot failed: {type(e).__name__}")
+                if not post.text:
+                    post.errors.append("the advertisement carries no text of its own (picture or video only)")
+                res.posts.append(post)
+                opened += 1
         except PWTimeout as e:
             res.error = f"timeout: {e}"
             log.error("[%s/%s] %s", brand, platform, res.error)

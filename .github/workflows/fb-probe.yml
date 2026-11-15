@@ -17,6 +17,13 @@ on:
       ads_page:
         description: A Facebook page handle whose own ads are listed in the Ad Library
         default: cetaphilmalaysia
+      sweep_test:
+        description: "Brand=handle pairs, comma separated: run the sweep's own Facebook code on them (nothing is filed)"
+        default: ''
+      only_sweep_test:
+        description: Skip the login and public-page probes
+        type: boolean
+        default: false
 
 concurrency:
   group: kkm-fb-probe
@@ -59,7 +66,9 @@ jobs:
           PUBLIC: ${{ inputs.public }}
           ADQ: ${{ inputs.adq }}
           ADS_PAGE: ${{ inputs.ads_page }}
-        run: python tools/fb_probe.py --handle "$HANDLE" --public "$PUBLIC" --adq "$ADQ" --ads-page "$ADS_PAGE" --out fb_probe_out
+          SWEEP_TEST: ${{ inputs.sweep_test }}
+          ONLY: ${{ inputs.only_sweep_test && '--only-sweep-test' || '' }}
+        run: python tools/fb_probe.py --handle "$HANDLE" --public "$PUBLIC" --adq "$ADQ" --ads-page "$ADS_PAGE" --sweep-test "$SWEEP_TEST" $ONLY --out fb_probe_out
       - name: Upload the pictures
         if: always()
         uses: actions/upload-artifact@v4
