@@ -8,6 +8,15 @@ run:
   # the ledger lets the account's next visit continue where this one stopped, so one busy page cannot take half
   # a run (Uriage Instagram: 159 posts, 51 of 100 minutes, 14 Nov 2026). The workflow input max_open overrides it.
   max_new_posts_per_visit: 0
+  # Facebook ends a recorded login the moment a runner presents it (15 Nov 2026), so its pages are not read.
+  # "ads" reads Meta's Ad Library instead: the page's running advertisements, public, no login. "page" is the old
+  # route (needs a Facebook login that Facebook accepts from the machine running this).
+  facebook_source: ads
+  ad_library_country: MY
+  max_ads_per_page: 60
+  # The page's own public address is tried first for its number, because it is one page load. Where Facebook will
+  # not serve it, the page is looked up by name inside the Ad Library. false = always look it up by name.
+  facebook_try_public_page: true
   lookback_days: 0                # 0 = off; otherwise skip posts older than N days when a date is known
   min_post_date: "2024-06-01"     # review only posts published on/after this date (YYYY-MM-DD); "" = off
   push_risky: true                # also push "Risky" verdicts (status New, type prefixed "Risky:")
@@ -66,6 +75,8 @@ platforms:
   Instagram:
     profile_url: "https://www.instagram.com/{handle}/"
     post_link_patterns: ["/p/", "/reel/"]
+  # Facebook is read through Meta's Ad Library (run.facebook_source: ads): every advertisement the page is running
+  # in Malaysia, with no login. The URLs below are the old page route, used only when facebook_source is "page".
   Facebook:
     profile_url: "https://www.facebook.com/{handle}"
     # www renders its feed with JavaScript and often yields no anchors to a logged-out or

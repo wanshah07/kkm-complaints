@@ -101,7 +101,7 @@ def classify(res, links: int, signed_in: bool = True) -> dict:
     """state / detail / suggest from a TargetResult stopped before its first post."""
     err = str(res.error or "")
     low = err.lower()
-    if low.startswith("login wall") or "login prompt" in low or "soft-block" in low:
+    if low.startswith("login wall") or "login prompt" in low or "soft-block" in low or "asked for a login" in low:
         return {"state": "blocked", "detail": "The platform asked for a login or slowed us down; the account itself was not judged."}
     if "profile not available" in low:
         return {"state": "not_found", "detail": "The platform says this profile is not available. Check the handle."}
@@ -119,6 +119,18 @@ def classify(res, links: int, signed_in: bool = True) -> dict:
         # that "live" hid a dead Facebook session for a day (14 Nov 2026).
         return {"state": "limited", "detail": f"Only the public, signed-out view could be read ({links} post(s)). "
                                               "Our login was not accepted for this page; record the session again."}
+    if getattr(res, "via_ads", False):
+        # Facebook is read through Meta's Ad Library. A page running no advertisement is still a page that reads.
+        how = str(getattr(res, "ads_how", "") or "")
+        if not links and "none of" in how:
+            # Looked up by name and nothing links to this handle. That is a page running nothing here, or a handle
+            # that is not the page's own; the two cannot be told apart from the Library, so it is not called Live.
+            return {"state": "empty", "detail": "No advertisement by this page was found in Malaysia's Ad Library, and the page itself "
+                                                "could not be opened to confirm the handle. Check the handle if this page does advertise. ("
+                                                + how[:200] + ")"}
+        return {"state": "live", "detail": ((f"{links} advertisement(s) running in Malaysia (Meta Ad Library)." if links
+                                             else "No advertisement by this page is running in Malaysia right now (Meta Ad Library).")
+                                            + (" Found: " + how[:220] + "." if how else ""))}
     out = {"state": "live", "detail": f"{links} post(s) visible on the profile."}
     if res.renamed_to:
         out.update(state="renamed", suggest=res.renamed_to,

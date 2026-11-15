@@ -54,7 +54,7 @@ jobs:
           done
           if [ "$N" -gt 0 ] && git fetch -q origin status --depth=1 2>/dev/null && git show FETCH_HEAD:status.json > /tmp/status_prev.json 2>/dev/null; then
             echo "busy=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::a sweep or an account check is using the login: the last real result is republished, nothing is probed"
+            echo "::notice::a sweep or an account check is using the login: Instagram and Threads keep their last real result; Facebook (Ad Library, no login) is still probed"
           else
             echo "busy=false" >> "$GITHUB_OUTPUT"
           fi
@@ -66,21 +66,18 @@ jobs:
           cache-dependency-path: scraper/requirements.txt
 
       - name: Install dependencies
-        if: steps.busy.outputs.busy != 'true'
         working-directory: scraper
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Cache Playwright browsers
-        if: steps.busy.outputs.busy != 'true'
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: pw-${{ runner.os }}-${{ hashFiles('scraper/requirements.txt') }}
 
       - name: Install Chromium
-        if: steps.busy.outputs.busy != 'true'
         working-directory: scraper
         run: python -m playwright install --with-deps chromium
 

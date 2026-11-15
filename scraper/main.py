@@ -691,7 +691,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             return False
         if canonical_url(post.url) in known:
             return False
-        if not date_allowed(post.posted_at, lookback, min_date):
+        if not getattr(post, "always_current", False) and not date_allowed(post.posted_at, lookback, min_date):
             return False
         if focus_term and focus_term not in (post.text or "").lower():
             return False
@@ -764,7 +764,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                 if cu in known:
                     report["skipped"].append({"url": post.url, "why": "already in sheet"})
                     continue
-                if not date_allowed(post.posted_at, lookback, min_date):
+                # An advertisement that is running today is current whenever it started (Facebook, via the Ad Library).
+                if not getattr(post, "always_current", False) and not date_allowed(post.posted_at, lookback, min_date):
                     report["skipped"].append({"url": post.url, "why": f"posted {post.posted_at}, outside {date_rule}"})
                     continue
                 if not post.text and not post.screenshot_path:
@@ -835,7 +836,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
                 # The platform often hides the timestamp from anonymous visitors; when the reviewer can read
                 # it off the screenshot, use it for the Date column and the lookback filter.
-                if not post.posted_at and v.get("post_date"):
+                if not post.posted_at and v.get("post_date") and not getattr(post, "always_current", False):
                     post.posted_at = v["post_date"]
                     if not date_allowed(post.posted_at, lookback, min_date):
                         report["skipped"].append({"url": post.url, "why": f"posted {post.posted_at} per screenshot, outside {date_rule}",
