@@ -1,14 +1,13 @@
 {
- "checked_at": "2026-11-15T15:52:48Z",
+ "checked_at": "2026-11-15T18:57:19Z",
  "platforms": [
   {
    "key": "instagram",
    "label": "Instagram",
-   "state": "live",
-   "detail": "Signed in and reading posts: the sweep that finished 2026-11-15 12:53 UTC read 2 account(s) on Instagram.",
-   "links": 2,
-   "at": "2026-11-15T12:53:30Z",
-   "carried": false
+   "state": "down",
+   "detail": "Instagram shows a login page. Record the session again (guide section 4).",
+   "links": null,
+   "at": "2026-11-15T18:57:23Z"
   },
   {
    "key": "facebook",
@@ -16,16 +15,15 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-15T15:53:04Z"
+   "at": "2026-11-15T18:57:46Z"
   },
   {
    "key": "threads",
    "label": "Threads",
-   "state": "live",
-   "detail": "Signed in and reading posts: the sweep that finished 2026-11-15 12:53 UTC read 3 account(s) on Threads.",
-   "links": 3,
-   "at": "2026-11-15T12:53:30Z",
-   "carried": false
+   "state": "down",
+   "detail": "The saved login is no longer held after loading the page. Record the session again.",
+   "links": 12,
+   "at": "2026-11-15T18:58:19Z"
   },
   {
    "key": "tiktok",
@@ -45,17 +43,17 @@
   }
  ],
  "notes": [
-  "Instagram and Threads were not probed: a sweep or an account check was using the login. Their state comes from the last finished sweep."
+  "No saved login is configured (PW_STORAGE_STATE_B64 empty or invalid): every platform is read signed out."
  ],
  "session_days_left": {
-  "instagram": 363.8,
+  "instagram": 363.6,
   "facebook": null,
-  "threads": 363.8
+  "threads": 363.6
  },
  "last_sweep": {
   "conclusion": "success",
-  "at": "2026-11-15T12:56:07Z",
+  "at": "2026-11-15T17:25:13Z",
   "title": "KKM complaint scraper"
  },
- "overall": "live"
+ "overall": "down"
 }
