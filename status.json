@@ -1,51 +1,61 @@
 {
- "checked_at": "2026-11-14T22:35:28Z",
+ "checked_at": "2026-11-15T06:45:07Z",
  "platforms": [
   {
    "key": "instagram",
    "label": "Instagram",
    "state": "live",
    "detail": "Signed in and reading posts normally.",
-   "links": 40
+   "links": 40,
+   "at": "2026-11-14T22:35:28Z",
+   "carried": true
   },
   {
    "key": "facebook",
    "label": "Facebook",
    "state": "down",
    "detail": "Facebook shows a login page. Record the session again (guide section 4).",
-   "links": null
+   "links": null,
+   "at": "2026-11-14T22:35:28Z",
+   "carried": true
   },
   {
    "key": "threads",
    "label": "Threads",
    "state": "live",
    "detail": "Signed in and reading posts normally.",
-   "links": 40
+   "links": 40,
+   "at": "2026-11-14T22:35:28Z",
+   "carried": true
   },
   {
    "key": "tiktok",
    "label": "TikTok links",
    "links": null,
    "state": "live",
-   "detail": "The link checker is running (last run 2026-11-14 21:23). Works on links you paste into the Links tab."
+   "at": "2026-11-15T01:15:48Z",
+   "detail": "The link checker is running (last run 2026-11-15 01:15). Works on links you paste into the Links tab."
   },
   {
    "key": "tiktok_auto",
    "label": "TikTok accounts",
    "links": null,
    "state": "live",
-   "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-14 20:07). Only an account's ten newest are visible at a time."
+   "at": "2026-11-15T01:19:03Z",
+   "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-15 01:19). Only an account's ten newest are visible at a time."
   }
  ],
- "notes": [],
+ "notes": [
+  "Instagram, Facebook and Threads were not re-tested: a sweep or an account check was using the login."
+ ],
  "session_days_left": {
-  "instagram": 364.5,
-  "facebook": 364.5,
-  "threads": 364.5
+  "instagram": 364.1,
+  "facebook": 364.1,
+  "threads": 364.1
  },
  "last_sweep": {
   "conclusion": "success",
-  "at": "2026-11-14T12:53:39Z",
+  "at": "2026-11-15T06:41:22Z",
   "title": "KKM complaint scraper"
  },
  "overall": "down"
