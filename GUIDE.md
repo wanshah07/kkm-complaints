@@ -443,6 +443,10 @@ A **redeploy** (Apps Script → Deploy → Manage deployments → New version) i
 
 ---
 
+### Why a status pill can say "old" (and why it no longer should)
+
+The strip at the top shows when each platform was last tested. While a sweep or an account check runs, the status check does not open a second browser on the same login (two at once is what gets a session signed out), so it kept the last result and its time, and a pill older than 14 hours shows **old**. With sweeps running back to back that was most of the day (15 Nov 2026: Instagram and Threads read *old* while both were being read all day). Now, while the login is busy, Instagram and Threads take their state from **the last finished sweep**: *live* with the number of accounts it read and the time it finished, or *down* if Instagram signed the session out during it. If the sweep read none, the old result and its time stay, and the pill goes *old*.
+
 ### Facebook is read through Meta's Ad Library (15 Nov 2026)
 
 **Facebook pages are no longer opened with a login, and Facebook does not need to be in the recorded session.**

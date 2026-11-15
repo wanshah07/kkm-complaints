@@ -19,7 +19,7 @@ Usage (the workflow does this; locally set PW_STORAGE_STATE_B64 first):
 It prints one line per platform and always exits 0, so a down platform never hides itself behind a red run:
 the dashboard is where it shows.
 """
-import argparse, base64, gzip, json, os, sys, time
+import argparse, base64, gzip, json, os, re, subprocess, sys, time
 from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -163,6 +163,80 @@ def carry_previous(path):
     return out if len(out) == 3 else None
 
 
+# ---------------------------------------------------------------------------------------------------------------
+# While sweeps run back to back, the login is never free for a probe, so Instagram and Threads showed "old" for a day
+# (15 Nov 2026) although both were being read all day. The sweep is itself the best test of the login: it opens real
+# profiles with it. So the status takes its evidence from the last finished sweep: how many accounts of each platform
+# it read, and whether Instagram signed the session out. No second browser ever touches the session.
+_TABLE_ROW = re.compile(r"\s{2,}(?P<brand>.+?)\s{2,}(?P<plat>Instagram|Facebook|Threads|TikTok)\s+posts=(?P<n>\d+)\s+(?P<rest>.*?)\s*$")
+
+
+def evidence_from_log(text):
+    """Per platform, from a sweep's log: accounts read (ok / partial) and walls, and whether the session was ended."""
+    out = {}
+    for line in (text or "").splitlines():
+        m = _TABLE_ROW.search(line)
+        if m:
+            e = out.setdefault(m.group("plat"), {"ok": 0, "wall": 0, "signed_out": False})
+            rest = m.group("rest").lower()
+            if rest.startswith("ok") or rest.startswith("partial"):
+                e["ok"] += 1
+            elif "login wall" in rest or "login prompt" in rest:
+                e["wall"] += 1
+        if "signed the recorded session out" in line:
+            out.setdefault("Instagram", {"ok": 0, "wall": 0, "signed_out": False})["signed_out"] = True
+    return out
+
+
+def apply_sweep_evidence(carried, evidence, run_at, run_title=""):
+    """Replace a carried Instagram / Threads entry with what the last finished sweep showed, when that is newer."""
+    when = (run_at or "")[:16].replace("T", " ")
+    out = []
+    for c in carried:
+        ev = evidence.get({"instagram": "Instagram", "threads": "Threads"}.get(c.get("key"), ""))
+        if not ev or not run_at or (c.get("at") or "") >= run_at:
+            out.append(c)
+            continue
+        q = dict(c)
+        if ev["signed_out"]:
+            q.update(state="down", at=run_at, carried=False, links=None,
+                     detail="Instagram ended the saved login during the sweep that finished %s UTC. Record the session again (guide section 4)." % when)
+        elif ev["ok"] >= 1:
+            q.update(state="live", at=run_at, carried=False, links=ev["ok"],
+                     detail="Signed in and reading posts: the sweep that finished %s UTC read %d account(s) on %s." % (when, ev["ok"], c.get("label", "")))
+        out.append(q)
+    return out
+
+
+def last_sweep_evidence(repo, runs=4):
+    """(evidence, finished_at) from the newest finished scraper runs that read each platform. ({}, "") on any trouble."""
+    def gh(path):
+        r = subprocess.run(["gh", "api", path], capture_output=True, text=True, timeout=120)
+        return r.stdout if r.returncode == 0 else ""
+    try:
+        listing = json.loads(gh("repos/%s/actions/workflows/scraper.yml/runs?per_page=%d&status=completed" % (repo, runs)) or "{}")
+    except Exception:
+        return {}, ""
+    best, best_at = {}, ""
+    for run in (listing.get("workflow_runs") or []):
+        if run.get("conclusion") not in ("success", "failure"):
+            continue
+        try:
+            jobs = json.loads(gh("repos/%s/actions/runs/%s/jobs" % (repo, run["id"])) or "{}").get("jobs") or []
+            log = gh("repos/%s/actions/jobs/%s/logs" % (repo, jobs[0]["id"])) if jobs else ""
+        except Exception:
+            continue
+        ev = evidence_from_log(log)
+        if ev and not best:
+            best, best_at = ev, run.get("updated_at") or ""
+        elif ev:
+            for k, v in ev.items():
+                best.setdefault(k, v)
+        if all(k in best for k in ("Instagram", "Threads")):
+            break
+    return best, best_at
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="status.json")
@@ -204,9 +278,14 @@ def main():
             if not any(c.get("key") == "facebook" for c in carried):
                 carried.insert(1, r)
             print("%-10s %-9s links=%s  %s" % (r["label"], r["state"], r["links"], r["detail"]), flush=True)
+        evidence, evidence_at = last_sweep_evidence(os.environ.get("GITHUB_REPOSITORY", ""))
+        before = [(c.get("key"), c.get("state"), c.get("at")) for c in carried]
+        carried = apply_sweep_evidence(carried, evidence, evidence_at)
+        from_sweep = [c for c, b in zip(carried, before) if (c.get("key"), c.get("state"), c.get("at")) != b]
         result["platforms"].extend(carried)
-        result["notes"].append("%s not re-tested: a sweep or an account check was using the login." % (
-            "Instagram and Threads were" if fresh_fb else "Instagram, Facebook and Threads were"))
+        result["notes"].append("%s not probed: a sweep or an account check was using the login.%s" % (
+            "Instagram and Threads were" if fresh_fb else "Instagram, Facebook and Threads were",
+            " Their state comes from the last finished sweep." if from_sweep else ""))
         for r in carried:
             if not (fresh_fb and r.get("key") == "facebook"):
                 print("%-10s %-9s carried from %s" % (r["label"], r["state"], r.get("at", "")), flush=True)
