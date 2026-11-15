@@ -242,6 +242,14 @@ def main() -> int:
             m = _VIDEO_ID.search(str(u))
             if m:
                 known_ids.add(m.group(1))
+    for handle, vids in found.items():
+        ids = [v["id"] for v in vids]
+        newest = sorted(ids, key=int, reverse=True)[:10]            # the ten newest; pinned ones may be older
+        if len(newest) == 10 and not any(i in known_ids for i in newest):
+            # Only ten are ever visible. If none of them has been seen before, either this account is new
+            # to the list or it posted more than ten since the last run and the older ones are out of reach.
+            print(f"::notice::TikTok @{handle}: all ten newest videos are new to us. First run for this account, "
+                  f"or more than ten were posted since the last run (the older ones can no longer be listed).")
     links, counts = choose(found, known_ids, min_post_date(), cap)
     held_over = counts["new"] - len(links)
     print(f"{counts['listed']} listed, {counts['known']} already reviewed, {counts['old']} before the date limit, "

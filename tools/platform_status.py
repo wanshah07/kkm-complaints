@@ -117,18 +117,46 @@ def probe_one(sc, browser, key, label, platform, handle, want_links):
             pass
 
 
+def carry_previous(path):
+    """The Instagram / Facebook / Threads entries of the previous status.json, each keeping the time it was really
+    probed (`at`; a file written before 15 Nov 2026 has only the file's own checked_at). None when unusable."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            prev = json.load(f)
+    except Exception:
+        return None
+    out = []
+    for p in prev.get("platforms") or []:
+        if p.get("key") in ("instagram", "facebook", "threads"):
+            q = dict(p)
+            q["at"] = p.get("at") or prev.get("checked_at") or ""
+            q["carried"] = True
+            out.append(q)
+    return out if len(out) == 3 else None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="status.json")
     ap.add_argument("--no-browser", action="store_true", help="skip the platform probes (offline test)")
     ap.add_argument("--last-runs", default="", help="JSON from the workflow: last runs of the scraper and the TikTok checker")
+    ap.add_argument("--carry", default="", help="the previous status.json: a sweep or an account check is using the login "
+                                                "right now, so do not probe; keep each platform's last result and its time")
     args = ap.parse_args()
 
     result = {"checked_at": now_iso(), "platforms": [], "notes": []}
     raw_b64 = os.environ.get("PW_STORAGE_STATE_B64", "")
     shop_b64 = os.environ.get("PW_STORAGE_STATE_SHOP_B64", "")
 
-    if not args.no_browser:
+    carried = carry_previous(args.carry) if args.carry else None
+    if carried is not None:
+        # The probe uses the same login as the sweep. Two browsers on one session at once is what gets a session
+        # signed out, so while a sweep or an account check runs the last real result is kept, with its own time.
+        result["platforms"].extend(carried)
+        result["notes"].append("Instagram, Facebook and Threads were not re-tested: a sweep or an account check was using the login.")
+        for r in carried:
+            print("%-10s %-9s carried from %s" % (r["label"], r["state"], r.get("at", "")), flush=True)
+    elif not args.no_browser:
         import yaml
         from playwright.sync_api import sync_playwright
         from scraper import Scraper
@@ -146,6 +174,7 @@ def main():
                     r = probe_one(sc, browser, key, label, platform, handle, want)
                     if not sc._storage_state_path and r["state"] == "live":
                         r["state"], r["detail"] = "degraded", "Reading posts, but no saved login is configured."
+                    r["at"] = now_iso()
                     result["platforms"].append(r)
                     print("%-10s %-9s links=%s  %s" % (label, r["state"], r["links"], r["detail"]), flush=True)
             finally:
@@ -164,7 +193,7 @@ def main():
         except Exception:
             last = {}
     tk = last.get("tiktok") or {}
-    tt = {"key": "tiktok", "label": "TikTok links", "links": None, "state": "unknown",
+    tt = {"key": "tiktok", "label": "TikTok links", "links": None, "state": "unknown", "at": tk.get("at", ""),
           "detail": "Works on links pasted into the dashboard; the sweep does not read TikTok accounts."}
     if tk.get("conclusion") == "success":
         tt["state"] = "live"
@@ -186,6 +215,7 @@ def main():
         ok = ta.get("conclusion") == "success"
         result["platforms"].append({
             "key": "tiktok_auto", "label": "TikTok accounts", "links": None, "state": "live" if ok else "down",
+            "at": ta.get("at", ""),
             "detail": ("New videos of the accounts in the Targets tab's TikTok column are found and reviewed "
                        "automatically (last run %s). Only an account's ten newest are visible at a time."
                        % ta.get("at", "")[:16].replace("T", " ")) if ok else

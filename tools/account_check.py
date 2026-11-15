@@ -12,6 +12,7 @@ Per account it records one of:
   live        posts are visible                         renamed    live, but the account answers to another handle
   empty       the profile opens and shows no posts      not_found  the platform says there is no such profile
   private     the profile is private to our login       blocked    a login wall or soft block: not the account's fault
+  limited     only the public, signed-out view was read: our login was not accepted for that page
   error       the visit itself failed
 
 Instagram, Facebook and Threads are read with the sweep's own login (PW_STORAGE_STATE_B64), paced, one profile at a
@@ -38,7 +39,6 @@ sys.path.insert(0, HERE)
 import yaml  # noqa: E402
 import requests  # noqa: E402
 from playwright.sync_api import sync_playwright  # noqa: E402
-import scraper as sc  # noqa: E402
 from scraper import Scraper, _pace, env_str  # noqa: E402
 from uploader import AppsScriptClient  # noqa: E402
 import tiktok_discover as ttd  # noqa: E402
@@ -97,7 +97,7 @@ def order(pairs, status, recheck_hours):
     return [p for _, _, p in rest], fresh
 
 
-def classify(res, links: int) -> dict:
+def classify(res, links: int, signed_in: bool = True) -> dict:
     """state / detail / suggest from a TargetResult stopped before its first post."""
     err = str(res.error or "")
     low = err.lower()
@@ -107,10 +107,18 @@ def classify(res, links: int) -> dict:
         return {"state": "not_found", "detail": "The platform says this profile is not available. Check the handle."}
     if "private" in low:
         return {"state": "private", "detail": "The profile is private to our login, so its posts cannot be read."}
+    if "no posts yet" in low:
+        return {"state": "empty", "detail": "The account exists but has not posted anything yet."}
     if low.startswith("no post links found"):
         return {"state": "empty", "detail": "The profile opened but showed no posts (no posts yet, or the platform hid them)."}
     if err:
         return {"state": "error", "detail": err.split(" — ")[0][:160]}
+    if signed_in and getattr(res, "signed_out_view", False):
+        # Signed in, the page showed nothing; signed out, it showed something. That is the login being refused
+        # for this page, and the sweep then reads only the public view (on Facebook, usually one post). Calling
+        # that "live" hid a dead Facebook session for a day (14 Nov 2026).
+        return {"state": "limited", "detail": f"Only the public, signed-out view could be read ({links} post(s)). "
+                                              "Our login was not accepted for this page; record the session again."}
     out = {"state": "live", "detail": f"{links} post(s) visible on the profile."}
     if res.renamed_to:
         out.update(state="renamed", suggest=res.renamed_to,
@@ -149,8 +157,11 @@ def main() -> int:
     pairs = pairs_from(client.targets(), set((cfg.get("platforms") or {}).keys()), args.platform, args.brand)
 
     status, can_write = {}, not args.dry_run
+    backend_states = None
     try:
-        status = {str(k).lower(): v for k, v in (client._post({"action": "targets_admin"}, retries=2).get("status") or {}).items()}
+        admin = client._post({"action": "targets_admin"}, retries=2)
+        status = {str(k).lower(): v for k, v in (admin.get("status") or {}).items()}
+        backend_states = admin.get("states")          # absent on a Targets.gs deployed before 15 Nov 2026
     except Exception as e:
         if "unknown action" in str(e).lower():
             print("::notice::the deployed Apps Script has no Targets panel support yet (Targets.gs + a new version); "
@@ -167,14 +178,7 @@ def main() -> int:
     out_dir = os.path.join(os.getcwd(), "account_check_tmp")
     scraper = Scraper(cfg, out_dir)
     scraper.should_stop = lambda: True          # never open a post: the profile is the whole visit
-    seen_links = []
-    real_collect = sc._collect_links
-
-    def counting_collect(*a, **k):
-        links = real_collect(*a, **k)
-        seen_links.append(len(links))
-        return links
-    sc._collect_links = counting_collect
+    signed_in = bool(getattr(scraper, "_storage_state_path", None))
 
     results, pending, tally = [], [], Counter()
     deadline = time.time() + args.max_minutes * 60
@@ -211,14 +215,16 @@ def main() -> int:
                 if plat.lower() == "tiktok":
                     rec.update(check_tiktok(tt_session, handle))
                 else:
-                    del seen_links[:]
                     res = scraper._scrape_target(browser, brand, plat, handle)
                     if plat in scraper.session_lost:
                         stopped = f"{plat} signed the recorded session out; record it again (GUIDE section 4). Stopped after {i} account(s)"
                         break
-                    links = max(seen_links) if seen_links else 0
-                    rec.update(classify(res, links))
+                    links = int(getattr(res, "links_found", 0) or 0)
+                    rec.update(classify(res, links, signed_in))
                     rec["posts"] = links
+                    if rec["state"] == "limited" and "limited" not in (backend_states or []):
+                        # A backend that does not know the state would drop the whole line; say it the old way.
+                        rec["state"] = "blocked"
                 results.append(rec)
                 pending.append(rec)
                 tally[(plat, rec["state"])] += 1

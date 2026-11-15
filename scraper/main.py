@@ -325,6 +325,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--selftest", metavar="QUERY", nargs="?", const="",
                     help="check a deployed Apps Script from outside the browser: payload size, "
                          "field truncation and server-side search. Read-only, no browser, no writes.")
+    ap.add_argument("--order", choices=["legacy", "oldest"], default="legacy",
+                    help="oldest: visit the accounts never swept first, then the ones swept longest ago, read "
+                         "from the TargetStatus tab the sweep itself writes. No offset to carry between runs, "
+                         "and adding, pausing or removing a Targets row cannot shift the order. legacy: the "
+                         "unjudged-first order rotated by --offset.")
+    ap.add_argument("--max-open", type=int, default=None,
+                    help="judge at most N unjudged posts per account in this run (the newest first); the rest "
+                         "wait for the account's next visit. Overrides run.max_new_posts_per_visit; 0 = no cap.")
     ap.add_argument("--offset", type=int, default=0,
                     help="rotate the already-judged targets by N so successive runs cover "
                          "different slices of a watchlist longer than one run's budget")
@@ -353,7 +361,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     started = datetime.now(MYT)
     cfg = load_config(args.config)
-    run_cfg = cfg.get("run", {})
+    run_cfg = cfg.setdefault("run", {})
+    if args.max_open is not None:
+        run_cfg["max_new_posts_per_visit"] = max(0, args.max_open)
     run_dir = os.path.join(args.out, started.strftime("%Y%m%d_%H%M%S"))
     os.makedirs(run_dir, exist_ok=True)
     report: Dict = {"started_myt": started.isoformat(), "targets": [], "pushed": [], "skipped": [],
@@ -496,7 +506,20 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Streamed, one target at a time, and each is reviewed and filed before the next is
     # scraped. The alternative cost a three-hour run: everything was scraped first, the job
     # timeout cut in with one target left, and not a single post had been reviewed or filed.
-    if known and not web_mode and not tt_mode:
+    oldest_order = False
+    if args.order == "oldest" and not web_mode and not tt_mode:
+        try:
+            status = (client or AppsScriptClient())._post({"action": "targets_admin"}, retries=2).get("status") or {}
+            brands, never, total_pairs = order_oldest(brands, set(cfg.get("platforms", {})), status)
+            oldest_order = True
+            log.info("sweep order: oldest first; %d of %d account(s) have never been swept and go first",
+                     never, total_pairs)
+            report["order"] = "oldest"
+            report["never_swept"] = never
+        except Exception as e:
+            # A backend deployed before Targets.gs, or one that is not answering: the old order still works.
+            log.warning("--order oldest needs the account status (%s); using the legacy order", str(e)[:120])
+    if known and not web_mode and not tt_mode and not oldest_order:
         total_rows = len(brands)
         brands_before = brands
         brands, fresh = sweep_order(brands, known, offset=args.offset,
@@ -662,6 +685,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         loop would have made anyway."""
         if getattr(post, "not_owned", False) or getattr(post, "blocked", False):
             return False
+        if not _is_web_link(post.url):
+            return False
         if canonical_url(post.url) in known:
             return False
         if not date_allowed(post.posted_at, lookback, min_date):
@@ -689,7 +714,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                 reached.add((tr.brand, tr.platform))
             report["targets"].append({"brand": tr.brand, "platform": tr.platform, "profile": tr.profile_url,
                                       "posts": len(tr.posts), "error": tr.error,
-                                      "truncated": bool(getattr(tr, "truncated", False))})
+                                      "truncated": bool(getattr(tr, "truncated", False)),
+                                      "capped": bool(getattr(tr, "capped", False)),
+                                      "opened": sum(1 for x in tr.posts if not getattr(x, "known", False)
+                                                    and not getattr(x, "not_owned", False))})
             if web_mode and tr.error and not tr.error.startswith("skipped:"):
                 # A wall or a dead feed is a gap in the sweep, not a pass. Later rows on a walled
                 # host are skipped quietly (their error starts "skipped:"), so it is named once.
@@ -714,6 +742,12 @@ def main(argv: Optional[List[str]] = None) -> int:
                     _file_target()
                 _prefetch(tr.posts, _pi)
                 cu = canonical_url(post.url)
+                if not _is_web_link(post.url):
+                    # A feed can hand back anything as a product "link" (urljoin passes javascript: and data:
+                    # through untouched). It becomes a clickable link in the dashboard, so it stops here.
+                    report["skipped"].append({"url": str(post.url)[:120], "why": "not an http(s) link - not reviewed"})
+                    report["errors"].append(f"{post.brand}/{post.platform}: not an http(s) link: {str(post.url)[:80]}")
+                    continue
                 if getattr(post, "not_owned", False):
                     report["skipped"].append({"url": post.url, "why": (post.errors[-1] if post.errors else "different account")})
                     continue
@@ -920,12 +954,49 @@ def main(argv: Optional[List[str]] = None) -> int:
     return 0
 
 
+def _is_web_link(u) -> bool:
+    return bool(re.match(r"^https?://[^\s/]+", str(u or "").strip(), re.I))
+
+
+def order_oldest(brands: List[dict], platforms: set, status: dict) -> Tuple[List[dict], int, int]:
+    """
+    (one-account rows in visiting order, never-swept count, total accounts).
+
+    The order the sweep used until 15 Nov 2026 needed an offset carried from run to run by hand
+    (offset + targets reached), counted in ROWS while "reached" was reported in ACCOUNTS, and it moved
+    whenever a Targets row was added, paused or removed: the second brand run of 14-15 Nov skipped four
+    brands that way. The sweep now records when it last reached each account (TargetStatus, written by
+    _record_sweep_status), so the order can simply be: never swept first, then the longest ago. Nothing
+    is carried between runs and editing the Targets tab cannot shift it.
+
+    Each brand row is split into one row per account, so a brand's Instagram and its Threads rotate
+    independently. A status recorded for a different handle does not count: the row was repointed.
+    """
+    def key(name, plat):
+        return (str(name).strip() + "\x01" + str(plat).strip()).lower()
+    rows = []
+    for i, b in enumerate(brands or []):
+        for j, (plat, handle) in enumerate((b.get("handles") or {}).items()):
+            if plat not in platforms or not handle:
+                continue
+            st = status.get(key(b.get("name"), plat)) or {}
+            same = str(st.get("handle") or "").strip().lower() == str(handle).strip().lower()
+            swept = str(st.get("sweep_at") or "") if same else ""
+            one = dict(b)
+            one["handles"] = {plat: handle}
+            rows.append((swept, i, j, one))
+    rows.sort(key=lambda r: (r[0], r[1], r[2]))      # '' (never) sorts first; ISO times sort by age
+    return [r[3] for r in rows], sum(1 for r in rows if not r[0]), len(rows)
+
+
 def sweep_status_updates(report: dict, brands: List[dict]) -> List[dict]:
     """
     One line per account this sweep REACHED, for the Targets panel's "last sweep" (Targets.gs,
     target_status_update): when, how many posts were on the profile, and the sweep's note if it had one.
-    A target cut short by the run budget was not reached and is left out, and so is a platform whose
-    recorded session was signed out: neither says anything about the account.
+    A platform whose recorded session was signed out is left out: that says nothing about the account.
+    An account the visit only partly covered (the per-visit cap, or the run budget ending mid-account) IS
+    recorded, with a note: its judged posts are in the ledger, and recording it sends it to the back of
+    the "oldest first" order so the next run moves on instead of opening the same account again.
     """
     handles = {(b.get("name"), plat): h for b in brands or [] for plat, h in (b.get("handles") or {}).items()}
     renamed = {(c.get("brand"), c.get("platform")): c for c in report.get("handle_checks") or []}
@@ -934,11 +1005,16 @@ def sweep_status_updates(report: dict, brands: List[dict]) -> List[dict]:
     for t in report.get("targets") or []:
         key = (t.get("brand"), t.get("platform"))
         err = str(t.get("error") or "")
-        if t.get("truncated") or key not in handles or "signed" in err.lower():
+        if key not in handles or "signed" in err.lower():
             continue
+        opened = int(t.get("opened") or 0)
+        if t.get("truncated") and not opened:
+            continue                    # the run budget ended before anything of this account was judged
         note = err.split(" — ")[0][:120]
         if not note and key in renamed:
             note = str(renamed[key].get("note") or "")[:160]
+        if not note and (t.get("capped") or t.get("truncated")):
+            note = f"partial: {opened} new post(s) judged, older ones wait for the next visit"
         out.append({"brand": key[0], "platform": key[1], "handle": handles[key], "sweep_at": at,
                     "sweep_posts": int(t.get("posts") or 0), "sweep_note": note})
     return out
@@ -1089,6 +1165,7 @@ def resolve_targets(cfg: dict, mode: str, client: Optional[AppsScriptClient], re
         report["targets_source"] = "config.yaml (sheet unreachable)"
         return cfg["brands"]
     known_platforms = set(cfg.get("platforms", {}).keys())
+    unknown_cols: set = set()
     brands: List[dict] = []
     for t in rows:
         if not t.get("active", True):
@@ -1097,11 +1174,17 @@ def resolve_targets(cfg: dict, mode: str, client: Optional[AppsScriptClient], re
         for plat, handle in (t.get("handles") or {}).items():
             if plat in known_platforms:
                 handles[plat] = handle
+            elif str(plat).strip().lower() == "tiktok":
+                # Read by its own workflow (tiktok-auto.yml), not by the sweep. It used to be warned about
+                # once per row on every run, which buried the warnings that mattered.
+                continue
             else:
-                log.warning("Targets tab: platform column %r has no entry in config.yaml platforms; skipped", plat)
+                unknown_cols.add(plat)
         brands.append({"name": t["name"], "handles": handles, "product_hints": t.get("product_hints", []),
                        "type": t.get("type", ""), "active": True,
                        "website_feed": t.get("website_feed", ""), "product_feed": t.get("product_feed", "")})
+    for plat in sorted(unknown_cols):
+        log.warning("Targets tab: platform column %r has no entry in config.yaml platforms; skipped", plat)
     if not brands:
         log.warning("Targets tab has no active rows; using config.yaml")
         report["targets_source"] = "config.yaml (sheet empty)"
