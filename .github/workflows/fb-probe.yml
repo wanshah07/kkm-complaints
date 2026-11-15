@@ -8,6 +8,12 @@ on:
       handle:
         description: A Facebook page to read as a test
         default: cetaphilmalaysia
+      public:
+        description: Pages to read with no login at all, comma separated
+        default: cetaphilmalaysia,larocheposaymalaysia
+      adq:
+        description: A word to look up in Meta's Ad Library (Malaysia)
+        default: cetaphil
 
 concurrency:
   group: kkm-fb-probe
@@ -47,7 +53,9 @@ jobs:
       - name: Probe
         env:
           HANDLE: ${{ inputs.handle }}
-        run: python tools/fb_probe.py --handle "$HANDLE" --out fb_probe_out
+          PUBLIC: ${{ inputs.public }}
+          ADQ: ${{ inputs.adq }}
+        run: python tools/fb_probe.py --handle "$HANDLE" --public "$PUBLIC" --adq "$ADQ" --out fb_probe_out
       - name: Upload the pictures
         if: always()
         uses: actions/upload-artifact@v4

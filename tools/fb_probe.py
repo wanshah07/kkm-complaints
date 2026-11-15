@@ -102,6 +102,37 @@ def reason_in(body):
     return ""
 
 
+POST_LINK = re.compile(r"/(posts|videos|reel|photos?)/[^?#]+|story\.php\?[^#]*|/photo/?\?fbid=\d+|/watch/?\?v=\d+|permalink\.php\?[^#]*")
+
+
+def public_links(page):
+    """Post links on the page, without Facebook's tracking tail, in the order they appear."""
+    try:
+        hrefs = page.evaluate("() => [...document.querySelectorAll('a[href]')].map(a => a.href)")
+    except Exception:
+        return []
+    out = []
+    for h in hrefs:
+        if POST_LINK.search(h):
+            h = re.split(r"[?&]__(?:cft|tn|xts)__", h)[0]
+            if h not in out:
+                out.append(h)
+    return out
+
+
+def close_dialog(page):
+    """Press the X of Facebook's "See more from ..." box, exactly as a visitor would. 1 when one was closed."""
+    try:
+        x = page.locator("div[role='dialog'] [aria-label='Close']").first
+        if x.is_visible(timeout=500):
+            x.click()
+            page.wait_for_timeout(600)
+            return 1
+    except Exception:
+        pass
+    return 0
+
+
 def clean_url(u):
     return re.sub(r"[?#].*$", "", u or "")
 
@@ -110,6 +141,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--handle", default="cetaphilmalaysia")
     ap.add_argument("--out", default=os.path.join(HERE, "fb_probe_out"))
+    ap.add_argument("--public", default="cetaphilmalaysia,larocheposaymalaysia", help="pages to read with no cookies at all, comma separated")
+    ap.add_argument("--scrolls", type=int, default=10)
+    ap.add_argument("--adq", default="cetaphil", help="a word to look up in Meta's Ad Library (Malaysia)")
     args = ap.parse_args()
     raw_b64 = (os.environ.get("PW_STORAGE_STATE_B64") or "").strip()
     if not raw_b64:
@@ -179,11 +213,70 @@ def main():
                 why = reason_in(body)
                 if why:
                     print("STEP %-6s reason: %s" % (key, why))
-                if v != "signed_in" or key != "home":      # a signed-in home feed shows the account: no picture of that
-                    try:
-                        page.screenshot(path=os.path.join(args.out, "fb_%s.png" % key), full_page=False)
-                    except Exception:
-                        pass
+                # No pictures from this context at all. A signed-in feed shows the account, and so does a REJECTED
+                # login: Facebook answers it with "Continue as <name>" and the profile photo (15 Nov 2026: that
+                # picture was uploaded once and deleted). Pictures come from the cookie-less visit below only.
+                try:
+                    chooser = page.get_by_text("Use another profile").first.is_visible(timeout=800)
+                except Exception:
+                    chooser = False
+                if chooser:
+                    print("STEP %-6s Facebook remembers this browser and offers to continue as the account: the login was ended, not forgotten" % key)
+            ctx.close()
+
+            # ---- The same page with no cookies at all: what any visitor is shown.
+            pub = browser.new_context(viewport={"width": 1280, "height": 1600}, locale=run_cfg.get("locale", "en-MY"),
+                                      timezone_id=run_cfg.get("timezone", "Asia/Kuala_Lumpur"), user_agent=ua)
+            pub.set_default_timeout(20000)
+            for handle in [h.strip() for h in args.public.split(",") if h.strip()]:
+                pp = pub.new_page()
+                try:
+                    pp.goto("https://www.facebook.com/%s" % handle, wait_until="domcontentloaded", timeout=45000)
+                    pp.wait_for_timeout(4000)
+                    walled = "/login" in pp.url
+                    first = public_links(pp)
+                    closed = 0
+                    series = []
+                    for i in range(args.scrolls):
+                        closed += close_dialog(pp)
+                        pp.mouse.wheel(0, 2400)
+                        pp.wait_for_timeout(1600)
+                        series.append(len(public_links(pp)))
+                    closed += close_dialog(pp)
+                    links = public_links(pp)
+                    print("PUBLIC %-22s redirected_to_login=%s links_at_load=%d after_%d_scrolls=%d dialogs_closed=%d growth=%s" % (
+                        handle, walled, len(first), args.scrolls, len(links), closed, series))
+                    kinds = {}
+                    for u in links:
+                        k = re.search(r"/(posts|videos|reel|photos?|watch)\b|story\.php|permalink\.php", u)
+                        kinds[k.group(0).strip("/") if k else "other"] = kinds.get(k.group(0).strip("/") if k else "other", 0) + 1
+                    print("PUBLIC %-22s kinds=%s" % (handle, kinds))
+                    pp.screenshot(path=os.path.join(args.out, "public_%s.png" % re.sub(r"[^a-z0-9]+", "_", handle.lower())), full_page=False)
+                except Exception as e:
+                    print("PUBLIC %-22s could not read: %s" % (handle, type(e).__name__))
+                finally:
+                    pp.close()
+                time.sleep(6)
+
+            # ---- Meta's Ad Library: public by design, every ad a page is running on Facebook and Instagram.
+            ap_ = pub.new_page()
+            try:
+                ap_.goto("https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=MY&q=%s&search_type=keyword_unordered&media_type=all" % args.adq,
+                         wait_until="domcontentloaded", timeout=45000)
+                ap_.wait_for_timeout(7000)
+                body = ""
+                try:
+                    body = ap_.locator("body").inner_text(timeout=4000) or ""
+                except Exception:
+                    pass
+                ids = len(set(re.findall(r"Library ID:\s*(\d+)", body)))
+                res = re.search(r"~?([\d,]+)\s+results?", body)
+                print("ADLIB redirected_to_login=%s library_ids_on_page=%d results_line=%s text_chars=%d url=%s" % (
+                    "/login" in ap_.url, ids, res.group(0) if res else "none", len(body), clean_url(ap_.url)))
+                ap_.screenshot(path=os.path.join(args.out, "adlib.png"), full_page=False)
+            except Exception as e:
+                print("ADLIB could not read: %s" % type(e).__name__)
+            pub.close()
         finally:
             browser.close()
     final = verdicts[0] if verdicts else "unknown"
