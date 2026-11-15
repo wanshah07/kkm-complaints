@@ -41,6 +41,23 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   button, [role=button], a.btn { touch-action: manipulation; }
   .tap { min-height: 44px; }
+  #kkmConfirm { flex-shrink: 0; }
+  /* Phones (audit 15 Nov 2026): the first complaint used to sit below a screen of tiles and filters. The tiles are
+     three small ones to a row, the status chips are one scrolling row, and the four selects fold under "Filters". */
+  @media (max-width: 639px) {
+    #stats > * { padding: .5rem .625rem !important; border-radius: .75rem; }
+    #stats > * > :nth-child(2) { font-size: 1.25rem !important; line-height: 1.5rem !important; }
+    #stats > * > :first-child { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #fMore:not(.hidden) { display: grid; grid-template-columns: minmax(0, 1fr); gap: .5rem; width: 100%; }
+    #fMore select { min-width: 0; max-width: 100%; }
+    #statusChips { scrollbar-width: none; } #statusChips::-webkit-scrollbar { display: none; }
+    #statusChips > button, #routeTabs > button { min-height: 40px; flex-shrink: 0; }
+    #routeCards button, #routeCards a { min-height: 40px; display: inline-flex; align-items: center; }
+    #questLink, #btnRewrite { display: inline-flex; align-items: center; min-height: 40px; }
+    /* A row that scrolls sideways says so: its right edge fades out. */
+    #routeTabs, #statusChips { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); padding-right: 28px; }
+    .stRow { display: grid; grid-template-columns: 1fr 1fr; }
+  }
   /* Views */
   .view { display: none; } .view.on { display: block; }
   .tab { border-bottom: 2px solid transparent; }
@@ -102,6 +119,7 @@
     .bg-emerald-100 { background-color: #064e3b !important; } .text-emerald-800 { color: #a7f3d0 !important; }
     .bg-violet-100 { background-color: #3b2a6b !important; } .text-violet-800 { color: #ddd6fe !important; }
     .bg-red-100 { background-color: #5b1a1a !important; } .text-red-800 { color: #fecaca !important; }
+    .text-red-700 { color: #fca5a5 !important; } .border-red-200 { border-color: #7f1d1d !important; } .hover\:bg-red-50:hover { background-color: #3f1414 !important; }
   }
   /* Print = "Save as PDF" from any browser, Samsung Internet included. Only the active view prints. */
   @media print {
@@ -185,7 +203,7 @@
     <div class="grid lg:grid-cols-3 gap-4 min-w-0">
       <div class="lg:col-span-2 min-w-0 bg-white rounded-2xl border border-slate-200 p-4">
         <div class="flex items-baseline justify-between gap-2"><h3 class="font-semibold text-sm">Complaints detected per month</h3><span id="monthNote" class="text-xs text-slate-500"></span></div>
-        <div id="chartMonths" class="mt-3 overflow-x-auto max-w-full"></div>
+        <div id="chartMonths" tabindex="0" role="region" aria-label="Complaints per month, scrollable chart" class="mt-3 overflow-x-auto max-w-full"></div>
       </div>
       <div class="min-w-0 bg-white rounded-2xl border border-slate-200 p-4">
         <h3 class="font-semibold text-sm">From detection to filing</h3>
@@ -211,7 +229,7 @@
         <span><i class="inline-block w-3 h-3 rounded align-middle mr-1" style="background:var(--surface);border:1.5px dashed var(--muted)"></i>on push / on request / manual</span>
         <span><i class="inline-block w-3 h-3 rounded align-middle mr-1" style="background:var(--crit-bg);border:1.5px dashed var(--crit)"></i>off or not firing</span>
       </div>
-      <div id="cmap" class="cmap mt-3"></div>
+      <div id="cmap" tabindex="0" role="region" aria-label="How the parts connect, scrollable diagram" class="cmap mt-3"></div>
     </div>
   </section>
 
@@ -222,15 +240,18 @@
          Cosmetic Ads and is selected on boot. A tab drives the same filter as the Route select below. -->
     <nav id="routeTabs" class="flex gap-1 overflow-x-auto -mx-1 px-1 pb-1 text-sm no-print" aria-label="Routes"></nav>
     <!-- Stats -->
-    <section id="stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"></section>
+    <section id="stats" class="grid grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3"></section>
 
     <!-- Filters -->
     <section class="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 flex flex-wrap items-center gap-2 sm:gap-3 no-print">
-      <div id="statusChips" class="flex flex-wrap gap-2 w-full sm:w-auto"></div>
-      <select id="fBrand" aria-label="Brand" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white max-w-[48%] sm:max-w-none"><option value="">All brands</option></select>
-      <select id="fType" title="Limit the list to one kind of account from the Targets tab (Wan, 4 Nov 2026: search a brand among the doctors' accounts)" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white max-w-[48%] sm:max-w-none"><option value="">All accounts</option></select>
-      <select id="fPlatform" aria-label="Platform" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white max-w-[48%] sm:max-w-none"><option value="">All platforms</option></select>
+      <div id="statusChips" class="flex flex-nowrap sm:flex-wrap gap-2 w-full sm:w-auto overflow-x-auto"></div>
+      <button id="fToggle" type="button" aria-expanded="false" aria-controls="fMore" class="sm:hidden tap rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium">Filters<span id="fToggleN" class="hidden ml-1 rounded-full bg-slate-900 text-white px-1.5 text-xs"></span></button>
+      <div id="fMore" class="hidden sm:contents">
+      <select id="fBrand" aria-label="Brand" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white w-full sm:w-auto"><option value="">All brands</option></select>
+      <select id="fType" aria-label="Account type" title="Limit the list to one kind of account from the Targets tab (Wan, 4 Nov 2026: search a brand among the doctors' accounts)" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white w-full sm:w-auto"><option value="">All accounts</option></select>
+      <select id="fPlatform" aria-label="Platform" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white w-full sm:w-auto"><option value="">All platforms</option></select>
       <select id="fRoute" aria-label="Route" class="rounded-lg border-slate-300 text-sm py-2 pl-3 pr-8 border bg-white max-w-full"><option value="">All routes</option></select>
+      </div>
       <input id="fSearch" type="search" placeholder="Search a brand or product, text, reason, URL…" class="flex-1 min-w-[160px] rounded-lg border border-slate-300 text-sm py-2 px-3">
       <span id="count" class="text-xs text-slate-500"></span>
     </section>
@@ -304,7 +325,7 @@
 
 <!-- Drawer -->
 <div id="overlay" class="fixed inset-0 bg-slate-900/40 z-40 hidden"></div>
-<aside id="drawer" class="drawer fixed top-0 right-0 w-full sm:w-[640px] bg-white z-50 shadow-2xl translate-x-full overflow-y-auto">
+<div id="drawer" class="drawer fixed top-0 right-0 w-full sm:w-[640px] bg-white z-50 shadow-2xl translate-x-full overflow-y-auto">
   <div class="sticky top-0 bg-white border-b border-slate-200 px-4 sm:px-5 py-3 flex items-center gap-3 z-10" style="padding-top:calc(.75rem + var(--sa-top))">
     <div class="min-w-0">
       <div id="dTitle" class="font-semibold truncate">—</div>
@@ -318,7 +339,7 @@
 
   <div class="p-4 sm:p-5 space-y-5" style="padding-bottom:calc(2rem + var(--sa-bottom))">
     <!-- Status actions -->
-    <div class="flex flex-wrap gap-2">
+    <div class="stRow flex flex-wrap gap-2">
       <button data-status="In-Progress" class="stBtn rounded-lg bg-amber-100 text-amber-900 px-3 py-2 text-sm font-medium hover:bg-amber-200">Mark In-Progress</button>
       <button data-status="Complete" class="stBtn rounded-lg bg-emerald-700 text-white px-3 py-2 text-sm font-medium hover:bg-emerald-800">Mark Complete (submitted)</button>
       <button data-status="Dismissed" class="stBtn rounded-lg bg-slate-200 text-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-300">Dismiss (false positive)</button>
@@ -463,7 +484,7 @@
       <span id="dMeta" class="text-xs text-slate-500"></span>
     </div>
   </div>
-</aside>
+</div>
 
 <!-- TikTok links modal (Links.gs) -->
 <div id="linksModal" class="fixed inset-0 z-50 hidden">
@@ -472,7 +493,7 @@
     <div class="px-4 sm:px-5 py-4 border-b border-slate-200 flex items-center gap-3" style="padding-top:calc(1rem + var(--sa-top))">
       <div class="min-w-0">
         <h2 class="font-semibold">TikTok links</h2>
-        <p class="text-xs text-slate-500">Paste video links, one per line. They are read within about 15 minutes. A breach (Unacceptable or Risky) waits here for your decision; an acceptable link is cleared and stays in the reviewed history, so it is never read twice.</p>
+        <p class="text-xs text-slate-500">For a video from an account you are not watching, or an older video: paste the links, one per line. They are read by the next scheduled run, usually within a few hours (GitHub runs its schedules late). Accounts in Targets with a TikTok handle are found automatically and do not need this. A breach (Unacceptable or Risky) waits here for your decision; an acceptable link is cleared and stays in the reviewed history, so it is never read twice.</p>
       </div>
       <button data-lclose aria-label="Close" class="tap ml-auto shrink-0 rounded-lg border border-slate-300 px-3 text-sm hover:bg-slate-50">✕</button>
     </div>
@@ -513,11 +534,12 @@
       <div id="tgMsg" class="hidden rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"></div>
       <div id="tgChips" class="flex flex-wrap gap-2 text-xs"></div>
       <div class="flex flex-wrap items-center gap-2">
-        <input id="tgSearch" type="search" placeholder="Search a name or handle" class="rounded-lg border border-slate-300 text-sm py-2 px-3 w-full sm:w-64">
-        <select id="tgKind" class="rounded-lg border border-slate-300 text-sm py-2 px-2 bg-white"><option value="social">Social accounts</option><option value="web">Websites</option><option value="all">Everything</option></select>
-        <select id="tgPlat" class="rounded-lg border border-slate-300 text-sm py-2 px-2 bg-white"></select>
-        <select id="tgState" class="rounded-lg border border-slate-300 text-sm py-2 px-2 bg-white">
-          <option value="">Any status</option><option value="live">Live</option><option value="attention">Needs attention</option><option value="unchecked">Not checked yet</option><option value="blocked">Could not check</option><option value="paused">Paused</option></select>
+        <input id="tgSearch" type="search" aria-label="Search a name or handle" placeholder="Search a name or handle" class="rounded-lg border border-slate-300 text-sm py-2 px-3 w-full sm:w-64">
+        <select id="tgKind" aria-label="Kind of row" class="rounded-lg border border-slate-300 text-sm py-2 px-2 bg-white"><option value="social">Social accounts</option><option value="web">Websites</option><option value="all">Everything</option></select>
+        <select id="tgPlat" aria-label="Platform" class="rounded-lg border border-slate-300 text-sm py-2 px-2 bg-white"></select>
+        <select id="tgSort" aria-label="Sort" class="rounded-lg border border-slate-300 text-sm py-2 px-2 bg-white"><option value="">Sheet order</option><option value="attention">Needs attention first</option><option value="oldest">Oldest check first</option><option value="name">Name A-Z</option></select>
+        <select id="tgState" aria-label="Status" class="rounded-lg border border-slate-300 text-sm py-2 px-2 bg-white">
+          <option value="">Any status</option><option value="live">Live</option><option value="attention">Needs attention</option><option value="unchecked">Not checked yet</option><option value="blocked">Could not check / login refused</option><option value="paused">Paused</option></select>
         <button id="tgAdd" class="sm:ml-auto rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">+ Add account</button>
       </div>
       <form id="tgForm" class="hidden rounded-xl border border-slate-300 bg-slate-50 p-3 sm:p-4 space-y-3" autocomplete="off">
@@ -532,10 +554,13 @@
           <label class="block text-xs font-medium text-slate-600">Product hints (comma separated)<input id="tgHints" maxlength="1000" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white"></label>
           <label class="block text-xs font-medium text-slate-600">Notes<input id="tgNotes" maxlength="1000" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white"></label>
         </div>
-        <div id="tgFeeds" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label class="block text-xs font-medium text-slate-600">Website feed<input id="tgWeb" maxlength="1000" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white"></label>
-          <label class="block text-xs font-medium text-slate-600">Product feed<input id="tgProd" maxlength="1000" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white"></label>
-        </div>
+        <details id="tgFeeds" class="hidden">
+          <summary class="cursor-pointer text-xs font-medium text-slate-600">Website row fields (a shop or brand website instead of a social account)</summary>
+          <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label class="block text-xs font-medium text-slate-600">Website feed<input id="tgWeb" maxlength="1000" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white"></label>
+            <label class="block text-xs font-medium text-slate-600">Product feed<input id="tgProd" maxlength="1000" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white"></label>
+          </div>
+        </details>
         <div class="flex flex-wrap items-center gap-2">
           <button id="tgSave" type="submit" class="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">Save</button>
           <button id="tgCancel" type="button" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50">Cancel</button>
@@ -544,7 +569,7 @@
       </form>
       <div id="tgList" class="rounded-xl border border-slate-200 divide-y divide-slate-100"></div>
       <div id="tgEmpty" class="hidden p-6 text-center text-slate-500 text-sm">Nothing matches.</div>
-      <p id="tgFoot" class="text-xs text-slate-500"></p>
+      <div class="flex flex-wrap items-center gap-3"><p id="tgFoot" class="text-xs text-slate-500"></p><button id="tgUndo" type="button" class="hidden text-xs rounded border border-slate-300 px-2 py-1 hover:bg-slate-50"></button></div>
     </div>
   </div>
 </div>
@@ -740,6 +765,10 @@ const state = { rows: [], archived: [], stats: null, summary: null, summaryFrom:
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+// A link that came from the sheet or a feed is only ever opened if it is a web address. esc() stops markup, not
+// schemes: "javascript:..." in a Post URL would run in this page, where the dashboard key lives (audit, 15 Nov 2026).
+const safeHref = (u) => { const v = String(u ?? '').trim(); return /^https?:\/\//i.test(v) ? v : '#'; };
+
 function toast(msg, ms = 2600) {
   const t = $('toast'); t.textContent = msg; t.classList.remove('hidden');
   clearTimeout(t._h); t._h = setTimeout(() => t.classList.add('hidden'), ms);
@@ -842,6 +871,7 @@ async function boot(rethrow) {
   $('loading').classList.remove('hidden'); $('loading').innerHTML = '<div class="spinner"></div>';
   try {
     const b = await rpc('apiBootstrap');
+    if (!b || !Array.isArray(b.rows) || !b.stats || !b.stats.counts) throw new Error('The backend answered, but not in the shape this page expects. Re-paste Code.gs in the Apps Script editor and deploy a new version.');
     state.rows = b.rows; state.stats = b.stats; state.lookups = b.lookups; state.statuses = b.statuses;
     state.questUrl = b.questUrl; KKM_FORM_URL = b.kkmFormUrl || KKM_FORM_URL;
     applyRoutes(b.routes);
@@ -1156,8 +1186,8 @@ function renderTable() {
       <td class="px-4 py-3 max-w-[340px]"><div class="font-medium">${esc(r['Violation Type'])}</div><div class="text-xs text-slate-500 clamp-2">${esc(r['Violation Reason'])}</div></td>
       <td class="px-4 py-3"><span class="badge ${STATUS_STYLE[r['Status']] || 'bg-slate-100'}">${esc(r['Status'])}</span>${r['KKM Feedback'] ? '<div class="text-[11px] text-emerald-700 mt-1">Replied</div>' : ''}</td>
       <td class="px-4 py-3 whitespace-nowrap text-xs">
-        <a href="${esc(r['Post URL'])}" target="_blank" rel="noopener" class="text-blue-700 underline mr-2" onclick="event.stopPropagation()">post</a>
-        ${r['Screenshot Link'] ? `<a href="${esc(r['Screenshot Link'])}" target="_blank" rel="noopener" class="text-blue-700 underline" onclick="event.stopPropagation()">shot</a>` : '<span class="text-slate-500">no shot</span>'}
+        <a href="${esc(safeHref(r['Post URL']))}" target="_blank" rel="noopener" class="text-blue-700 underline mr-2" onclick="event.stopPropagation()">post</a>
+        ${r['Screenshot Link'] ? `<a href="${esc(safeHref(r['Screenshot Link']))}" target="_blank" rel="noopener" class="text-blue-700 underline" onclick="event.stopPropagation()">shot</a>` : '<span class="text-slate-500">no shot</span>'}
       </td>
     </tr>`).join('');
   $('rows').querySelectorAll('tr[data-id]').forEach(tr => tr.onclick = () => openRow(tr.dataset.id));
@@ -1277,17 +1307,23 @@ function renderHome() {
 
 // "How they connect": one row per runner, read from the repo's own workflow triggers (9 Oct 2026; 6 Nov 2026):
 // scraper.yml runs on its own cron, Friday 23:30 MYT (15:30 UTC), and on Run workflow; tiktok-links.yml
-// carries a cron GitHub has never fired (manual poll stands in), pages.yml deploys on push to main.
+// and the three jobs added 14 Nov 2026 carry crons GitHub fires late (a few times a day), pages.yml deploys on push to main.
 const LANES = [
   { lane: 'Sweep (kkm-complaints)', c: '--lane-sweep', rows: [
     { src: [['scraper.yml', 'wanshah07/kkm-complaints · main'], ['Targets tab', 'Google Sheet · brands and handles']], run: ['Weekly sweep', 'GitHub cron · Fri 23:30 MYT · or Run workflow'], kind: 'routine', a1: 'cron',
       dst: [['Complaints tab', 'Google Sheet · one row per finding'], ['Reviewed ledger', 'never reads a post twice']] },
-    { src: [['tiktok-links.yml', 'links pasted in the dashboard']], run: ['TikTok link review', 'cron set, not fired by GitHub · polled by hand'], kind: 'off', a1: 'claims 10',
-      dst: [['Links tab', 'held findings wait for a decision']] }
+    { src: [['tiktok-links.yml', 'links pasted in the dashboard']], run: ['TikTok link review', 'GitHub cron · every 15 min on paper, a few times a day in practice'], kind: 'cron', a1: 'claims 10',
+      dst: [['Links tab', 'held findings wait for a decision']] },
+    { src: [['tiktok-auto.yml', 'Targets tab · TikTok column']], run: ['TikTok auto discovery', 'GitHub cron · every 3 h on paper · ten newest videos'], kind: 'cron', a1: 'new videos',
+      dst: [['Complaints tab', 'filed as New, like a sweep post']] },
+    { src: [['account-check.yml', 'every handle in the Targets tab']], run: ['Account check', 'GitHub cron · daily slice · profile only'], kind: 'cron', a1: 'status',
+      dst: [['TargetStatus tab', 'the badges in the Targets panel']] },
+    { src: [['platform-status.yml', 'one profile per platform']], run: ['Platform status', 'GitHub cron · every 6 h'], kind: 'cron', a1: 'status.json',
+      dst: [['Status strip', 'under the header of this page']] }
   ] },
   { lane: 'Dashboard', c: '--lane-dash', rows: [
     { src: [['web/index.html', 'this page']], run: ['pages.yml', 'on push to main'], kind: 'push', a1: 'deploy', dst: [['aduan.kkmhalalconsultant.com', 'GitHub Pages']], a2: 'publish' },
-    { src: [['Code.gs + Links.gs', 'Apps Script on the sheet']], run: ['Web app /exec', 'on request · DASHBOARD_KEY'], kind: 'push', a1: 'JSON', dst: [['Overview · queue · routes', 'what you are reading']] }
+    { src: [['Code.gs + Links.gs + Targets.gs', 'Apps Script on the sheet']], run: ['Web app /exec', 'on request · DASHBOARD_KEY'], kind: 'push', a1: 'JSON', dst: [['Overview · queue · routes', 'what you are reading']] }
   ] },
   { lane: 'Filing', c: '--lane-file', rows: [
     { src: [['Drawer', 'checked complaint + screenshot']], run: ['You press Submit', 'KKM form · SisPAA · FEMES · MCMC …'], kind: 'push', a1: 'fill / copy',
@@ -1355,7 +1391,7 @@ function renderRoutes() {
       <div class="text-xs"><span class="font-semibold text-slate-600">Fields the form needs</span><div class="mt-0.5 text-slate-500">${(r.fields || []).map(esc).join(' · ') || '—'}</div></div>
       <div class="text-xs">
         <div class="flex items-center gap-2 flex-wrap"><span class="font-semibold text-slate-600">Channel</span><span class="badge ${bcls}">${btext}</span>${ch.checked ? `<span class="text-slate-500">checked ${esc(ch.checked)}</span>` : ''}</div>
-        <div class="text-slate-600 mt-0.5">${esc(ch.label || '')}${ch.url ? ` — <a class="text-blue-700 underline break-all" target="_blank" rel="noopener" href="${esc(ch.url)}">${esc(ch.url.replace(/^https?:\/\//, ''))}</a>` : ''}</div>
+        <div class="text-slate-600 mt-0.5">${esc(ch.label || '')}${ch.url ? ` — <a class="text-blue-700 underline break-all" target="_blank" rel="noopener" href="${esc(safeHref(ch.url))}">${esc(ch.url.replace(/^https?:\/\//, ''))}</a>` : ''}</div>
         ${ch.note ? `<div class="text-slate-500 mt-0.5">${esc(ch.note)}</div>` : ''}
         ${(r.email || r.phone) ? `<div class="text-slate-500 mt-0.5">${r.email ? `<a class="underline" href="mailto:${esc(r.email)}">${esc(r.email)}</a>` : ''}${r.email && r.phone ? ' · ' : ''}${r.phone ? `<a class="underline" href="tel:${esc(r.phone.replace(/\s+/g, ''))}">${esc(r.phone)}</a>` : ''}</div>` : ''}
       </div>
@@ -1475,6 +1511,7 @@ async function openRow(id) {
   showDrawer(true);
   try {
     const fresh = await rpc('apiOpen', id);   // New → In-Progress happens server-side
+    if (!fresh || !fresh['ID']) throw new Error('the backend did not return this complaint (it may have been removed from the sheet). Press Refresh.');
     mergeRow(fresh); fillDrawer(fresh);
     if (local && local['Status'] === 'New' && fresh['Status'] === 'In-Progress') { toast('Status → In-Progress'); refreshStatsOnly(); }
   } catch (e) { toast('Open failed: ' + e.message); }
@@ -1494,9 +1531,9 @@ function fillDrawer(r) {
   const st = $('dStatus'); st.textContent = r['Status']; st.className = 'badge ' + (STATUS_STYLE[r['Status']] || '');
   const shot = $('dShot');
   shot.innerHTML = r['Screenshot Link']
-    ? `<a href="${esc(r['Screenshot Link'])}" target="_blank" rel="noopener"><img src="${esc(driveThumb(r['Screenshot Link']))}" alt="screenshot" loading="lazy" class="w-full max-h-[420px] object-contain bg-white" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'p-4 text-sm',textContent:'Preview unavailable — open the link.'}))"></a>`
+    ? `<a href="${esc(safeHref(r['Screenshot Link']))}" target="_blank" rel="noopener"><img src="${esc(driveThumb(r['Screenshot Link']))}" alt="screenshot" loading="lazy" class="w-full max-h-[420px] object-contain bg-white" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'p-4 text-sm',textContent:'Preview unavailable — open the link.'}))"></a>`
     : `<div class="p-4 text-sm text-slate-500">No screenshot.</div>`;
-  $('dUrl').textContent = r['Post URL']; $('dUrl').href = r['Post URL'];
+  $('dUrl').textContent = r['Post URL']; $('dUrl').href = safeHref(r['Post URL']);
   $('dText').textContent = r['Extracted Text'] || '—';
   $('eViolationType').value = r['Violation Type'] || '';
   if ($('eViolationType').value !== (r['Violation Type'] || '')) { const o = document.createElement('option'); o.value = o.textContent = r['Violation Type']; $('eViolationType').appendChild(o); $('eViolationType').value = r['Violation Type']; }
@@ -1983,6 +2020,13 @@ $('fType').onchange = e => { state.filter.type = e.target.value; renderTable(); 
 $('fPlatform').onchange = e => { state.filter.platform = e.target.value; renderTable(); };
 $('fRoute').onchange = e => { state.filter.route = e.target.value; renderAll(); };
 $('fSearch').oninput = e => { state.filter.q = e.target.value; renderTable(); };
+// Phones: the four selects fold under one button, which says how many are in use.
+function syncFilterToggle() {
+  const n = ['fBrand', 'fType', 'fPlatform'].filter(id => $(id).value).length;
+  $('fToggleN').textContent = n; $('fToggleN').classList.toggle('hidden', !n);
+}
+$('fToggle').onclick = () => { const open = $('fMore').classList.toggle('hidden') === false; $('fToggle').setAttribute('aria-expanded', open ? 'true' : 'false'); };
+['fBrand', 'fType', 'fPlatform'].forEach(id => $(id).addEventListener('change', syncFilterToggle));
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('ldModal').classList.contains('hidden')) { closeDetail(); return; } showDrawer(false); showModal(false); showLinks(false); showTargets(false); showAdmin(false); toggleMenu('exportMenu', false); toggleMenu('moreMenu', false); if (cfg.key) showConnect(false); } });
 // ---------------------------------------------------------------------------
 // TikTok links (Links.gs): paste here, a scheduled run reads them, the outcome comes back here.
@@ -2060,7 +2104,7 @@ async function loadLinks() {
       const short = o.link.replace(/^https?:\/\/(www\.)?/, '');
       const decide = (k === 'decide' && o.canFile) ? `<div class="flex gap-1 justify-end flex-wrap"><button class="lWhy text-xs rounded border border-violet-300 text-violet-800 px-2 py-1 hover:bg-violet-50" data-link="${esc(o.link)}">Why?</button><button class="lFile text-xs rounded bg-slate-900 text-white px-2 py-1 hover:bg-slate-800" data-link="${esc(o.link)}">Add to database</button><button class="lDismiss text-xs rounded border border-slate-300 px-2 py-1 hover:bg-slate-50" data-link="${esc(o.link)}">Dismiss</button></div>` : '';
       const retry = decide || ((k === 'error' && /tiktok\.com/.test(o.link)) ? `<button class="lRetry text-xs rounded border border-slate-300 px-2 py-1 hover:bg-slate-50" data-link="${esc(o.link)}">Retry</button>` : '');
-      return `<tr><td class="px-3 py-2 max-w-[260px]"><a class="text-blue-700 hover:underline break-all" href="${esc(o.link)}" target="_blank" rel="noopener">${esc(short.length > 60 ? short.slice(0, 58) + '…' : short)}</a></td>
+      return `<tr><td class="px-3 py-2 max-w-[260px]"><a class="text-blue-700 hover:underline break-all" href="${esc(safeHref(o.link))}" target="_blank" rel="noopener">${esc(short.length > 60 ? short.slice(0, 58) + '…' : short)}</a></td>
         <td class="px-3 py-2"><span class="badge ${LINK_BADGE[k]}">${esc(label)}</span>${o.run ? `<div class="text-[11px] text-slate-500 mt-0.5">run ${trimRun(o.run)}</div>` : ''}</td>
         <td class="px-3 py-2 text-slate-700">${esc(o.result)}</td><td class="px-3 py-2 text-right">${retry}</td></tr>`;
     }).join('');
@@ -2110,7 +2154,7 @@ async function openDetail(link) {
     $('ldReason').textContent = d.reason || 'No reason recorded.';
     $('ldText').textContent = d.text || '(no caption text was captured)';
     $('ldDesc').textContent = d.description; $('ldDescWrap').classList.toggle('hidden', !d.description);
-    $('ldVideo').href = d.link; $('ldShot').href = d.screenshot || '#'; $('ldShot').classList.toggle('hidden', !d.screenshot);
+    $('ldVideo').href = safeHref(d.link); $('ldShot').href = safeHref(d.screenshot); $('ldShot').classList.toggle('hidden', !d.screenshot);
     $('ldMsg').textContent = '';
   } catch (e) { $('ldMsg').textContent = /Unknown action/.test(e.message) ? 'The backend needs the latest Links.gs (new version).' : e.message; }
 }
@@ -2134,11 +2178,13 @@ const TG_STATE = {
   live: ['Live', 'bg-emerald-100 text-emerald-800'], renamed: ['Handle changed', 'bg-amber-100 text-amber-900'],
   empty: ['No posts seen', 'bg-amber-100 text-amber-900'], not_found: ['Not found', 'bg-red-100 text-red-800'],
   private: ['Private', 'bg-red-100 text-red-800'], blocked: ['Could not check', 'bg-slate-200 text-slate-700'],
+  limited: ['Login refused', 'bg-amber-100 text-amber-900'],
   error: ['Check failed', 'bg-slate-200 text-slate-700'], '': ['Not checked yet', 'bg-slate-100 text-slate-600'] };
 const TG_ATTENTION = ['renamed', 'empty', 'not_found', 'private'];
 const TG_PROFILE = { Instagram: h => `https://www.instagram.com/${h}/`, Facebook: h => `https://www.facebook.com/${h}`,
   Threads: h => `https://www.threads.net/@${h}`, TikTok: h => `https://www.tiktok.com/@${h}` };
-let tg = { platforms: [], targets: [], status: {}, types: [], has: {}, canEdit: false, editing: null };
+const TG_STALE_DAYS = 10;          // the daily check comes round about every 8 days; older than this is not current
+let tg = { platforms: [], targets: [], status: {}, types: [], has: {}, undo: null, canEdit: false, editing: null };
 const tgKey = (brand, plat) => (String(brand).trim() + '\u0001' + String(plat).trim()).toLowerCase();
 function tgWhen(iso) {
   if (!iso) return '';
@@ -2159,7 +2205,7 @@ async function loadTargets() {
   const msg = (m) => { $('tgMsg').textContent = m || ''; $('tgMsg').classList.toggle('hidden', !m); };
   try {
     const d = await api('targets_admin', {}, 60000);
-    tg = Object.assign(tg, { platforms: d.platforms || [], targets: d.targets || [], status: d.status || {}, types: d.types || [], has: d.has || {}, canEdit: true });
+    tg = Object.assign(tg, { platforms: d.platforms || [], targets: d.targets || [], status: d.status || {}, types: d.types || [], has: d.has || {}, undo: d.undo || null, canEdit: true });
     msg('');
   } catch (e) {
     if (!/Unknown action/.test(e.message)) { msg(e.message); return; }
@@ -2167,7 +2213,7 @@ async function loadTargets() {
     try {
       const d = await api('targets', {}, 60000);
       const plats = []; (d.targets || []).forEach(t => Object.keys(t.handles || {}).forEach(p => { if (!plats.includes(p)) plats.push(p); }));
-      tg = Object.assign(tg, { platforms: plats, targets: d.targets || [], status: {}, types: [], has: {}, canEdit: false });
+      tg = Object.assign(tg, { platforms: plats, targets: d.targets || [], status: {}, types: [], has: {}, undo: null, canEdit: false });
       msg('Read only for now: the backend does not have the Targets update yet. In the Apps Script editor add Targets.gs, re-paste Code.gs, then Deploy → Manage deployments → New version. After that you can add, change and remove accounts here and each account shows its status.');
     } catch (e2) { msg(e2.message); return; }
   }
@@ -2193,7 +2239,13 @@ function renderTargets() {
   $('tgChips').querySelectorAll('[data-tgchip]').forEach(b => b.onclick = () => { $('tgState').value = b.dataset.tgchip; renderTargets(); });
   ['tgBadge'].forEach(id => { $(id).textContent = count.attention; $(id).classList.toggle('hidden', !count.attention); });
 
-  const rows = tg.targets.filter(t => {
+  const worst = (t) => { const o = { attention: 0, blocked: 1, unchecked: 2, live: 3 }; const b = Object.keys(t.handles || {}).map(p => o[bucket(tgStateOf(t, p))]); return !t.active ? 9 : (b.length ? Math.min(...b) : 8); };
+  const oldest = (t) => { const a = Object.keys(t.handles || {}).map(p => (tgStatusOf(t, p) || {}).checked_at || ''); return a.length ? a.sort()[0] : '~'; };
+  const sort = $('tgSort').value;
+  const rows = tg.targets.map((t, i) => [t, i]).sort((a, b) =>
+    sort === 'attention' ? (worst(a[0]) - worst(b[0]) || a[1] - b[1]) :
+    sort === 'oldest' ? (oldest(a[0]) < oldest(b[0]) ? -1 : oldest(a[0]) > oldest(b[0]) ? 1 : a[1] - b[1]) :
+    sort === 'name' ? a[0].name.localeCompare(b[0].name, undefined, { sensitivity: 'base' }) : a[1] - b[1]).map(x => x[0]).filter(t => {
     const hs = Object.keys(t.handles || {});
     if (kind === 'social' && !hs.length) return false;
     if (kind === 'web' && hs.length) return false;
@@ -2210,7 +2262,8 @@ function renderTargets() {
       const h = t.handles[p], s = tgStatusOf(t, p) || {}, st = s.state || '', [label, cls] = TG_STATE[st] || TG_STATE[''];
       const url = TG_PROFILE[p] ? TG_PROFILE[p](encodeURIComponent(h).replace(/%40/g, '@')) : '';
       const bits = [];
-      if (s.checked_at) bits.push('checked ' + tgWhen(s.checked_at) + (st === 'live' || st === 'renamed' ? ` · ${esc(s.posts || 0)} post(s) seen` : ''));
+      const ageD = s.checked_at ? Math.floor((Date.now() - Date.parse(s.checked_at)) / 86400000) : 0;
+      if (s.checked_at) bits.push('checked ' + tgWhen(s.checked_at) + (ageD >= TG_STALE_DAYS ? ` <span class="text-amber-700 font-medium">(${ageD} days ago: may be out of date)</span>` : '') + (st === 'live' || st === 'renamed' ? ` · ${esc(s.posts || 0)} post(s) seen` : ''));
       if (s.sweep_at) bits.push('last sweep ' + tgWhen(s.sweep_at) + ` · ${esc(s.sweep_posts || 0)} post(s)` + (s.sweep_note ? ' · ' + esc(s.sweep_note) : ''));
       const why = (st && st !== 'live' && s.detail) ? `<div class="text-[11px] text-slate-600">${esc(s.detail)}</div>` : '';
       const use = (st === 'renamed' && s.suggest && tg.canEdit) ? ` <button type="button" class="tgUse text-[11px] rounded border border-amber-300 text-amber-900 px-1.5 py-0.5 hover:bg-amber-50" data-name="${esc(t.name)}" data-plat="${esc(p)}" data-h="${esc(s.suggest)}">Use @${esc(s.suggest)}</button>` : '';
@@ -2226,7 +2279,9 @@ function renderTargets() {
         ${t.active ? '' : '<span class="badge bg-slate-200 text-slate-700">Paused</span>'}<span class="ml-auto"></span>${acts}</div>
       <div class="mt-1">${lines}${web}</div>${t.notes ? `<div class="mt-1 text-[11px] text-slate-500">${esc(t.notes)}</div>` : ''}</div>`;
   }).join('');
-  $('tgFoot').textContent = `${rows.length} of ${tg.targets.length} row(s) shown. Status comes from the account check (profile only) and from each sweep.`;
+  $('tgFoot').textContent = `${rows.length} of ${tg.targets.length} row(s) shown. Status comes from the account check (profile only) and from each sweep. Every change is kept in the sheet's TargetsLog tab.`;
+  $('tgUndo').classList.toggle('hidden', !(tg.canEdit && tg.undo));
+  if (tg.undo) $('tgUndo').textContent = `Undo: put "${tg.undo.name}" back`;
   const find = n => tg.targets.find(t => t.name === n);
   $('tgList').querySelectorAll('.tgEdit').forEach(b => b.onclick = () => tgForm(find(b.dataset.name), true));
   $('tgList').querySelectorAll('.tgUse').forEach(b => b.onclick = () => { tgForm(find(b.dataset.name), true); const i = document.querySelector(`#tgHandles input[data-plat="${CSS.escape(b.dataset.plat)}"]`); if (i) { i.value = b.dataset.h; i.focus(); } });
@@ -2239,7 +2294,7 @@ function renderTargets() {
     const t = find(b.dataset.name); if (!t) return;
     if (!confirm(`Remove "${t.name}" from the Targets tab?\n\nThe sweep stops watching it. Complaints already filed for it stay as they are. To stop watching without deleting the row, use Pause.`)) return;
     b.disabled = true;
-    try { await api('target_remove', { name: t.name }); toast('Removed'); loadTargets(); } catch (e) { toast(e.message, 5000); b.disabled = false; }
+    try { await api('target_remove', { name: t.name }); toast('Removed. "Undo" at the bottom of the list puts it back.', 5000); loadTargets(); } catch (e) { toast(e.message, 5000); b.disabled = false; }
   });
 }
 function tgForm(t, open) {
@@ -2252,7 +2307,9 @@ function tgForm(t, open) {
   $('tgType').value = t ? (t.type || '') : ''; $('tgActive').checked = t ? !!t.active : true;
   $('tgHints').value = t ? (t.product_hints || []).join(', ') : ''; $('tgNotes').value = t ? (t.notes || '') : '';
   $('tgWeb').value = t ? (t.website_feed || '') : ''; $('tgProd').value = t ? (t.product_feed || '') : '';
-  $('tgFeeds').classList.toggle('hidden', !(t && (t.website_feed || t.product_feed)));
+  // The two feed fields belong to website rows; they stay folded for an account row unless it already has one.
+  $('tgFeeds').open = !!(t && (t.website_feed || t.product_feed || !Object.keys(t.handles || {}).length));
+  $('tgFeeds').classList.toggle('hidden', !(tg.has.website_feed || tg.has.product_feed));
   $('tgHandles').innerHTML = tg.platforms.map(p => `<label class="block text-xs font-medium text-slate-600">${esc(p)}<input data-plat="${esc(p)}" maxlength="300" value="${esc(t ? (t.handles[p] || '') : '')}" placeholder="handle or profile link" class="mt-1 w-full rounded-lg border border-slate-300 text-sm py-2 px-3 bg-white font-mono"></label>`).join('');
   $('tgFormMsg').textContent = '';
   $('tgForm').scrollIntoView({ block: 'nearest' });
@@ -2263,7 +2320,7 @@ async function tgSave(ev) {
   const handles = {}; $('tgHandles').querySelectorAll('input[data-plat]').forEach(i => { handles[i.dataset.plat] = i.value.trim(); });
   const target = { name: $('tgName').value.trim(), active: $('tgActive').checked, type: $('tgType').value.trim(), handles,
     product_hints: $('tgHints').value.trim(), notes: $('tgNotes').value.trim() };
-  if (!$('tgFeeds').classList.contains('hidden')) { target.website_feed = $('tgWeb').value.trim(); target.product_feed = $('tgProd').value.trim(); }
+  if (!$('tgFeeds').classList.contains('hidden') && ($('tgFeeds').open || $('tgWeb').value || $('tgProd').value)) { target.website_feed = $('tgWeb').value.trim(); target.product_feed = $('tgProd').value.trim(); }
   $('tgSave').disabled = true; $('tgFormMsg').textContent = '';
   try {
     const d = await api('target_save', { target, original: tg.editing || '' });
@@ -2276,7 +2333,13 @@ $('btnTargets').onclick = () => showTargets(true);
 $('tgAdd').onclick = () => tgForm(null, true);
 $('tgCancel').onclick = () => tgForm(null, false);
 $('tgForm').addEventListener('submit', tgSave);
-['tgSearch', 'tgKind', 'tgPlat', 'tgState'].forEach(id => $(id).addEventListener('input', renderTargets));
+['tgSearch', 'tgKind', 'tgPlat', 'tgState', 'tgSort'].forEach(id => $(id).addEventListener('input', renderTargets));
+$('tgUndo').onclick = async () => {
+  $('tgUndo').disabled = true;
+  try { const d = await api('target_undo'); toast(`"${d.name}" is back in the list. Its accounts are tested by the next account check.`, 5000); loadTargets(); }
+  catch (e) { toast(/Unknown action/.test(e.message) ? 'The backend needs the new Targets.gs and Code.gs before a removal can be undone.' : e.message, 6000); }
+  finally { $('tgUndo').disabled = false; }
+};
 document.querySelectorAll('[data-tgclose]').forEach(b => b.onclick = () => showTargets(false));
 
 $('btnLinks').onclick = () => showLinks(true);
@@ -2330,7 +2393,7 @@ function renderOwn() {
   if (!rows.length) { $('ownList').innerHTML = `<div class="md:col-span-2 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">${f === 'New' ? 'Nothing waiting. Every own-brand post has been dealt with.' : 'Nothing in this list.'}</div>`; return; }
   $('ownList').innerHTML = rows.map(r => {
     const st = r.Status || 'New';
-    const shot = r['Screenshot Link'] ? `<a class="text-blue-700 hover:underline text-xs" href="${esc(r['Screenshot Link'])}" target="_blank" rel="noopener">Screenshot</a>` : '';
+    const shot = r['Screenshot Link'] ? `<a class="text-blue-700 hover:underline text-xs" href="${esc(safeHref(r['Screenshot Link']))}" target="_blank" rel="noopener">Screenshot</a>` : '';
     const btn = (act, label, cls) => `<button data-own-act="${act}" data-own-id="${esc(r.ID)}" class="rounded-lg px-3 py-2 text-xs font-semibold ${cls}">${label}</button>`;
     const actions = st === 'New'
       ? btn('dismiss', 'Dismissed', 'bg-slate-900 text-white hover:bg-slate-800') + btn('taken', 'Action taken', 'bg-violet-700 text-white hover:bg-violet-600') + btn('not_own', 'Not own brand', 'border border-slate-300 bg-white hover:bg-slate-50')
@@ -2343,7 +2406,7 @@ function renderOwn() {
       </div>
       <div class="text-sm font-medium">${esc(r['Nama Kosmetik'] || 'Product not named')} <span class="font-normal text-slate-500">· ${esc(String(r['Violation Type'] || '').replace(/^Risky:\s*/, ''))}</span></div>
       <div class="text-xs text-slate-600" style="${clampCss}">${esc(r['Violation Reason'])}</div>
-      <div class="flex items-center gap-3 flex-wrap"><a class="text-blue-700 hover:underline text-xs font-medium" href="${esc(r['Post URL'])}" target="_blank" rel="noopener">Open post ↗</a>${shot}<span class="text-[11px] text-slate-500">${esc(r.ID)}</span></div>
+      <div class="flex items-center gap-3 flex-wrap"><a class="text-blue-700 hover:underline text-xs font-medium" href="${esc(safeHref(r['Post URL']))}" target="_blank" rel="noopener">Open post ↗</a>${shot}<span class="text-[11px] text-slate-500">${esc(r.ID)}</span></div>
       <div class="flex flex-wrap gap-2 pt-1">${actions}</div>
     </div>`;
   }).join('');
@@ -2383,8 +2446,8 @@ function renderChecks() {
       <div class="text-sm font-medium">${esc(h.product || 'Product not named')} <span class="font-normal text-slate-500">· ${esc(h.type)}</span></div>
       <div class="rounded-lg bg-amber-50 border border-amber-200 px-2 py-1.5 text-xs text-amber-900">${esc(h.why)}</div>
       <div class="text-xs text-slate-600" style="${clampCss}">${esc(h.reason)}</div>
-      <div class="flex items-center gap-3 flex-wrap"><a class="inline-flex items-center rounded-lg bg-blue-700 text-white px-3 py-2 text-xs font-semibold hover:bg-blue-600" href="${esc(h.url)}" target="_blank" rel="noopener">Open post ↗</a>
-        ${h.screenshot ? `<a class="text-blue-700 hover:underline text-xs" href="${esc(h.screenshot)}" target="_blank" rel="noopener">Screenshot</a>` : ''}
+      <div class="flex items-center gap-3 flex-wrap"><a class="inline-flex items-center rounded-lg bg-blue-700 text-white px-3 py-2 text-xs font-semibold hover:bg-blue-600" href="${esc(safeHref(h.url))}" target="_blank" rel="noopener">Open post ↗</a>
+        ${h.screenshot ? `<a class="text-blue-700 hover:underline text-xs" href="${esc(safeHref(h.screenshot))}" target="_blank" rel="noopener">Screenshot</a>` : ''}
         <button data-chk="more" class="text-xs text-slate-600 underline">Full reason</button></div>
       <div data-chk-detail class="hidden rounded-lg bg-slate-50 border border-slate-200 p-2 text-xs text-slate-700 whitespace-pre-wrap max-h-64 overflow-y-auto"></div>
       <div class="flex flex-wrap items-center gap-2 pt-1">
@@ -2434,25 +2497,39 @@ async function loadPlatStatus() {
     const r = await fetch('status.json?t=' + Date.now(), { cache: 'no-store' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const d = await r.json();
-    const ageH = (Date.now() - Date.parse(d.checked_at)) / 3600000;
-    const stale = !(ageH >= 0) || ageH > 14;
+    // Each platform carries the time it was really measured (`at`): while a sweep is using the login the probe
+    // republishes the last real result instead of testing, so the file's own time can be newer than the fact.
+    const isOld = (iso) => { const h = (Date.now() - Date.parse(iso)) / 3600000; return !(h >= 0) || h > 14; };
+    const stale = isOld(d.checked_at);
+    const fmt = (iso) => { const t = new Date(iso); return isNaN(t) ? '' : t.toLocaleString('en-MY', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); };
     const cls = { live: 'bg-emerald-100 text-emerald-800', degraded: 'bg-amber-100 text-amber-900', down: 'bg-red-100 text-red-800', unknown: 'bg-slate-100 text-slate-700' };
     const word = { live: 'live', degraded: 'limited', down: 'down', unknown: 'unknown' };
     const dot = { live: '\u25CF', degraded: '\u25D0', down: '\u2715', unknown: '?' };
     const pills = $('platPills'); pills.textContent = '';
     (d.platforms || []).forEach((p) => {
-      const st = stale ? 'unknown' : (cls[p.state] ? p.state : 'unknown');
+      const old = stale || (p.at ? isOld(p.at) : false);
+      const st = old ? 'unknown' : (cls[p.state] ? p.state : 'unknown');
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'rounded-full px-2.5 py-1 font-medium shrink-0 ' + cls[st];
-      b.textContent = dot[st] + ' ' + p.label + ' ' + (stale ? 'old' : word[st]);
+      b.textContent = dot[st] + ' ' + p.label + ' ' + (old ? 'old' : word[st]);
       b.title = p.detail || '';
+      b.setAttribute('aria-pressed', 'false');
       b.addEventListener('click', () => {
         const el = $('platDetail');
         const same = platDetailKey === p.key && !el.classList.contains('hidden');
         platDetailKey = p.key;
-        el.textContent = same ? '' : p.label + ': ' + (p.detail || 'No detail.');
+        el.textContent = '';
+        if (!same) {
+          el.append(p.label + ': ' + (p.detail || 'No detail.') + (p.at ? ' Measured ' + fmt(p.at) + (p.carried ? ' (not re-tested since: a sweep was using the login).' : '.') : ''));
+          if (['down', 'degraded'].includes(p.state) && ['instagram', 'facebook', 'threads'].includes(p.key)) {
+            const a = document.createElement('a'); a.href = $('faqLink').href; a.target = '_blank'; a.rel = 'noopener';
+            a.className = 'ml-1 underline text-blue-700'; a.textContent = 'How to record the login again (guide, section 4) \u2197';
+            el.append(' ', a);
+          }
+        }
         el.classList.toggle('hidden', same);
+        pills.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b && !same ? 'true' : 'false'));
       });
       pills.appendChild(b);
     });
@@ -2462,6 +2539,39 @@ async function loadPlatStatus() {
   } catch (e) { box.classList.add('hidden'); }
 }
 loadPlatStatus(); setInterval(loadPlatStatus, 600000);
+
+// Dialogs (audit 15 Nov 2026): none of the drawers and pop-ups said it was a dialog, held keyboard focus, or gave
+// focus back on closing. Done here in one place by watching each one open and close, so no open/close function
+// had to change. Topmost first.
+const DIALOGS = [['ldModal', 'Why this was flagged'], ['connect', 'Connect to the backend'], ['modal', 'Manual entry'], ['adminModal', 'Admin: reviewer settings'],
+                 ['tgModal', 'Targets'], ['linksModal', 'TikTok links'], ['drawer', 'Complaint details']];
+const dlgOpen = (el) => el.id === 'drawer' ? !el.classList.contains('translate-x-full') : !el.classList.contains('hidden');
+const dlgFocusable = (el) => [...el.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]):not([type=hidden]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')].filter(x => x.offsetParent !== null);
+const dlgReturn = {};
+DIALOGS.forEach(([id, label]) => {
+  const el = $(id); if (!el) return;
+  el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', label);
+  let was = dlgOpen(el);
+  new MutationObserver(() => {
+    const now = dlgOpen(el); if (now === was) return; was = now;
+    if (now) {
+      dlgReturn[id] = document.activeElement;
+      setTimeout(() => { if (dlgOpen(el) && !el.contains(document.activeElement)) { const f = dlgFocusable(el)[0]; if (f) f.focus({ preventScroll: true }); } }, 60);
+    } else {
+      const back = dlgReturn[id]; dlgReturn[id] = null;
+      if (back && document.contains(back) && back.offsetParent !== null) back.focus({ preventScroll: true });
+    }
+  }).observe(el, { attributes: true, attributeFilter: ['class'] });
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Tab') return;
+  const top = DIALOGS.map(([id]) => $(id)).find(el => el && dlgOpen(el)); if (!top) return;
+  const f = dlgFocusable(top); if (!f.length) return;
+  const first = f[0], last = f[f.length - 1];
+  if (!top.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+  else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
 if (cfg.key) { loadLinks(); loadChecks(); }
 showView(VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'home');
 boot();

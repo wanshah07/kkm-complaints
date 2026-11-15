@@ -9,26 +9,34 @@
  *   targets_admin          viewer   every Targets row + the platform columns + each account's status
  *   target_save            viewer   add a row, or change one (matched by its Brand name)
  *   target_remove          viewer   delete a row (to pause one instead, save it with Active off)
+ *   target_undo            viewer   put back the row removed last (15 Nov 2026)
  *   target_status_update   machine  the account check and the sweep write what they saw
  *
  * The Targets tab stays the one list the scraper reads; this only edits it the way a person would, one row at a
  * time, under the script lock. Status lives in its OWN tab, TargetStatus, because every extra column in Targets is
  * read as a platform. One status row per Brand + Platform:
  *
- *   State         live | renamed | empty | not_found | private | blocked | error   ('' = not checked yet)
+ *   State         live | renamed | empty | not_found | private | blocked | limited | error   ('' = not checked yet)
+ *                 limited (15 Nov 2026) = only the public, signed-out view was read: our login was refused.
  *   Checked at    when tools/account_check.py last visited the profile (UTC ISO)
  *   Last sweep …  when a sweep last reached the account, how many posts it saw, and its note
  *
  * Changing a handle clears that account's check, so the panel shows "not checked yet" until the next account
  * check, which takes never-checked accounts first. An own-brand name or handle is refused: this system never
  * watches Wan's own brands.
+ *
+ * Every add, edit and removal is written to the TargetsLog tab with the row as it was and as it became
+ * (15 Nov 2026). The panel had made deleting a row one click with no trace and no way back; the log is the trace,
+ * and target_undo restores the row removed last.
  */
 var TSTATUS_SHEET_NAME = 'TargetStatus';
 var TSTATUS_HEADERS = ['Brand', 'Platform', 'Handle', 'State', 'Detail', 'Posts seen', 'Checked at',
                        'Suggested handle', 'Last sweep at', 'Last sweep posts', 'Last sweep note'];
 var TSTATUS_FIELDS = ['brand', 'platform', 'handle', 'state', 'detail', 'posts', 'checked_at',
                       'suggest', 'sweep_at', 'sweep_posts', 'sweep_note'];
-var TSTATUS_STATES = ['live', 'renamed', 'empty', 'not_found', 'private', 'blocked', 'error'];
+var TSTATUS_STATES = ['live', 'renamed', 'empty', 'not_found', 'private', 'blocked', 'limited', 'error'];
+var TLOG_SHEET_NAME = 'TargetsLog';
+var TLOG_HEADERS = ['When (UTC)', 'Action', 'Brand', 'Row before', 'Row after', 'Undone at'];
 var TSTATUS_CHECK_FIELDS = ['state', 'detail', 'posts', 'checked_at', 'suggest'];
 
 function targetStatusSheet_() {
@@ -42,6 +50,54 @@ function targetStatusSheet_() {
     [200, 100, 200, 90, 420, 90, 170, 160, 170, 110, 320].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
   }
   return sh;
+}
+
+function targetLogSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(TLOG_SHEET_NAME);
+  if (!sh) {
+    sh = ss.insertSheet(TLOG_SHEET_NAME);
+    sh.getRange(1, 1, sh.getMaxRows(), TLOG_HEADERS.length).setNumberFormat('@');
+    sh.getRange(1, 1, 1, TLOG_HEADERS.length).setValues([TLOG_HEADERS]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+    [170, 80, 200, 520, 520, 170].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
+  }
+  return sh;
+}
+
+// {header: value} for one Targets row, so the log still reads right after a column is added or moved.
+function targetRowObject_(headers, row) {
+  if (!row) return null;
+  var o = {};
+  headers.forEach(function (h, i) { if (h) o[h] = row[i] === undefined ? '' : row[i]; });
+  return o;
+}
+
+// action: add | edit | remove | undo. Never fails the change it records.
+function targetLog_(action, name, before, after) {
+  try {
+    var sh = targetLogSheet_();
+    var js = function (o) { return o ? JSON.stringify(o).slice(0, 45000) : ''; };
+    sh.getRange(sh.getLastRow() + 1, 1, 1, TLOG_HEADERS.length).setNumberFormat('@')
+      .setValues([[tstatusText_(new Date()), action, targetText_(name, 80), js(before), js(after), '']]);
+  } catch (err) { console.error(err); }
+}
+
+// The last removal that has not been undone and whose name is not back in the list: {row (1-based), name, at, before}.
+function targetLastRemoval_(liveNames) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TLOG_SHEET_NAME);
+  if (!sh || sh.getLastRow() < 2) return null;
+  var vals = sh.getRange(2, 1, sh.getLastRow() - 1, TLOG_HEADERS.length).getValues();
+  for (var i = vals.length - 1; i >= 0; i--) {
+    if (String(vals[i][1]) !== 'remove') continue;
+    if (String(vals[i][5] || '').trim()) return null;            // the latest removal was already undone
+    var name = String(vals[i][2] || '').trim();
+    if (!name || liveNames.indexOf(name.toLowerCase()) >= 0) return null;
+    var before = null;
+    try { before = JSON.parse(String(vals[i][3] || '')); } catch (e) { return null; }
+    return before ? { row: i + 2, name: name, at: tstatusText_(vals[i][0]), before: before } : null;
+  }
+  return null;
 }
 
 function tstatusKey_(brand, platform) {
@@ -121,7 +177,9 @@ function targetsAdmin_() {
   });
   var types = {};
   targets.forEach(function (t) { if (t.type) types[t.type] = 1; });
-  return { ok: true, platforms: cols.platforms, types: Object.keys(types).sort(),
+  var undo = targetLastRemoval_(targets.map(function (t) { return String(t.name).toLowerCase(); }));
+  return { ok: true, platforms: cols.platforms, types: Object.keys(types).sort(), states: TSTATUS_STATES,
+           undo: undo ? { name: undo.name, at: undo.at } : null,
            has: { type: cols.headers.indexOf('Type') >= 0, website_feed: cols.headers.indexOf('Website feed') >= 0,
                   product_feed: cols.headers.indexOf('Product feed') >= 0 },
            targets: targets, status: status };
@@ -201,6 +259,7 @@ function targetSave_(t, original) {
       return { ok: false, error: 'Give at least one handle. (A website row needs its Type instead.)' };
     }
     sheet.getRange((at >= 0 ? at : rows.length) + 2, 1, 1, headers.length).setValues([row]);
+    targetLog_(at >= 0 ? 'edit' : 'add', name, at >= 0 ? targetRowObject_(headers, rows[at]) : null, targetRowObject_(headers, row));
     if (changed.length) targetStatusDrop_(name, changed);      // a new handle has not been tested yet
     return { ok: true, name: at >= 0 ? String(rows[at][ix('Brand')]).trim() : name, added: at < 0, changed: changed };
   });
@@ -217,8 +276,34 @@ function targetRemove_(name) {
     var at = targetFindRow_(rows, headers.indexOf('Brand'), name);
     if (at < 0) return { ok: false, error: 'That row is no longer in the Targets tab.' };
     sheet.deleteRow(at + 2);
+    targetLog_('remove', String(rows[at][headers.indexOf('Brand')]).trim(), targetRowObject_(headers, rows[at]), null);
     targetStatusDrop_(name, null);
     return { ok: true, removed: String(rows[at][headers.indexOf('Brand')]).trim() };
+  });
+}
+
+// Put back the row removed last, exactly as it was (by column name, so a column added since is simply left blank).
+// Its status was dropped with it, so the accounts read "not checked yet" until the next account check.
+function targetUndo_() {
+  return withLock_(function () {
+    var sheet = ensureTargets_(SpreadsheetApp.getActiveSpreadsheet());
+    var headers = targetColumns_(sheet).headers;
+    var last = sheet.getLastRow();
+    var rows = last > 1 ? sheet.getRange(2, 1, last - 1, headers.length).getValues() : [];
+    var names = rows.map(function (r) { return String(r[headers.indexOf('Brand')] || '').trim().toLowerCase(); });
+    var u = targetLastRemoval_(names);
+    if (!u) return { ok: false, error: 'There is no removal to undo.' };
+    if (targetOwnBrand_(u.name)) return { ok: false, error: 'Own brands are never watched by this system.' };
+    var row = headers.map(function (h) {
+      var v = u.before[h];
+      if (h === 'Active') return v === true || String(v).toLowerCase() === 'true';
+      return v === undefined || v === null ? '' : String(v).replace(/^[=+]+/, '');
+    });
+    sheet.getRange(rows.length + 2, 1, 1, headers.length).setValues([row]);
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TLOG_SHEET_NAME)
+      .getRange(u.row, TLOG_HEADERS.length).setNumberFormat('@').setValue(tstatusText_(new Date()));
+    targetLog_('undo', u.name, null, targetRowObject_(headers, row));
+    return { ok: true, name: u.name };
   });
 }
 
