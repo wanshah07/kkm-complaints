@@ -767,6 +767,8 @@ function handleApi_(action, body, p) {
                             return targetRemove_(body.name);
       case 'target_status_update': if (!machine) return deny;
                             return targetStatusUpdate_(body.updates);
+      case 'target_undo':   if (!viewer) return deny;
+                            return targetUndo_();
       // --- Own brand segment (Wan, 11 Oct 2026) ---
       case 'own_brand_list': if (!viewer) return deny;
                             return ownBrandList_();
@@ -1159,10 +1161,13 @@ function apiInsertRecords_(records, source) {
       try {
         rec = normaliseRecord_(rec);
         if (!rec['Post URL']) { errors.push({ index: i, error: 'Post URL missing' }); return; }
+        // The link becomes a clickable link in the dashboard, so it must be a web address and nothing else:
+        // a feed can hand back "javascript:..." as a product link (15 Nov 2026 audit).
+        if (!isWebLink_(rec['Post URL'])) { errors.push({ index: i, error: 'Post URL must start with http:// or https://' }); return; }
         var urlKey = canonicalUrl_(rec['Post URL']);
         if (known[urlKey]) { duplicates.push(rec['Post URL']); return; }
         known[urlKey] = true;
-        var link = rec['Screenshot Link'] || '';
+        var link = isWebLink_(rec['Screenshot Link']) ? rec['Screenshot Link'] : '';
         if (!link && rec.screenshot_base64) {
           link = saveScreenshot_(rec.screenshot_base64, rec.screenshot_mime || 'image/jpeg',
             safeFilename_(rec['Brand'] + '_' + rec['Platform'] + '_' + today + '_' + (i + 1)) + extFor_(rec.screenshot_mime));
@@ -1843,6 +1848,10 @@ function sanitizeRowForSheet_(row) {
 
 function sanitizeRowsForSheet_(rows) {
   return rows.map(sanitizeRowForSheet_);
+}
+
+function isWebLink_(u) {
+  return /^https?:\/\/[^\s\/]+/i.test(String(u === null || u === undefined ? '' : u).trim());
 }
 
 function safeFilename_(s) {

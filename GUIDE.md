@@ -174,9 +174,14 @@ You no longer have to open the sheet to manage who is watched. Press **Targets**
 | Not found | The platform says there is no such profile | Correct the handle, or remove the row |
 | Private | The profile is private to our login | Remove it, or follow it from the recorded account |
 | Could not check | A login wall or soft block, not the account's fault | Nothing; the next check tries again |
+| Login refused | Only the public, signed-out view could be read (on Facebook that is usually one post). Our saved login was not accepted for that page | If many accounts on one platform show it, record the session again (section 4) |
 | Not checked yet | Added or changed since the last check | Nothing; the next check takes these first |
 
 The line beside the badge says when it was checked and how many posts were seen, and when a sweep last reached the account. The status is written by the **Account check** (Actions → *Account check*): it opens each account's profile with the sweep's own code and login, opens **no post**, reviews nothing and files nothing. A 40-minute slice of the accounts checked longest ago runs every day; **Run workflow** with *max_minutes* 150 checks about 250 accounts in one go, and *brand* checks one row straight away. It uses the sweep's login, so it queues behind a running sweep. Each sweep also records when it last reached an account.
+
+A check older than ten days is marked "may be out of date". **Sort** puts the accounts needing attention, or the ones checked longest ago, at the top.
+
+**Every change is logged, and a removal can be undone.** Each add, edit and removal is written to the sheet's `TargetsLog` tab with the row as it was and as it became. After a removal, **Undo: put "…" back** appears under the list and restores the row exactly; its accounts read "Not checked yet" until the next account check.
 
 **One-time deploy:** add `apps-script/Targets.gs` as a new file in the Apps Script editor, re-paste `Code.gs` (it carries four new routes), then Deploy → Manage deployments → New version. Until then the panel shows the list read only and says so, and the account check prints its results in its run log instead of storing them. Status is kept in its own sheet tab, `TargetStatus`; do not add status columns to the Targets tab, because every extra column there is read as a platform.
 
@@ -325,6 +330,19 @@ The order within a target is still insert first, ledger second: a post is not ma
 5. **Read the not-reached list, then run again.** Repeat until it comes back empty. That is the definition of a completed sweep.
 
 A hundred-odd targets takes three or four runs. Each one is unattended: fire it, read the summary, fire the next.
+
+### Sweeping without an offset: oldest first, with a cap per visit (15 Nov 2026)
+
+The offset method below works, but it has to be carried by hand from run to run, it counts *rows* while a run reports *accounts* reached, and it shifts whenever a Targets row is added, paused or removed. On 15 Nov that skipped four brands between two runs.
+
+Run the sweep with **order = oldest** instead (Actions → *KKM complaint scraper* → Run workflow):
+
+- The sweep records, for every account it reaches, when it was last swept (the *last sweep* line in the Targets panel). With `order = oldest` it visits the accounts **never swept first, then the ones swept longest ago**. There is no offset to remember, any number of runs can follow one another, and editing the Targets tab cannot shift anything.
+- **max_open** (try 40) is the most unjudged posts a visit opens on one account, newest first. A first visit to a busy brand page can be hundreds of posts and one page once took 51 of a run's 100 minutes. With a cap the visit moves on, the account is marked "partial", and because every judged post is in the ledger its next visit continues where this one stopped. Leave it blank for no cap.
+- `only_type` (brand / person) still narrows the list. `offset` and `skip_unjudged` are ignored in this mode.
+- It needs the Targets update deployed (it reads the status tab). Against an older backend it says so and falls back to the old order.
+
+The scheduled Friday sweep still uses the old order until this one has been run for a while.
 
 ### Why each run starts where the last one stopped
 
@@ -669,6 +687,8 @@ Open the run: GitHub → **Actions** → click the run. The summary at the end o
 | Log says | Cause | Fix |
 |---|---|---|
 | `login wall` | Session expired or that platform was not logged in during recording | Section 4 |
+| `N post links signed out` after `0 post links` (Facebook) | The saved Facebook login is not being accepted, so only the public view is read, usually one post. The Targets panel shows these pages as **Login refused** and the status strip shows Facebook down | Record the session again (section 4). Instagram and Threads can be fine at the same time |
+| Status strip pill says `old` while a sweep is running | The status probe does not test while a sweep or an account check is using the login; it republishes the last real result with its own time, and a result older than 14 hours reads `old` | Nothing; it tests again when the login is free |
 | `Instagram signed the recorded session out - not swept`, and the run ends red | Instagram ended the recorded session itself, even though its cookies had not expired (14 Nov 2026: 342 days were left). A signed-out grid shows only its newest 12 posts, so the run refuses to sweep Instagram rather than report `posts=12 ok` for every account. Facebook and Threads in the same run carry on | Record the session again (section 4). Nothing was lost: the Instagram targets are listed as not reached and the next run walks them |
 | `N link(s) name another account in the URL; not opened` | Working as intended (14 Nov 2026). A collab or shared post keeps its real owner in its link (`/<owner>/p/<id>/`), so it is skipped without being opened. Before this, such posts were opened on every pass and never remembered: about a third of a sweep's time | Nothing. If most of a grid belongs to one other account, the summary still says so, and that account may be worth its own Targets row |
 | `login wall on post page - not reviewed` | The platform served its gate instead of the post. The post is **not** reviewed and the run counts it as an error, so it will never be recorded as compliant | Refresh the session (section 4). Until then that post is unseen, not clean |
