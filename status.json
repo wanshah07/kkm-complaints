@@ -1,14 +1,14 @@
 {
- "checked_at": "2026-11-15T15:50:08Z",
+ "checked_at": "2026-11-15T15:52:48Z",
  "platforms": [
   {
    "key": "instagram",
    "label": "Instagram",
    "state": "live",
-   "detail": "Signed in and reading posts normally.",
-   "links": 40,
-   "at": "2026-11-14T22:35:28Z",
-   "carried": true
+   "detail": "Signed in and reading posts: the sweep that finished 2026-11-15 12:53 UTC read 2 account(s) on Instagram.",
+   "links": 2,
+   "at": "2026-11-15T12:53:30Z",
+   "carried": false
   },
   {
    "key": "facebook",
@@ -16,16 +16,16 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-15T15:50:23Z"
+   "at": "2026-11-15T15:53:04Z"
   },
   {
    "key": "threads",
    "label": "Threads",
    "state": "live",
-   "detail": "Signed in and reading posts normally.",
-   "links": 40,
-   "at": "2026-11-14T22:35:28Z",
-   "carried": true
+   "detail": "Signed in and reading posts: the sweep that finished 2026-11-15 12:53 UTC read 3 account(s) on Threads.",
+   "links": 3,
+   "at": "2026-11-15T12:53:30Z",
+   "carried": false
   },
   {
    "key": "tiktok",
@@ -45,7 +45,7 @@
   }
  ],
  "notes": [
-  "Instagram and Threads were not probed: a sweep or an account check was using the login."
+  "Instagram and Threads were not probed: a sweep or an account check was using the login. Their state comes from the last finished sweep."
  ],
  "session_days_left": {
   "instagram": 363.8,
