@@ -26,7 +26,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, Iterator, List, Optional, Tuple
-from urllib.parse import urljoin, urlsplit, urlunsplit
+from urllib.parse import quote, urljoin, urlsplit, urlunsplit
 
 from dateutil import parser as dateparser
 from playwright.sync_api import Browser, BrowserContext, Page, TimeoutError as PWTimeout, sync_playwright
@@ -74,6 +74,7 @@ class TargetResult:
     error: Optional[str] = None
     truncated: bool = False  # the run budget ended before every post of this target was opened
     via_ads: bool = False    # Facebook read through Meta's Ad Library: links_found counts running advertisements
+    ads_how: str = ""        # in words, how the page was found in the Library
     # Set when the sheet's handle is not the one the account actually answers to. The run keeps
     # going on the handle it landed on; the summary says so, so the Targets tab can be corrected.
     renamed_to: Optional[str] = None
@@ -116,6 +117,12 @@ DISMISS_SELECTORS = [
 AD_LIBRARY_LIST = ("https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country={country}"
                    "&view_all_page_id={page_id}")
 AD_LIBRARY_AD = "https://www.facebook.com/ads/library/?id={ad_id}"
+# Looking a page up by name, inside the Library. A brand page's own address is not dependable from a runner: on some
+# of GitHub's machines Facebook sends every page address to a login screen (probe run 43710499940: seven of seven),
+# and a page with an age or country limit does so everywhere. The Library always opens, and each advertisement in
+# it links its advertiser's name to that page's own handle, so the handle in Targets can be matched exactly.
+AD_LIBRARY_SEARCH = ("https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country={country}"
+                     "&q={q}&search_type=keyword_unordered&media_type=all")
 # Where a public page states its own numeric id. "delegate_page" and its siblings are the PAGE; "userID" and the
 # fb://profile address are the profile that fronts it, which the Ad Library does not know, so they come last.
 _FB_PAGE_ID_PATTERNS = (
@@ -131,21 +138,28 @@ _AD_MONTHS = {m: i + 1 for i, m in enumerate(("jan", "feb", "mar", "apr", "may",
 # Lines of an ad card that are the Library's own furniture, not the advertisement.
 _AD_CHROME = re.compile(r"^(active|inactive|platforms|open dropdown|see ad details|see summary details|sponsored|"
                         r"this ad has multiple versions|eu transparency|\d+ ads? use this creative and text\.?|"
+                        r"low impression count|sorry, we.re having trouble playing this video\.?|"
                         r"\d+:\d\d\s*/\s*\d+:\d\d)$", re.I)
 # Finds each ad card without relying on Facebook's generated class names: the leaf that reads "Library ID: N",
 # then up to the first ancestor that also holds the word "Sponsored" (the header and the advert are siblings
 # inside the card). Each card is tagged so it can be photographed by itself.
-_AD_CARDS_JS = """() => {
+_AD_CARDS_JS = r"""() => {
   const out = [];
-  const leaves = [...document.querySelectorAll('span,div')].filter(e => e.childElementCount === 0 && /^Library ID:\\s*\\d+/.test((e.textContent || '').trim()));
+  const leaves = [...document.querySelectorAll('span,div')].filter(e => e.childElementCount === 0 && /^Library ID:\s*\d+/.test((e.textContent || '').trim()));
+  const skip = /^(ads|l\.php|login|login\.php|help|policies|privacy|business|legal|watch|hashtag|share|sharer)$/i;
   for (const s of leaves) {
     let el = s, hops = 0;
     while (el.parentElement && el.parentElement !== document.body && !/Sponsored/.test(el.innerText || '') && hops < 14) { el = el.parentElement; hops++; }
     const text = el.innerText || '';
     if (!/Sponsored/.test(text) || (text.match(/Library ID:/g) || []).length !== 1) continue;
-    const id = s.textContent.match(/\\d+/)[0];
+    const id = s.textContent.match(/\d+/)[0];
     el.setAttribute('data-kkm-ad', id);
-    out.push({ id, text });
+    const pages = [];
+    for (const a of el.querySelectorAll('a[href]')) {
+      const m = (a.href || '').match(/^https?:\/\/(?:www\.|web\.|m\.)?facebook\.com\/([A-Za-z0-9._-]+)\/?(?:[?#].*)?$/);
+      if (m && !skip.test(m[1]) && !pages.includes(m[1])) pages.push(m[1]);
+    }
+    out.push({ id, text, pages });
   }
   return out;
 }"""
@@ -160,6 +174,23 @@ def facebook_page_id(html: str, handle: str = "") -> Optional[str]:
         if vals:
             return max(set(vals), key=vals.count)
     return None
+
+
+def ad_card_is_by(card: dict, handle: str) -> bool:
+    """True when the advertiser line of an Ad Library card links to this page handle (case does not matter)."""
+    want = (handle or "").strip().strip("/").lstrip("@").casefold()
+    return bool(want) and want in [str(p).casefold() for p in (card.get("pages") or [])]
+
+
+def ad_page_id_candidates(html: str) -> List[str]:
+    """Page ids named in an Ad Library page, most mentioned first. Candidates only: a single advertisement's page
+    also lists the same brand's pages in other countries, so each is checked against the handle before use."""
+    vals = re.findall(r"view_all_page_id=(\d{5,})", html or "") + re.findall(r'"page_id":"(\d{5,})"', html or "") \
+        + re.findall(r'"pageID":"(\d{5,})"', html or "")
+    seen: List[str] = []
+    for v in sorted(set(vals), key=lambda x: (-vals.count(x), vals.index(x))):
+        seen.append(v)
+    return seen[:4]
 
 
 def parse_ad_card(text: str) -> dict:
@@ -1019,7 +1050,7 @@ class Scraper:
         return ("Instagram signed the recorded session out - not swept (a signed-out grid shows only its "
                 "newest 12 posts). Record the session again (GUIDE section 4) and update PW_STORAGE_STATE_B64")
 
-    def _context(self, browser: Browser, use_storage: bool = True) -> BrowserContext:
+    def _context(self, browser: Browser, use_storage: bool = True, block_media: bool = True) -> BrowserContext:
         kwargs = dict(
             viewport={"width": 1280, "height": 1600},
             device_scale_factor=1,
@@ -1032,7 +1063,10 @@ class Scraper:
         ctx = browser.new_context(**kwargs)
         ctx.set_default_timeout(20000)
         # Block heavy media to keep runs fast; images are still needed for screenshots so only video/fonts.
-        ctx.route(re.compile(r".*\.(mp4|webm|m3u8|woff2?)(\?.*)?$"), lambda route: route.abort())
+        # Not in the Ad Library: a blocked video is drawn there as "Sorry, we're having trouble playing this
+        # video", and that sentence would sit in the middle of the evidence picture.
+        if block_media:
+            ctx.route(re.compile(r".*\.(mp4|webm|m3u8|woff2?)(\?.*)?$"), lambda route: route.abort())
         return ctx
 
     def _tiktok_embed_shot(self, ctx: BrowserContext, post: "Post", brand: str, url: str) -> bool:
@@ -1330,32 +1364,10 @@ class Scraper:
         log.info("[%s/%s] done in %.1fs", brand, platform, time.time() - t0)
         return res
 
-    def facebook_ads_listing(self, ctx: BrowserContext, handle: str, limit: int = 60):
-        """
-        The advertisements a Facebook page is running in Malaysia, from Meta's Ad Library, with no login.
-
-        Returns (page, page_id, cards, error). `page` is left open on the listing so a caller can photograph the
-        cards, each of which carries data-kkm-ad="<Library ID>"; `cards` is a list of parse_ad_card() dicts in the
-        order the Library shows them (newest first). An empty list with no error is a page that is running no
-        advertisement here, which is an ordinary answer and not a fault.
-        """
-        page = ctx.new_page()
-        page_id = facebook_page_id("", handle)
-        if not page_id:
-            page.goto("https://www.facebook.com/%s" % handle, wait_until="domcontentloaded", timeout=45000)
-            page.wait_for_timeout(2500)
-            if "/login" in page.url.lower():
-                return page, None, [], "Facebook asked for a login before showing the page, so its id could not be read"
-            page_id = facebook_page_id(page.content(), handle)
-            if not page_id:
-                hint = _diagnose_empty(page, self.out_dir, "facebook_page_%s" % re.sub(r"[^a-z0-9]+", "_", handle.lower()))
-                return page, None, [], "the page's id could not be read from its public page" + (f" — {hint}" if hint else " (handle wrong, or the page is gone)")
-        country = str(self.run_cfg.get("ad_library_country", "MY")).upper()
-        page.goto(AD_LIBRARY_LIST.format(country=country, page_id=page_id), wait_until="domcontentloaded", timeout=45000)
-        page.wait_for_timeout(6000)
-        if "/login" in page.url.lower():
-            return page, page_id, [], "the Ad Library asked for a login"
-        raw, stale = [], 0
+    def _ad_cards(self, page: Page, limit: int) -> List[dict]:
+        """The advertisement cards on the Library page now open, scrolling until `limit` or the end of the list."""
+        raw: List[dict] = []
+        stale = 0
         for _ in range(max(6, limit // 4)):
             now = page.evaluate(_AD_CARDS_JS)
             stale = stale + 1 if len(now) <= len(raw) else 0
@@ -1364,20 +1376,108 @@ class Scraper:
                 break
             page.mouse.wheel(0, 3000)
             page.wait_for_timeout(1700)
+        return raw
+
+    def _ad_library_open(self, page: Page, url: str) -> Optional[str]:
+        """Open a Library address. Returns a problem in words, or None when the Library answered."""
+        page.goto(url, wait_until="domcontentloaded", timeout=45000)
+        page.wait_for_timeout(6000)
+        if "/login" in page.url.lower():
+            return "the Ad Library asked for a login"
+        return None
+
+    def _ad_library_listed(self, page: Page) -> bool:
+        """True when the Library drew a results page at all (a count, or its 'no ads' sentence)."""
+        try:
+            body = page.locator("body").inner_text(timeout=3000) or ""
+        except Exception:
+            return False
+        return bool(re.search(r"~?\d[\d,]*\s+results?\b|no ads match|didn.t (find|return) any", body, re.I))
+
+    def facebook_ads_listing(self, ctx: BrowserContext, handle: str, limit: int = 60, brand: str = ""):
+        """
+        The advertisements a Facebook page is running in Malaysia, from Meta's Ad Library, with no login.
+
+        Returns (page, page_id, cards, error, how). `page` is left open on the listing so a caller can photograph
+        the cards, each of which carries data-kkm-ad="<Library ID>"; `cards` is a list of parse_ad_card() dicts in
+        the order the Library shows them (newest first); `how` says in words which route found the page. An empty
+        list with no error is a page that is running no advertisement here: an ordinary answer, not a fault.
+
+        The page's numeric id is found in this order: the handle is already a number; the page's own public
+        address says it (when Facebook serves that address to this machine); or the Library is searched for the
+        brand's name and the advertiser link of each result is matched against the handle.
+        """
+        page = ctx.new_page()
+        country = str(self.run_cfg.get("ad_library_country", "MY")).upper()
+        cache = self.__dict__.setdefault("_fb_page_ids", {})
+        key = (handle or "").strip().casefold()
+        page_id, how = facebook_page_id("", handle), "the Facebook column holds the page's number"
+        if not page_id and key in cache:
+            page_id, how = cache[key], "page number found earlier in this run"
+        if not page_id:
+            try:
+                page.goto("https://www.facebook.com/%s" % handle, wait_until="domcontentloaded", timeout=45000)
+                page.wait_for_timeout(2500)
+                if "/login" not in page.url.lower():
+                    page_id, how = facebook_page_id(page.content(), handle), "page number read from the page's public address"
+            except PWTimeout:
+                pass
+        by_name: List[dict] = []
+        if not page_id:
+            if not brand:
+                return page, None, [], "Facebook would not show the page's public address, and there is no name to look it up by", ""
+            err = self._ad_library_open(page, AD_LIBRARY_SEARCH.format(country=country, q=quote(brand)))
+            if err:
+                return page, None, [], err, ""
+            raw = self._ad_cards(page, max(limit, 40))
+            if not raw and not self._ad_library_listed(page):
+                return page, None, [], "the Ad Library opened but showed no list (layout change, or a short block)", ""
+            by_name = [c for c in raw if ad_card_is_by(c, handle)]
+            how = "looked up in the Ad Library by the name %r, matched on the handle @%s" % (brand, handle)
+            if not by_name:
+                # Nothing under that name links to this handle: the page is running nothing here, or the handle
+                # in Targets is not the page's own. Either way there is nothing to review, and it is said so.
+                return page, None, [], None, how + ": none of %d advertisement(s) under that name is by this page" % len(raw)
+            # One of its advertisements names the page's number; the full list by number is the complete one.
+            try:
+                one = ctx.new_page()
+                one.goto(AD_LIBRARY_AD.format(ad_id=by_name[0]["id"]), wait_until="domcontentloaded", timeout=45000)
+                one.wait_for_timeout(4000)
+                candidates = ad_page_id_candidates(one.content())
+                one.close()
+            except Exception:
+                candidates = []
+            for cand in candidates:
+                if self._ad_library_open(page, AD_LIBRARY_LIST.format(country=country, page_id=cand)):
+                    break
+                raw = self._ad_cards(page, limit)
+                if raw and all(ad_card_is_by(c, handle) for c in raw[:5]):
+                    page_id = cand
+                    cache[key] = cand
+                    how += ", then listed in full by page number %s" % cand
+                    return page, page_id, self._parse_cards(raw, limit), None, how
+            # No number could be confirmed: the advertisements found by name are still this page's own.
+            self._ad_library_open(page, AD_LIBRARY_SEARCH.format(country=country, q=quote(brand)))
+            raw = [c for c in self._ad_cards(page, max(limit, 40)) if ad_card_is_by(c, handle)]
+            return page, None, self._parse_cards(raw, limit), None, how + " (the page's number could not be confirmed, so only advertisements that mention the name are listed)"
+        err = self._ad_library_open(page, AD_LIBRARY_LIST.format(country=country, page_id=page_id))
+        if err:
+            return page, page_id, [], err, how
+        raw = self._ad_cards(page, limit)
+        if not raw and not self._ad_library_listed(page):
+            return page, page_id, [], "the Ad Library opened but showed no list (layout change, or a short block)", how
+        cache[key] = page_id
+        return page, page_id, self._parse_cards(raw, limit), None, how
+
+    @staticmethod
+    def _parse_cards(raw: List[dict], limit: int) -> List[dict]:
         cards, seen = [], set()
         for c in raw:
             card = parse_ad_card(c.get("text", ""))
             if card["id"] and card["id"] not in seen:
                 seen.add(card["id"])
                 cards.append(card)
-        if not cards:
-            try:
-                body = page.locator("body").inner_text(timeout=3000) or ""
-            except Exception:
-                body = ""
-            if not re.search(r"\b0 results\b|no ads match|didn.t (find|return) any", body, re.I) and not re.search(r"~?\d[\d,]*\s+results?", body):
-                return page, page_id, [], "the Ad Library opened but showed no list (layout change, or a short block)"
-        return page, page_id, cards[:limit], None
+        return cards[:limit]
 
     def _scrape_facebook_ads(self, browser: Browser, brand: str, handle: str, res: TargetResult) -> TargetResult:
         """A Facebook target: every advertisement its page is running, one Post per ad. See the note above
@@ -1385,19 +1485,20 @@ class Scraper:
         platform = "Facebook"
         t0 = time.time()
         res.via_ads = True
-        ctx = self._context(browser, use_storage=False)     # no login is presented to Facebook at all
+        ctx = self._context(browser, use_storage=False, block_media=False)     # no login is presented to Facebook at all
         page = None
         try:
             limit = min(int(self.run_cfg.get("max_posts_per_profile", 60) or 60), int(self.run_cfg.get("max_ads_per_page", 60) or 60))
             log.info("[%s/%s] Ad Library for page %s", brand, platform, handle)
-            page, page_id, cards, err = self.facebook_ads_listing(ctx, handle, limit)
+            page, page_id, cards, err, how = self.facebook_ads_listing(ctx, handle, limit, brand=brand)
             res.profile_url = AD_LIBRARY_LIST.format(country=str(self.run_cfg.get("ad_library_country", "MY")).upper(), page_id=page_id) if page_id else res.profile_url
             res.links_found = len(cards)
             if err:
                 res.error = err
                 log.warning("[%s/%s] %s", brand, platform, err)
                 return res
-            log.info("[%s/%s] %d active ad(s) in the Ad Library (page id %s)", brand, platform, len(cards), page_id)
+            res.ads_how = how
+            log.info("[%s/%s] %d active ad(s) in the Ad Library; %s", brand, platform, len(cards), how)
             max_open = int(self.run_cfg.get("max_new_posts_per_visit", 0) or 0)
             opened = 0
             for card in cards:

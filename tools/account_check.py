@@ -121,8 +121,10 @@ def classify(res, links: int, signed_in: bool = True) -> dict:
                                               "Our login was not accepted for this page; record the session again."}
     if getattr(res, "via_ads", False):
         # Facebook is read through Meta's Ad Library. A page running no advertisement is still a page that reads.
-        return {"state": "live", "detail": (f"{links} advertisement(s) running in Malaysia (Meta Ad Library)." if links
-                                            else "The page reads; it is running no advertisement in Malaysia right now.")}
+        how = str(getattr(res, "ads_how", "") or "")
+        return {"state": "live", "detail": ((f"{links} advertisement(s) running in Malaysia (Meta Ad Library)." if links
+                                             else "No advertisement by this page is running in Malaysia right now (Meta Ad Library).")
+                                            + (" Found: " + how[:220] + "." if how else ""))}
     out = {"state": "live", "detail": f"{links} post(s) visible on the profile."}
     if res.renamed_to:
         out.update(state="renamed", suggest=res.renamed_to,

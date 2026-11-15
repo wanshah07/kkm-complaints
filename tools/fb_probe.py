@@ -297,9 +297,10 @@ def sweep_test(spec, out_dir):
                 new = [p for p in res.posts if not p.known]
                 print("SWEEP %-16s handle=%s via_ads=%s ads_listed=%s new=%d error=%s capped=%s secs=%.0f" % (
                     brand, handle, res.via_ads, res.links_found, len(new), res.error, res.capped, time.time() - t0))
+                print("SWEEP %-16s how: %s" % (brand, res.ads_how))
                 if res.error:
                     bad += 1
-                for p in new[:4]:
+                for p in new[:2]:
                     size = os.path.getsize(p.screenshot_path) if p.screenshot_path and os.path.exists(p.screenshot_path) else 0
                     print("SWEEP   ad url=%s started=%s text_chars=%d shot_bytes=%d current=%s errors=%s" % (p.url, p.posted_at, len(p.text or ""), size, p.always_current, p.errors))
                     print("SWEEP   canonical=%s note=%s" % (canonical_url(p.url), p.notes))

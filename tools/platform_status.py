@@ -69,7 +69,7 @@ def probe_facebook_ads(sc, browser, key, label, handle):
     out = {"key": key, "label": label, "state": "unknown", "detail": "", "links": None}
     ctx = sc._context(browser, use_storage=False)
     try:
-        _page, page_id, cards, err = sc.facebook_ads_listing(ctx, handle, 12)
+        _page, page_id, cards, err, _how = sc.facebook_ads_listing(ctx, handle, 12, brand="Cetaphil")
         if err:
             out.update(state="down" if "login" in err.lower() else "degraded",
                        detail="Meta's Ad Library could not be read for the test page: %s." % err)
