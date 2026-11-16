@@ -1520,8 +1520,10 @@ class Scraper:
         res.public_view = True
         res.profile_url = IG_EMBED_PROFILE.format(handle=handle)
         ctx = self._context(browser, use_storage=False)
-        # A post's embed fills whatever width it is given; phone width at twice the density reads like the post.
-        post_ctx = self._context(browser, use_storage=False, scale=2, viewport={"width": 540, "height": 900})
+        # A post's embed fills the width it is given. At phone width the picture was cut off on the right (test run
+        # 43806828389, a carousel's first slide), so it is drawn at the picture's own width, 1080, and the whole
+        # page is photographed: picture, then caption.
+        post_ctx = self._context(browser, use_storage=False, viewport={"width": 1080, "height": 1350})
         try:
             log.info("[%s/%s] public embed of @%s (no login)", brand, platform, handle)
             _page, codes, err = self.instagram_embed_listing(ctx, handle)
@@ -1576,7 +1578,7 @@ class Scraper:
                             if pg.locator("video").count():
                                 post.url = "https://www.instagram.com/%s/reel/%s/" % (handle, code)
                             post.text = text
-                            post.notes.append("read through Instagram's public embed, with no login")
+                            post.notes.append("read through Instagram's public embed, with no login (a carousel shows its first picture only)")
                             fname = re.sub(r"[^a-z0-9]+", "_", f"{brand}_instagram_{code}".lower()).strip("_")[:90]
                             path = os.path.join(self.out_dir, f"{fname}.png")
                             try:
