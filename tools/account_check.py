@@ -113,6 +113,10 @@ def classify(res, links: int, signed_in: bool = True) -> dict:
         return {"state": "empty", "detail": "The profile opened but showed no posts (no posts yet, or the platform hid them)."}
     if err:
         return {"state": "error", "detail": err.split(" — ")[0][:160]}
+    if getattr(res, "public_view", False):
+        # No login at all: Instagram's public embed. The account reads, but only its newest posts.
+        return {"state": "limited", "detail": f"No login: the newest {links} post(s) are read through Instagram's public embed. "
+                                              "Older posts need a saved login (guide section 4)."}
     if signed_in and getattr(res, "signed_out_view", False):
         # Signed in, the page showed nothing; signed out, it showed something. That is the login being refused
         # for this page, and the sweep then reads only the public view (on Facebook, usually one post). Calling

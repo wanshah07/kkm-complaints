@@ -75,6 +75,7 @@ class TargetResult:
     truncated: bool = False  # the run budget ended before every post of this target was opened
     via_ads: bool = False    # Facebook read through Meta's Ad Library: links_found counts running advertisements
     ads_how: str = ""        # in words, how the page was found in the Library
+    public_view: bool = False   # read with no login at all (Instagram's public embed): only the newest posts
     # Set when the sheet's handle is not the one the account actually answers to. The run keeps
     # going on the handle it landed on; the summary says so, so the Targets tab can be corrected.
     renamed_to: Optional[str] = None
@@ -101,6 +102,73 @@ DISMISS_SELECTORS = [
     "[aria-label='Close']", "div[role='dialog'] button:has-text('Not now')",
     "button:has-text('Not now')", "button:has-text('Not Now')",
 ]
+
+
+# ---------------------------------------------------------------------------------------------------------
+# Instagram with no login: the account's public embed (16 Nov 2026)
+#
+# Without a login Instagram sends a runner straight from a profile to the login page. What it does show anyone is
+# the profile embed (instagram.com/<handle>/embed/), the widget a website places to show an account: the six
+# newest posts. A tile carries no address; pressing it opens the post in a new tab, and the address it asks for is
+# the post's. That request is read and stopped, so the login page behind it is never loaded. Each post then has
+# its own captioned embed (instagram.com/p/<code>/embed/captioned/) with the owner, the caption and the picture.
+# The embed prints no date, but an Instagram post's code is its id, and the id carries the moment it was posted
+# (checked against five posts with known times, 16 Nov 2026: all within three seconds).
+# This reads NEW posts only. The history behind the six newest still needs a login.
+_IG_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+_IG_EPOCH_MS = 1314220021721
+IG_EMBED_PROFILE = "https://www.instagram.com/{handle}/embed/"
+IG_EMBED_POST = "https://www.instagram.com/p/{code}/embed/captioned/"
+_IG_POST_ADDRESS = re.compile(r"https://www\.instagram\.com/(?:[^/?#]+/)?(p|reel|tv)/([A-Za-z0-9_-]{5,})/?(?:[?#].*)?$")
+_IG_TILES_JS = r"""() => { let i = 0; for (const a of document.querySelectorAll('a[href="#"]')) { const im = a.querySelector('img'); if (im && (im.naturalWidth >= 200 || im.width >= 200)) a.setAttribute('data-kkm-tile', String(i++)); } return i; }"""
+
+
+def instagram_post_date(code: str) -> Optional[str]:
+    """The day (UTC) an Instagram or Threads post was made, read from its code. None when the code is not one."""
+    n = 0
+    for ch in (code or "")[:11]:
+        i = _IG_ALPHABET.find(ch)
+        if i < 0:
+            return None
+        n = n * 64 + i
+    if len(code or "") < 5:
+        return None
+    ms = (n >> 23) + _IG_EPOCH_MS
+    try:
+        d = datetime.fromtimestamp(ms / 1000.0, timezone.utc)
+    except Exception:
+        return None
+    if not (2010 <= d.year <= datetime.now(timezone.utc).year + 1):
+        return None
+    return d.date().isoformat()
+
+
+def instagram_code(url: str) -> Optional[str]:
+    m = re.search(r"instagram\.com/(?:[^/?#]+/)?(?:p|reel|tv)/([A-Za-z0-9_-]{5,})", url or "")
+    return m.group(1) if m else None
+
+
+def instagram_known_forms(handle: str, code: str) -> List[str]:
+    """Every canonical address one Instagram post can be stored under. The grid of a signed-in visit links a
+    video as /<handle>/reel/<code>, the embed opens the same post as /p/<code>: one post, so one row."""
+    h = (handle or "").strip().lstrip("@").lower()
+    out = []
+    for prefix in (("/" + h,) if h else ()) + ("",):
+        for kind in ("p", "reel", "tv"):
+            out.append("https://instagram.com%s/%s/%s" % (prefix, kind, (code or "").lower()))
+    return out
+
+
+def parse_instagram_embed_caption(text: str) -> Tuple[str, str]:
+    """(owner, caption) from the caption block of a post's embed: the owner's handle is its first line."""
+    lines = [ln.rstrip() for ln in (text or "").strip().splitlines()]
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    if not lines:
+        return "", ""
+    owner = lines[0].strip()
+    body = [ln for ln in lines[1:] if not re.match(r"^view all( \d[\d,]*)? comments?$", ln.strip(), re.I)]
+    return owner, re.sub(r"\n{3,}", "\n\n", "\n".join(body)).strip()
 
 
 # ---------------------------------------------------------------------------------------------------------
@@ -899,6 +967,9 @@ class Scraper:
         self.should_stop: Optional[Callable[[], bool]] = None
         # platform -> why, once a recorded session turns out to be signed out (see _session_signed_out).
         self.session_lost: Dict[str, str] = {}
+        # platform -> why it is being read with no login (run.instagram_source: auto). Not an error: the run goes
+        # on with the newest posts, and says so.
+        self.public_mode: Dict[str, str] = {}
         self._recorded_ig_session: Optional[bool] = None
 
     def _report_session_age(self, raw: bytes) -> None:
@@ -1010,6 +1081,29 @@ class Scraper:
             log.warning("PW_STORAGE_STATE_SHOP_B64 unusable (%s); TikTok will be read logged out", type(e).__name__)
             return path
 
+    def _instagram_login_recorded(self) -> bool:
+        """True when the saved session holds an Instagram login at all."""
+        if not self._storage_state_path:
+            return False
+        if self._recorded_ig_session is None:
+            try:
+                with open(self._storage_state_path, "r", encoding="utf-8") as f:
+                    state = json.load(f)
+                self._recorded_ig_session = any(
+                    c.get("name") == "sessionid" and c.get("value") and "instagram.com" in str(c.get("domain", ""))
+                    for c in state.get("cookies", []) or [])
+            except Exception:
+                self._recorded_ig_session = False
+        return bool(self._recorded_ig_session)
+
+    def _instagram_source(self) -> str:
+        return str(self.run_cfg.get("instagram_source", "auto")).lower()
+
+    def _instagram_known(self, handle: str, url: str) -> bool:
+        """Is this Instagram post already in the sheet or the ledger, under any of the addresses it can have?"""
+        code = instagram_code(url)
+        return bool(code) and any(f in self.known_urls for f in instagram_known_forms(handle, code))
+
     def _session_signed_out(self, ctx: BrowserContext, platform: str) -> Optional[str]:
         """
         Say so when Instagram has signed the recorded session out, instead of sweeping without it.
@@ -1026,18 +1120,7 @@ class Scraper:
         Only ever true for a session that was recorded signed in, so a deliberately logged-out
         setup (no storage state, or one without Instagram in it) behaves exactly as before.
         """
-        if platform != "Instagram" or not self._storage_state_path:
-            return None
-        if self._recorded_ig_session is None:
-            try:
-                with open(self._storage_state_path, "r", encoding="utf-8") as f:
-                    state = json.load(f)
-                self._recorded_ig_session = any(
-                    c.get("name") == "sessionid" and c.get("value") and "instagram.com" in str(c.get("domain", ""))
-                    for c in state.get("cookies", []) or [])
-            except Exception:
-                self._recorded_ig_session = False
-        if not self._recorded_ig_session:
+        if platform != "Instagram" or not self._instagram_login_recorded():
             return None
         try:
             alive = any(c.get("name") == "sessionid" and c.get("value")
@@ -1049,9 +1132,10 @@ class Scraper:
         return ("Instagram signed the recorded session out - not swept (a signed-out grid shows only its "
                 "newest 12 posts). Record the session again (GUIDE section 4) and update PW_STORAGE_STATE_B64")
 
-    def _context(self, browser: Browser, use_storage: bool = True, block_media: bool = True, scale: int = 1) -> BrowserContext:
+    def _context(self, browser: Browser, use_storage: bool = True, block_media: bool = True, scale: int = 1,
+                 viewport: Optional[dict] = None) -> BrowserContext:
         kwargs = dict(
-            viewport={"width": 1280, "height": 1600},
+            viewport=viewport or {"width": 1280, "height": 1600},
             device_scale_factor=scale,
             locale=self.run_cfg.get("locale", "en-MY"),
             timezone_id=self.run_cfg.get("timezone", "Asia/Kuala_Lumpur"),
@@ -1193,7 +1277,17 @@ class Scraper:
             return res
         if platform == "Facebook" and str(self.run_cfg.get("facebook_source", "ads")).lower() == "ads":
             return self._scrape_facebook_ads(browser, brand, handle, res)
-        ctx = self._context(browser)
+        if platform == "Instagram":
+            src = self._instagram_source()
+            if src == "embed" or (src == "auto" and (platform in self.public_mode or not self._instagram_login_recorded())):
+                if platform not in self.public_mode:
+                    self.public_mode[platform] = "no Instagram login is saved"
+                    log.warning("Instagram: no saved login, so each account's newest posts are read through its public "
+                                "embed (older posts need a login, GUIDE section 4)")
+                return self._scrape_instagram_embed(browser, brand, handle, res)
+        # Threads signs in with the Instagram login. Once Instagram has ended it, presenting it to Threads only costs
+        # a wasted page load before the signed-out retry, so Threads is read as a visitor from the start.
+        ctx = self._context(browser, use_storage=not (platform == "Threads" and "Instagram" in self.public_mode))
         page = ctx.new_page()
         t0 = time.time()
         try:
@@ -1202,6 +1296,12 @@ class Scraper:
             page.wait_for_timeout(2500)
             _dismiss_dialogs(page)
             lost = self._session_signed_out(ctx, platform)
+            if lost and self._instagram_source() == "auto":
+                # The saved login has been ended. Rather than sweep nothing, read what any visitor may see.
+                self.public_mode[platform] = "Instagram ended the saved login"
+                log.warning("Instagram ended the saved login. From here each account's newest posts are read through its "
+                            "public embed, with no login; older posts wait until the session is recorded again (GUIDE section 4)")
+                return self._scrape_instagram_embed(browser, brand, handle, res)
             if lost:
                 self.session_lost[platform] = lost
                 res.error = lost
@@ -1304,7 +1404,7 @@ class Scraper:
             max_open = int(self.run_cfg.get("max_new_posts_per_visit", 0) or 0)
             for link in links:
                 url = clean_post_url(link)
-                if canonical_url(url) in self.known_urls:
+                if canonical_url(url) in self.known_urls or (platform == "Instagram" and self._instagram_known(handle, url)):
                     res.posts.append(Post(brand=brand, platform=platform, url=url, known=True))
                     continue
                 # Another account's post is never opened either, when the link itself names that account
@@ -1360,6 +1460,155 @@ class Scraper:
                 ctx.close()
             except Exception:
                 pass
+        log.info("[%s/%s] done in %.1fs", brand, platform, time.time() - t0)
+        return res
+
+    def instagram_embed_listing(self, ctx: BrowserContext, handle: str, limit: int = 6):
+        """
+        The newest posts an Instagram account shows in its public embed, with no login.
+
+        Returns (page, [(kind, code)], error). Each tile is pressed as a visitor would; the address the new tab
+        asks for is read and the request stopped there, so nothing behind it is loaded.
+        """
+        asked: List[Tuple[str, str]] = []
+
+        def on_route(route):
+            m = _IG_POST_ADDRESS.match(route.request.url)
+            if m and route.request.is_navigation_request():
+                asked.append((m.group(1), m.group(2)))
+                route.abort()
+            else:
+                route.continue_()
+
+        ctx.route(_IG_POST_ADDRESS, on_route)
+        page = ctx.new_page()
+        page.goto(IG_EMBED_PROFILE.format(handle=handle), wait_until="domcontentloaded", timeout=45000)
+        page.wait_for_timeout(3500)
+        if "/accounts/login" in page.url.lower():
+            return page, [], "Instagram asked for a login even for the public embed"
+        tiles = int(page.evaluate(_IG_TILES_JS) or 0)
+        if not tiles:
+            return page, [], ("Instagram's public embed shows no posts for this account (the account does not allow "
+                              "embedding, or has none), so it cannot be read without a login")
+        codes: List[Tuple[str, str]] = []
+        for i in range(min(tiles, limit)):
+            before = len(asked)
+            try:
+                page.locator("a[data-kkm-tile='%d']" % i).click(timeout=5000)
+            except Exception:
+                continue
+            for _ in range(25):
+                if len(asked) > before:
+                    break
+                page.wait_for_timeout(200)
+            for other in list(ctx.pages):
+                if other is not page:
+                    try:
+                        other.close()
+                    except Exception:
+                        pass
+            if len(asked) > before and asked[-1][1] not in [c for _k, c in codes]:
+                codes.append(asked[-1])
+            page.wait_for_timeout(400)
+        if not codes:
+            return page, [], "the public embed's posts would not open (layout change)"
+        return page, codes, None
+
+    def _scrape_instagram_embed(self, browser: Browser, brand: str, handle: str, res: TargetResult) -> TargetResult:
+        """An Instagram target with no login: its newest posts, through the public embed. See the note above
+        IG_EMBED_PROFILE."""
+        platform = "Instagram"
+        t0 = time.time()
+        res.public_view = True
+        res.profile_url = IG_EMBED_PROFILE.format(handle=handle)
+        ctx = self._context(browser, use_storage=False)
+        # A post's embed fills the width it is given, so it is drawn at the picture's own width, 1080, and the whole
+        # page is photographed: picture, then caption. A carousel shows its first slide only (and a design that
+        # runs one sentence across two slides is therefore cut at the slide's edge: that is the post, not the shot).
+        post_ctx = self._context(browser, use_storage=False, viewport={"width": 1080, "height": 1350})
+        try:
+            log.info("[%s/%s] public embed of @%s (no login)", brand, platform, handle)
+            _page, codes, err = self.instagram_embed_listing(ctx, handle)
+            res.links_found = len(codes)
+            if err:
+                res.error = err
+                log.warning("[%s/%s] %s", brand, platform, err)
+                return res
+            log.info("[%s/%s] %d newest post(s) in the public embed", brand, platform, len(codes))
+            max_open = int(self.run_cfg.get("max_new_posts_per_visit", 0) or 0)
+            opened = 0
+            for _kind, code in codes:
+                url = "https://www.instagram.com/%s/p/%s/" % (handle, code)
+                if any(f in self.known_urls for f in instagram_known_forms(handle, code)):
+                    res.posts.append(Post(brand=brand, platform=platform, url=url, known=True))
+                    continue
+                stop = getattr(self, "should_stop", None)
+                if stop and stop():
+                    res.truncated = True
+                    log.warning("[%s/%s] run budget reached after %d post(s) opened; the rest is left for the next run", brand, platform, opened)
+                    break
+                if max_open and opened >= max_open:
+                    res.capped = True
+                    break
+                if opened:
+                    _pace([3, 7], "the next post")
+                post = Post(brand=brand, platform=platform, url=url, posted_at=instagram_post_date(code))
+                pg = post_ctx.new_page()
+                try:
+                    pg.goto(IG_EMBED_POST.format(code=code), wait_until="domcontentloaded", timeout=45000)
+                    pg.wait_for_timeout(2500)
+                    if "/accounts/login" in pg.url.lower():
+                        post.errors.append("login wall on the post's public embed - not reviewed")
+                        post.blocked = True
+                    else:
+                        cap = ""
+                        try:
+                            cap = pg.locator(".Caption").first.inner_text(timeout=3000)
+                        except Exception:
+                            pass
+                        owner, text = parse_instagram_embed_caption(cap)
+                        if not owner:
+                            try:
+                                owner = (pg.locator(".UsernameText, .HeaderText a, a.Username").first.inner_text(timeout=1500) or "").strip()
+                            except Exception:
+                                owner = ""
+                        post.owner = owner or None
+                        if owner and not _handles_match(owner, handle):
+                            post.errors.append(f"different account: post is by @{owner}, not @{handle} — not reviewed")
+                            post.not_owned = True
+                        else:
+                            if pg.locator("video").count():
+                                post.url = "https://www.instagram.com/%s/reel/%s/" % (handle, code)
+                            post.text = text
+                            post.notes.append("read through Instagram's public embed, with no login (a carousel shows its first picture only)")
+                            fname = re.sub(r"[^a-z0-9]+", "_", f"{brand}_instagram_{code}".lower()).strip("_")[:90]
+                            path = os.path.join(self.out_dir, f"{fname}.png")
+                            try:
+                                pg.screenshot(path=path, full_page=True)
+                                post.screenshot_path = path
+                            except Exception as e:
+                                post.errors.append(f"screenshot failed: {type(e).__name__}")
+                except PWTimeout:
+                    post.errors.append("the post's public embed did not load in time")
+                finally:
+                    try:
+                        pg.close()
+                    except Exception:
+                        pass
+                res.posts.append(post)
+                opened += 1
+        except PWTimeout as e:
+            res.error = f"timeout: {e}"
+            log.error("[%s/%s] %s", brand, platform, res.error)
+        except Exception as e:  # keep the run alive
+            res.error = f"{type(e).__name__}: {e}"
+            log.error("[%s/%s] %s", brand, platform, res.error)
+        finally:
+            for c in (ctx, post_ctx):
+                try:
+                    c.close()
+                except Exception:
+                    pass
         log.info("[%s/%s] done in %.1fs", brand, platform, time.time() - t0)
         return res
 

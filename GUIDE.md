@@ -443,6 +443,28 @@ A **redeploy** (Apps Script → Deploy → Manage deployments → New version) i
 
 ---
 
+### Instagram and Threads without a login (16 Nov 2026)
+
+**If there is no working login, the sweep still reads Instagram and Threads, but only each account's newest posts.** Nothing has to be switched on: it happens by itself when no Instagram login is saved or Instagram has ended it.
+
+| | With a saved login | With no login |
+| --- | --- | --- |
+| Instagram | the whole grid, back to `min_post_date` | the **6 newest posts**, through the account's public embed |
+| Threads | the whole profile | the **4 to 5 newest posts**, as any visitor sees them |
+| Facebook | not used | Meta's Ad Library, every running advertisement (never needs a login) |
+
+How Instagram is read with no login: the account's public embed (`instagram.com/<handle>/embed/`, the widget a website shows) lists its six newest posts. Each tile is pressed to learn the post's address; that request is read and stopped, so no login page is ever loaded. The post's own captioned embed then gives the owner, the caption and the picture. The post's date is worked out from its code, which carries the moment it was posted.
+
+What to expect:
+
+- **New posts are covered, history is not.** An account that posts more than six times between two visits loses the ones in between, so with no login the sweep should come round often. A first pass over an account's older posts needs a login.
+- **Some accounts cannot be read this way.** An account that does not allow embedding shows nothing in its public embed; the Targets panel says so on that account.
+- **A post by another account in the grid** (a collaboration) is not reviewed, as with a login.
+- **One post is one row**, whether it was first stored as `/reel/…` by a signed-in visit or as `/p/…` by the embed.
+- The run prints a yellow warning *"Instagram was read with no login"*, the status strip shows **limited** for Instagram and Threads with the reason, and such accounts read **Login refused / limited** in the Targets panel with *"No login: the newest N post(s)…"*.
+
+Setting, in `scraper/config.yaml` under `run:`: `instagram_source: auto` (the default: login while it works, public embed otherwise), `login` (never fall back; the run ends red when the login is ended) or `embed` (never use the login).
+
 ### Why a status pill can say "old" (and why it no longer should)
 
 The strip at the top shows when each platform was last tested. While a sweep or an account check runs, the status check does not open a second browser on the same login (two at once is what gets a session signed out), so it kept the last result and its time, and a pill older than 14 hours shows **old**. With sweeps running back to back that was most of the day (15 Nov 2026: Instagram and Threads read *old* while both were being read all day). Now, while the login is busy, Instagram and Threads take their state from **the last finished sweep**: *live* with the number of accounts it read and the time it finished, or *down* if Instagram signed the session out during it. If the sweep read none, the old result and its time stay, and the pill goes *old*.
@@ -722,6 +744,7 @@ Open the run: GitHub → **Actions** → click the run. The summary at the end o
 | `N active ad(s) in the Ad Library` (Facebook) | Working as intended: Facebook is read through Meta's Ad Library, with no login (section 2) | Nothing. `0 active ad(s)` means the page is running no advertisement in Malaysia today |
 | `the Ad Library opened but showed no list` or `the Ad Library asked for a login` | Meta changed the page, or slowed the runner down for a while | Run **Actions → Facebook login probe**; if it repeats, tell me and I adjust the reader |
 | Status strip pill says `old` while a sweep is running | The status probe does not test while a sweep or an account check is using the login; it republishes the last real result with its own time, and a result older than 14 hours reads `old` | Nothing; it tests again when the login is free |
+| `Instagram ended the saved login. From here each account's newest posts are read through its public embed` | Instagram ended the login; the sweep carries on with the six newest posts of each account (section 2, *Instagram and Threads without a login*) | Record the session again (section 4) when you want older posts read too |
 | `Instagram signed the recorded session out - not swept`, and the run ends red | Instagram ended the recorded session itself, even though its cookies had not expired (14 Nov 2026: 342 days were left). A signed-out grid shows only its newest 12 posts, so the run refuses to sweep Instagram rather than report `posts=12 ok` for every account. Facebook and Threads in the same run carry on | Record the session again (section 4). Nothing was lost: the Instagram targets are listed as not reached and the next run walks them |
 | `N link(s) name another account in the URL; not opened` | Working as intended (14 Nov 2026). A collab or shared post keeps its real owner in its link (`/<owner>/p/<id>/`), so it is skipped without being opened. Before this, such posts were opened on every pass and never remembered: about a third of a sweep's time | Nothing. If most of a grid belongs to one other account, the summary still says so, and that account may be worth its own Targets row |
 | `login wall on post page - not reviewed` | The platform served its gate instead of the post. The post is **not** reviewed and the run counts it as an error, so it will never be recorded as compliant | Refresh the session (section 4). Until then that post is unseen, not clean |

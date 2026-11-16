@@ -12,6 +12,10 @@ run:
   # "ads" reads Meta's Ad Library instead: the page's running advertisements, public, no login. "page" is the old
   # route (needs a Facebook login that Facebook accepts from the machine running this).
   facebook_source: ads
+  # Instagram: "auto" uses the saved login while Instagram accepts it, and otherwise reads each account's public
+  # embed with no login (the six newest posts; older ones are out of reach). "login" never falls back and ends the
+  # run red when the login is ended, as before 16 Nov 2026. "embed" never uses the login.
+  instagram_source: auto
   ad_library_country: MY
   max_ads_per_page: 60
   # The page's own public address is tried first for its number, because it is one page load. Where Facebook will

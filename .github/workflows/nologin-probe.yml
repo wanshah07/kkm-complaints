@@ -11,6 +11,9 @@ on:
       threads:
         description: Threads handles, comma separated
         default: nutox_my,hygr.my,klinikdrhasseenah
+      sweep_test:
+        description: "Brand=handle pairs: run the sweep's own Instagram code with no login (nothing is filed)"
+        default: ''
 
 concurrency:
   group: kkm-nologin-probe
@@ -28,6 +31,7 @@ jobs:
       PYTHONUNBUFFERED: '1'
       IG: ${{ inputs.instagram }}
       TH: ${{ inputs.threads }}
+      SWEEP_TEST: ${{ inputs.sweep_test }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -49,7 +53,7 @@ jobs:
         working-directory: scraper
         run: python -m playwright install --with-deps chromium
       - name: Probe
-        run: python tools/nologin_probe.py --instagram "$IG" --threads "$TH" --out nologin_out
+        run: python tools/nologin_probe.py --instagram "$IG" --threads "$TH" --sweep-test "$SWEEP_TEST" --out nologin_out
       - name: Upload the pictures
         if: always()
         uses: actions/upload-artifact@v4

@@ -33,12 +33,57 @@ def scroll_series(page, js, rounds=6):
     return out, page.evaluate(js)
 
 
+def sweep_test(spec, out_dir):
+    """The sweep's own Instagram route (Scraper._scrape_target) with no saved login. Prints, files nothing."""
+    import yaml
+    from playwright.sync_api import sync_playwright
+    from scraper import Scraper, canonical_url
+    with open(os.path.join(HERE, "..", "scraper", "config.yaml"), "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+    os.makedirs(out_dir, exist_ok=True)
+    os.environ.pop("PW_STORAGE_STATE_B64", None)
+    os.environ.pop("PW_STORAGE_STATE_PATH", None)
+    sc = Scraper(cfg, out_dir)
+    bad = 0
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
+        try:
+            for pair in [x for x in spec.split(",") if "=" in x]:
+                brand, handle = [v.strip() for v in pair.split("=", 1)]
+                t0 = time.time()
+                res = sc._scrape_target(browser, brand, "Instagram", handle)
+                new = [p for p in res.posts if not p.known and not p.not_owned]
+                other = [p for p in res.posts if p.not_owned]
+                print("SWEEP %-16s @%s public=%s listed=%s new=%d other_account=%d error=%s secs=%.0f" % (
+                    brand, handle, res.public_view, res.links_found, len(new), len(other), res.error, time.time() - t0))
+                if res.error:
+                    bad += 1
+                for p in other[:2]:
+                    print("SWEEP   not reviewed: %s (%s)" % (p.url, p.errors))
+                for p in new[:3]:
+                    size = os.path.getsize(p.screenshot_path) if p.screenshot_path and os.path.exists(p.screenshot_path) else 0
+                    print("SWEEP   post url=%s date=%s text_chars=%d shot_bytes=%d errors=%s notes=%s" % (p.url, p.posted_at, len(p.text or ""), size, p.errors, p.notes))
+                    print("SWEEP   text: %s" % json.dumps((p.text or "")[:260], ensure_ascii=False))
+                sc.known_urls = set(sc.known_urls) | {canonical_url(p.url) for p in new}
+                # the same posts under the address a signed-in visit would give them must also count as known
+                again = sc._scrape_target(browser, brand, "Instagram", handle)
+                print("SWEEP %-16s second visit: listed=%s new=%d (expect 0)" % (brand, again.links_found, len([p for p in again.posts if not p.known and not p.not_owned])))
+                time.sleep(5)
+        finally:
+            browser.close()
+    print("SWEEP public_mode=%s" % sc.public_mode)
+    return 1 if bad else 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--instagram", default="")
     ap.add_argument("--threads", default="")
     ap.add_argument("--out", default=os.path.join(HERE, "nologin_out"))
+    ap.add_argument("--sweep-test", default="", help="Brand=handle[,Brand=handle]: run the sweep's own Instagram code with no login and print what it would hand the reviewer; nothing is filed")
     args = ap.parse_args()
+    if args.sweep_test:
+        return sweep_test(args.sweep_test, args.out)
     import yaml
     from playwright.sync_api import sync_playwright
     with open(os.path.join(HERE, "..", "scraper", "config.yaml"), "r", encoding="utf-8") as f:
@@ -67,6 +112,42 @@ def main():
                 pg.wait_for_timeout(3500)
                 codes = pg.evaluate(IG_LINKS)
                 t = body(pg)
+                html = pg.content()
+                hrefs = pg.evaluate("() => [...document.querySelectorAll('a[href]')].map(a => a.getAttribute('href')).slice(0, 12)")
+                short = []
+                for m in re.findall(r'"shortcode"\s*:\s*"([A-Za-z0-9_-]{5,})"', html) + re.findall(r'\\?/(?:p|reel)\\?/([A-Za-z0-9_-]{8,})', html):
+                    if m not in short:
+                        short.append(m)
+                tiles = pg.evaluate("() => { const im = [...document.querySelectorAll('img')].filter(i => i.naturalWidth >= 200 || i.width >= 200); return im.slice(0, 8).map(i => { let e = i, hops = 0; while (e && e.tagName !== 'A' && hops < 8) { e = e.parentElement; hops++; } return { a: e && e.tagName === 'A' ? e.getAttribute('href') : null, alt: (i.alt || '').slice(0, 90), role: i.closest('[role]') ? i.closest('[role]').getAttribute('role') : null }; }); }")
+                print("IG %-20s embed dom: anchors=%s" % (h, json.dumps(hrefs)[:500]))
+                print("IG %-20s embed dom: shortcodes_in_html=%s" % (h, short[:10]))
+                print("IG %-20s embed dom: tiles=%s" % (h, json.dumps(tiles, ensure_ascii=False)[:700]))
+                if not codes and short:
+                    codes = ["p/" + c for c in short]
+                # The grid's tiles are <a href="#">: the post's address only exists once a tile is pressed, which
+                # opens the post in a new tab. Press the first three, as a visitor would, and read where they lead.
+                from urllib.parse import unquote
+                n_tiles = pg.evaluate("() => { let i = 0; for (const a of document.querySelectorAll('a[href=\"#\"]')) { const im = a.querySelector('img'); if (im && (im.naturalWidth >= 200 || im.width >= 200)) a.setAttribute('data-kkm-tile', String(i++)); } return i; }")
+                alt_len = pg.evaluate("() => [...document.querySelectorAll('a[data-kkm-tile] img')].map(i => (i.alt || '').length)")
+                print("IG %-20s embed tiles=%d alt_chars=%s" % (h, n_tiles, alt_len))
+                for i in range(min(n_tiles, 3)):
+                    try:
+                        with ctx.expect_page(timeout=8000) as newp:
+                            pg.locator("a[data-kkm-tile='%d']" % i).click()
+                        np_ = newp.value
+                        try:
+                            np_.wait_for_load_state("domcontentloaded", timeout=10000)
+                        except Exception:
+                            pass
+                        u = unquote(np_.url)
+                        m = re.search(r"/(p|reel|tv)/([A-Za-z0-9_-]{5,})", u)
+                        print("IG %-20s tile %d opens: %s -> code=%s" % (h, i, re.sub(r"ig_rid=[^&]+", "ig_rid=…", u)[:150], (m.group(1) + "/" + m.group(2)) if m else None))
+                        if m and (m.group(1) + "/" + m.group(2)) not in codes:
+                            codes.append(m.group(1) + "/" + m.group(2))
+                        np_.close()
+                    except Exception as e:
+                        print("IG %-20s tile %d: no new tab (%s); page now at %s" % (h, i, type(e).__name__, pg.url[:120]))
+                    time.sleep(2)
                 print("IG %-20s embed:   http=%s login_url=%s posts=%d first=%s text_chars=%d head=%s" % (
                     h, r.status if r else "?", "/accounts/login" in pg.url, len(codes), codes[:3], len(t), json.dumps(t[:160], ensure_ascii=False)))
                 pg.screenshot(path=os.path.join(args.out, "ig_embed_%s.png" % safe))
@@ -89,6 +170,13 @@ def main():
                     print("IG %-20s post %s: http=%s login_url=%s caption_chars=%d imgs=%d datetime=%s text_chars=%d" % (
                         h, code, r.status if r else "?", "/accounts/login" in pg.url, len(cap), imgs, when.group(1) if when else None, len(t)))
                     print("IG %-20s post %s caption: %s" % (h, code, json.dumps((cap or t)[:300], ensure_ascii=False)))
+                    box = pg.evaluate("() => { const e = document.querySelector('.Embed, .EmbedFrame, body > div'); if (!e) return null; const r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height), e.className.slice(0, 60)]; }")
+                    user = None
+                    try:
+                        user = pg.locator(".UsernameText, .HeaderText a, a.Username").first.inner_text(timeout=1500)
+                    except Exception:
+                        pass
+                    print("IG %-20s post %s embed box=%s username=%s video=%d" % (h, code, box, user, pg.locator("video").count()))
                     pg.screenshot(path=os.path.join(args.out, "ig_post_%s_%s.png" % (safe, cid)))
                 except Exception as e:
                     print("IG %-20s post %s: %s" % (h, code, type(e).__name__))
