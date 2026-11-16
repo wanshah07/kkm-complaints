@@ -1,5 +1,5 @@
 {
- "checked_at": "2026-11-16T00:48:06Z",
+ "checked_at": "2026-11-16T02:54:16Z",
  "platforms": [
   {
    "key": "instagram",
@@ -7,7 +7,7 @@
    "state": "down",
    "detail": "Instagram ended the saved login. Record the session again (guide section 4).",
    "links": null,
-   "at": "2026-11-16T00:48:15Z"
+   "at": "2026-11-16T02:54:23Z"
   },
   {
    "key": "facebook",
@@ -15,7 +15,7 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-16T00:48:38Z"
+   "at": "2026-11-16T02:54:46Z"
   },
   {
    "key": "threads",
@@ -23,7 +23,7 @@
    "state": "down",
    "detail": "The saved login is no longer held after loading the page. Record the session again.",
    "links": 0,
-   "at": "2026-11-16T00:49:08Z"
+   "at": "2026-11-16T02:55:15Z"
   },
   {
    "key": "tiktok",
@@ -38,19 +38,19 @@
    "label": "TikTok accounts",
    "links": null,
    "state": "live",
-   "at": "2026-11-15T19:11:16Z",
-   "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-15 19:11). Only an account's ten newest are visible at a time."
+   "at": "2026-11-16T01:28:01Z",
+   "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-16 01:28). Only an account's ten newest are visible at a time."
   }
  ],
  "notes": [],
  "session_days_left": {
-  "instagram": 363.4,
+  "instagram": 363.3,
   "facebook": null,
-  "threads": 363.4
+  "threads": 363.3
  },
  "last_sweep": {
   "conclusion": "success",
-  "at": "2026-11-15T17:25:13Z",
+  "at": "2026-11-16T01:55:37Z",
   "title": "KKM complaint scraper"
  },
  "overall": "down"
