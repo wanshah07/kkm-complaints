@@ -67,6 +67,18 @@ def main():
                 pg.wait_for_timeout(3500)
                 codes = pg.evaluate(IG_LINKS)
                 t = body(pg)
+                html = pg.content()
+                hrefs = pg.evaluate("() => [...document.querySelectorAll('a[href]')].map(a => a.getAttribute('href')).slice(0, 12)")
+                short = []
+                for m in re.findall(r'"shortcode"\s*:\s*"([A-Za-z0-9_-]{5,})"', html) + re.findall(r'\\?/(?:p|reel)\\?/([A-Za-z0-9_-]{8,})', html):
+                    if m not in short:
+                        short.append(m)
+                tiles = pg.evaluate("() => { const im = [...document.querySelectorAll('img')].filter(i => i.naturalWidth >= 200 || i.width >= 200); return im.slice(0, 8).map(i => { let e = i, hops = 0; while (e && e.tagName !== 'A' && hops < 8) { e = e.parentElement; hops++; } return { a: e && e.tagName === 'A' ? e.getAttribute('href') : null, alt: (i.alt || '').slice(0, 90), role: i.closest('[role]') ? i.closest('[role]').getAttribute('role') : null }; }); }")
+                print("IG %-20s embed dom: anchors=%s" % (h, json.dumps(hrefs)[:500]))
+                print("IG %-20s embed dom: shortcodes_in_html=%s" % (h, short[:10]))
+                print("IG %-20s embed dom: tiles=%s" % (h, json.dumps(tiles, ensure_ascii=False)[:700]))
+                if not codes and short:
+                    codes = ["p/" + c for c in short]
                 print("IG %-20s embed:   http=%s login_url=%s posts=%d first=%s text_chars=%d head=%s" % (
                     h, r.status if r else "?", "/accounts/login" in pg.url, len(codes), codes[:3], len(t), json.dumps(t[:160], ensure_ascii=False)))
                 pg.screenshot(path=os.path.join(args.out, "ig_embed_%s.png" % safe))
