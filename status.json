@@ -1,5 +1,5 @@
 {
- "checked_at": "2026-11-16T09:14:39Z",
+ "checked_at": "2026-11-16T09:45:54Z",
  "platforms": [
   {
    "key": "instagram",
@@ -7,7 +7,8 @@
    "state": "live",
    "detail": "Signed in and reading posts normally.",
    "links": 40,
-   "at": "2026-11-16T09:15:05Z"
+   "at": "2026-11-16T09:15:05Z",
+   "carried": true
   },
   {
    "key": "facebook",
@@ -15,7 +16,7 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-16T09:15:46Z"
+   "at": "2026-11-16T09:46:10Z"
   },
   {
    "key": "threads",
@@ -23,7 +24,8 @@
    "state": "degraded",
    "detail": "No working login (The saved login is no longer held after loading the page). Still reading the newest 12 posts of each account as any visitor may; older posts need the session recorded again (guide section 4).",
    "links": 12,
-   "at": "2026-11-16T09:16:40Z"
+   "at": "2026-11-16T09:16:40Z",
+   "carried": true
   },
   {
    "key": "tiktok",
@@ -42,11 +44,13 @@
    "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-16 01:28). Only an account's ten newest are visible at a time."
   }
  ],
- "notes": [],
+ "notes": [
+  "Instagram and Threads were not probed: a sweep or an account check was using the login."
+ ],
  "session_days_left": {
   "instagram": 365.0,
   "facebook": null,
-  "threads": null
+  "threads": 365.0
  },
  "last_sweep": {
   "conclusion": "success",
