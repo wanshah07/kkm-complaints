@@ -79,6 +79,30 @@ def main():
                 print("IG %-20s embed dom: tiles=%s" % (h, json.dumps(tiles, ensure_ascii=False)[:700]))
                 if not codes and short:
                     codes = ["p/" + c for c in short]
+                # The grid's tiles are <a href="#">: the post's address only exists once a tile is pressed, which
+                # opens the post in a new tab. Press the first three, as a visitor would, and read where they lead.
+                from urllib.parse import unquote
+                n_tiles = pg.evaluate("() => { let i = 0; for (const a of document.querySelectorAll('a[href=\"#\"]')) { const im = a.querySelector('img'); if (im && (im.naturalWidth >= 200 || im.width >= 200)) a.setAttribute('data-kkm-tile', String(i++)); } return i; }")
+                alt_len = pg.evaluate("() => [...document.querySelectorAll('a[data-kkm-tile] img')].map(i => (i.alt || '').length)")
+                print("IG %-20s embed tiles=%d alt_chars=%s" % (h, n_tiles, alt_len))
+                for i in range(min(n_tiles, 3)):
+                    try:
+                        with ctx.expect_page(timeout=8000) as newp:
+                            pg.locator("a[data-kkm-tile='%d']" % i).click()
+                        np_ = newp.value
+                        try:
+                            np_.wait_for_load_state("domcontentloaded", timeout=10000)
+                        except Exception:
+                            pass
+                        u = unquote(np_.url)
+                        m = re.search(r"/(p|reel|tv)/([A-Za-z0-9_-]{5,})", u)
+                        print("IG %-20s tile %d opens: %s -> code=%s" % (h, i, re.sub(r"ig_rid=[^&]+", "ig_rid=…", u)[:150], (m.group(1) + "/" + m.group(2)) if m else None))
+                        if m and (m.group(1) + "/" + m.group(2)) not in codes:
+                            codes.append(m.group(1) + "/" + m.group(2))
+                        np_.close()
+                    except Exception as e:
+                        print("IG %-20s tile %d: no new tab (%s); page now at %s" % (h, i, type(e).__name__, pg.url[:120]))
+                    time.sleep(2)
                 print("IG %-20s embed:   http=%s login_url=%s posts=%d first=%s text_chars=%d head=%s" % (
                     h, r.status if r else "?", "/accounts/login" in pg.url, len(codes), codes[:3], len(t), json.dumps(t[:160], ensure_ascii=False)))
                 pg.screenshot(path=os.path.join(args.out, "ig_embed_%s.png" % safe))
@@ -101,6 +125,13 @@ def main():
                     print("IG %-20s post %s: http=%s login_url=%s caption_chars=%d imgs=%d datetime=%s text_chars=%d" % (
                         h, code, r.status if r else "?", "/accounts/login" in pg.url, len(cap), imgs, when.group(1) if when else None, len(t)))
                     print("IG %-20s post %s caption: %s" % (h, code, json.dumps((cap or t)[:300], ensure_ascii=False)))
+                    box = pg.evaluate("() => { const e = document.querySelector('.Embed, .EmbedFrame, body > div'); if (!e) return null; const r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height), e.className.slice(0, 60)]; }")
+                    user = None
+                    try:
+                        user = pg.locator(".UsernameText, .HeaderText a, a.Username").first.inner_text(timeout=1500)
+                    except Exception:
+                        pass
+                    print("IG %-20s post %s embed box=%s username=%s video=%d" % (h, code, box, user, pg.locator("video").count()))
                     pg.screenshot(path=os.path.join(args.out, "ig_post_%s_%s.png" % (safe, cid)))
                 except Exception as e:
                     print("IG %-20s post %s: %s" % (h, code, type(e).__name__))
