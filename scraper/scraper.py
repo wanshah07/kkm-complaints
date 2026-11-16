@@ -901,8 +901,7 @@ class Scraper:
         self.session_lost: Dict[str, str] = {}
         self._recorded_ig_session: Optional[bool] = None
 
-    @staticmethod
-    def _report_session_age(raw: bytes) -> None:
+    def _report_session_age(self, raw: bytes) -> None:
         """
         A recorded session dies quietly: the run still works, every profile just hits a wall and
         reports 0 posts, which reads like the brands went quiet. Say it plainly up front instead.
