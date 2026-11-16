@@ -86,10 +86,52 @@ def probe_facebook_ads(sc, browser, key, label, handle):
     return out
 
 
+def probe_public(sc, browser, key, label, platform, handle, why):
+    """The login is gone or absent: can the platform still be read as any visitor? 'degraded' when it can
+    (the sweep then reads only each account's newest posts), 'down' when it cannot."""
+    from scraper import _collect_links, _dismiss_dialogs
+    out = {"key": key, "label": label, "state": "down", "detail": why, "links": None}
+    ctx = sc._context(browser, use_storage=False)
+    try:
+        if platform == "Instagram":
+            if sc._instagram_source() == "login":
+                return out
+            _page, codes, err = sc.instagram_embed_listing(ctx, handle)
+            n = len(codes)
+            if n:
+                out.update(state="degraded", links=n,
+                           detail="No working login (%s). Still reading the newest %d posts of each account through Instagram's "
+                                  "public embed; older posts need the session recorded again (guide section 4)." % (why.rstrip("."), n))
+            else:
+                out["detail"] = "%s And the public embed could not be read either: %s." % (why, err)
+        else:
+            pcfg = sc.platforms[platform]
+            url = pcfg["profile_url"].format(handle=handle)
+            page = ctx.new_page()
+            page.goto(url, wait_until="domcontentloaded", timeout=45000)
+            page.wait_for_timeout(3500)
+            _dismiss_dialogs(page)
+            links = _collect_links(page, pcfg["post_link_patterns"], url, 12, platform=platform, handle=handle, scroll_pause=[1.0, 2.0])
+            if links:
+                out.update(state="degraded", links=len(links),
+                           detail="No working login (%s). Still reading the newest %d posts of each account as any visitor may; "
+                                  "older posts need the session recorded again (guide section 4)." % (why.rstrip("."), len(links)))
+    except Exception as e:
+        out["detail"] = "%s The public view could not be checked (%s)." % (why, type(e).__name__)
+    finally:
+        try:
+            ctx.close()
+        except Exception:
+            pass
+    return out
+
+
 def probe_one(sc, browser, key, label, platform, handle, want_links):
     from scraper import _collect_links, _dismiss_dialogs, _is_login_wall, _wait_for_posts
     if platform == "Facebook" and facebook_by_ads(sc):
         return probe_facebook_ads(sc, browser, key, label, handle)
+    if platform in ("Instagram", "Threads") and not sc._storage_state_path:
+        return probe_public(sc, browser, key, label, platform, handle, "No saved login is configured.")
     from playwright.sync_api import TimeoutError as PWTimeout
     pcfg = sc.platforms[platform]
     url = pcfg["profile_url"].format(handle=handle)
@@ -102,9 +144,10 @@ def probe_one(sc, browser, key, label, platform, handle, want_links):
         _dismiss_dialogs(page)
         lost = sc._session_signed_out(ctx, platform)
         if lost:
-            out.update(state="down", detail="Instagram ended the saved login. Record the session again (guide section 4).")
-            return out
+            return probe_public(sc, browser, key, label, platform, handle, "Instagram ended the saved login.")
         if _is_login_wall(page):
+            if platform in ("Instagram", "Threads"):
+                return probe_public(sc, browser, key, label, platform, handle, "%s shows a login page to the saved login." % label)
             out.update(state="down", detail="%s shows a login page. Record the session again (guide section 4)." % label)
             return out
         _wait_for_posts(page, pcfg["post_link_patterns"])
@@ -121,6 +164,8 @@ def probe_one(sc, browser, key, label, platform, handle, want_links):
         except Exception:
             held = set()
         signed_in = all(n in held for n in names) if platform == "Facebook" else any(n in held for n in names)
+        if not signed_in and platform in ("Instagram", "Threads"):
+            return probe_public(sc, browser, key, label, platform, handle, "The saved login is no longer held after loading the page.")
         if not signed_in:
             out.update(state="down", detail="The saved login is no longer held after loading the page. Record the session again.")
         elif len(links) >= want_links:

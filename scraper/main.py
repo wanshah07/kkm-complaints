@@ -718,6 +718,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                                       "posts": len(tr.posts), "error": tr.error,
                                       "truncated": bool(getattr(tr, "truncated", False)),
                                       "capped": bool(getattr(tr, "capped", False)),
+                                      "public": bool(getattr(tr, "public_view", False)),
                                       "opened": sum(1 for x in tr.posts if not getattr(x, "known", False)
                                                     and not getattr(x, "not_owned", False))})
             if web_mode and tr.error and not tr.error.startswith("skipped:"):
@@ -932,6 +933,11 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     for plat, why in (getattr(scraper, "session_lost", None) or {}).items():
         report["errors"].append(f"session: {plat}: {why}")
+    # Read with no login: not a failure, but the run must say that only the newest posts were covered.
+    report["public_mode"] = dict(getattr(scraper, "public_mode", None) or {})
+    for plat, why in report["public_mode"].items():
+        print(f"::warning title={plat} was read with no login::{why}. Only each account's newest posts were read "
+              f"(public embed). Record the session again to reach older posts (GUIDE section 4).", flush=True)
     if client is not None and not args.dry_run and not tt_mode and not web_mode:
         _record_sweep_status(client, report, brands)
     report["finished_myt"] = datetime.now(MYT).isoformat()
@@ -1016,6 +1022,8 @@ def sweep_status_updates(report: dict, brands: List[dict]) -> List[dict]:
         note = err.split(" — ")[0][:120]
         if not note and key in renamed:
             note = str(renamed[key].get("note") or "")[:160]
+        if not note and t.get("public"):
+            note = "no login: only the newest posts were read (public embed); older ones need a saved login"
         if not note and (t.get("capped") or t.get("truncated")):
             note = f"partial: {opened} new post(s) judged, older ones wait for the next visit"
         out.append({"brand": key[0], "platform": key[1], "handle": handles[key], "sweep_at": at,
