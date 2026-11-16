@@ -1,0 +1,46 @@
+name: Repair sweep status stamps
+
+# One-off tool (tools/sweep_status_repair.py): clears "last swept" stamps a sweep wrote while it was browsing logged
+# out. Touches the TargetStatus tab only. Run it by hand; dry run first.
+on:
+  workflow_dispatch:
+    inputs:
+      after:
+        description: Clear stamps at or after this UTC time (ISO)
+        required: true
+      before:
+        description: ... and at or before this UTC time (ISO)
+        required: true
+      platforms:
+        description: Platforms to clear, comma separated
+        default: Instagram,Threads
+      dry_run:
+        description: List what would be cleared and write nothing
+        type: boolean
+        default: true
+
+concurrency:
+  group: kkm-status-repair
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APPS_SCRIPT_WEBHOOK_URL: ${{ secrets.APPS_SCRIPT_WEBHOOK_URL }}
+      APPS_SCRIPT_API_TOKEN: ${{ secrets.APPS_SCRIPT_API_TOKEN }}
+      AFTER: ${{ inputs.after }}
+      BEFORE: ${{ inputs.before }}
+      PLATFORMS: ${{ inputs.platforms }}
+      DRY: ${{ inputs.dry_run && '--dry-run' || '' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests
+      - run: python tools/sweep_status_repair.py --after "$AFTER" --before "$BEFORE" --platforms "$PLATFORMS" $DRY
