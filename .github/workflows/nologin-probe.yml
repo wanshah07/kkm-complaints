@@ -1,0 +1,60 @@
+name: No-login probe (Instagram, Threads)
+
+# Measures what Instagram and Threads show a visitor with no login, from a runner (tools/nologin_probe.py).
+# Presents no cookies and files nothing. Run by hand.
+on:
+  workflow_dispatch:
+    inputs:
+      instagram:
+        description: Instagram handles, comma separated
+        default: cetaphilmy,nutox_my,hygr.my,safimalaysia
+      threads:
+        description: Threads handles, comma separated
+        default: nutox_my,hygr.my,klinikdrhasseenah
+
+concurrency:
+  group: kkm-nologin-probe
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TZ: Asia/Kuala_Lumpur
+      PYTHONUNBUFFERED: '1'
+      IG: ${{ inputs.instagram }}
+      TH: ${{ inputs.threads }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scraper/requirements.txt
+      - name: Install dependencies
+        working-directory: scraper
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('scraper/requirements.txt') }}
+      - name: Install Chromium
+        working-directory: scraper
+        run: python -m playwright install --with-deps chromium
+      - name: Probe
+        run: python tools/nologin_probe.py --instagram "$IG" --threads "$TH" --out nologin_out
+      - name: Upload the pictures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nologin-probe-${{ github.run_id }}
+          path: nologin_out/
+          retention-days: 7
+          if-no-files-found: ignore
