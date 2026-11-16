@@ -501,7 +501,11 @@ A browser window opens. In that one window, in order:
 3. Visit each brand profile once, so the session looks used.
 4. **Close the window.** Closing is what writes the file.
 
-Then convert and upload:
+**Easiest way to convert (16 Nov 2026):** download `tools/session_pack.py` (`Invoke-WebRequest https://raw.githubusercontent.com/wanshah07/kkm-complaints/main/tools/session_pack.py -OutFile session_pack.py`) and run `py session_pack.py storage_state.json`. It keeps only the Instagram and Threads logins, checks each login is really in the file, prints how long it lasts (never a value) and copies the text for the secret to the clipboard. If it says *NO LOGIN in the file* for a site, that site was not signed in when the window was closed: record again.
+
+How to know the secret really changed: the status strip's `session_days_left` (and the run log's `browser session for instagram.com valid for N more day(s)`) jumps to about 365 for a login recorded today. A number that does not move means the old secret is still in place.
+
+Or do it by hand:
 
 ```
 [Convert]::ToBase64String([IO.File]::ReadAllBytes("storage_state.json")) | Set-Clipboard
