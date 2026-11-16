@@ -1,13 +1,14 @@
 {
- "checked_at": "2026-11-16T11:12:41Z",
+ "checked_at": "2026-11-16T16:10:55Z",
  "platforms": [
   {
    "key": "instagram",
    "label": "Instagram",
    "state": "live",
-   "detail": "Signed in and reading posts normally.",
-   "links": 40,
-   "at": "2026-11-16T11:13:12Z"
+   "detail": "Signed in and reading posts: the sweep that finished 2026-11-16 14:57 UTC read 8 account(s) on Instagram.",
+   "links": 8,
+   "at": "2026-11-16T14:57:34Z",
+   "carried": false
   },
   {
    "key": "facebook",
@@ -15,7 +16,7 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-16T11:13:35Z"
+   "at": "2026-11-16T16:11:11Z"
   },
   {
    "key": "threads",
@@ -23,7 +24,8 @@
    "state": "live",
    "detail": "Signed in and reading posts normally.",
    "links": 40,
-   "at": "2026-11-16T11:14:55Z"
+   "at": "2026-11-16T11:14:55Z",
+   "carried": true
   },
   {
    "key": "tiktok",
@@ -38,19 +40,21 @@
    "label": "TikTok accounts",
    "links": null,
    "state": "live",
-   "at": "2026-11-16T01:28:01Z",
-   "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-16 01:28). Only an account's ten newest are visible at a time."
+   "at": "2026-11-16T12:20:14Z",
+   "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-16 12:20). Only an account's ten newest are visible at a time."
   }
  ],
- "notes": [],
+ "notes": [
+  "Instagram and Threads were not probed: a sweep or an account check was using the login. Their state comes from the last finished sweep."
+ ],
  "session_days_left": {
-  "instagram": 364.9,
+  "instagram": 364.7,
   "facebook": null,
-  "threads": 364.9
+  "threads": 364.7
  },
  "last_sweep": {
   "conclusion": "success",
-  "at": "2026-11-16T11:06:07Z",
+  "at": "2026-11-16T14:57:34Z",
   "title": "KKM complaint scraper"
  },
  "overall": "live"
