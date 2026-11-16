@@ -1285,7 +1285,9 @@ class Scraper:
                     log.warning("Instagram: no saved login, so each account's newest posts are read through its public "
                                 "embed (older posts need a login, GUIDE section 4)")
                 return self._scrape_instagram_embed(browser, brand, handle, res)
-        ctx = self._context(browser)
+        # Threads signs in with the Instagram login. Once Instagram has ended it, presenting it to Threads only costs
+        # a wasted page load before the signed-out retry, so Threads is read as a visitor from the start.
+        ctx = self._context(browser, use_storage=not (platform == "Threads" and "Instagram" in self.public_mode))
         page = ctx.new_page()
         t0 = time.time()
         try:
@@ -1520,9 +1522,9 @@ class Scraper:
         res.public_view = True
         res.profile_url = IG_EMBED_PROFILE.format(handle=handle)
         ctx = self._context(browser, use_storage=False)
-        # A post's embed fills the width it is given. At phone width the picture was cut off on the right (test run
-        # 43806828389, a carousel's first slide), so it is drawn at the picture's own width, 1080, and the whole
-        # page is photographed: picture, then caption.
+        # A post's embed fills the width it is given, so it is drawn at the picture's own width, 1080, and the whole
+        # page is photographed: picture, then caption. A carousel shows its first slide only (and a design that
+        # runs one sentence across two slides is therefore cut at the slide's edge: that is the post, not the shot).
         post_ctx = self._context(browser, use_storage=False, viewport={"width": 1080, "height": 1350})
         try:
             log.info("[%s/%s] public embed of @%s (no login)", brand, platform, handle)
