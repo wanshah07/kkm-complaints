@@ -22,16 +22,19 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "scraper"))
 
 
-def pick(status, after, before, platforms):
-    """The records to clear: [(brand, platform, handle, sweep_at, note)], from the backend's status map."""
-    want = {p.strip().lower() for p in platforms if p.strip()}
+def pick(status, after, before, platforms, names=None):
+    """The records to clear: [(brand, platform, handle, sweep_at, note)], from the backend's status map.
+    The map is keyed "brand\\x01platform" in lower case and its records carry no brand or platform of their own;
+    `names` maps a lower-case brand to the name the Targets tab spells."""
+    want = {p.strip().lower(): p.strip() for p in platforms if p.strip()}
+    names = {str(k).lower(): v for k, v in (names or {}).items()}
     out = []
-    for _k, rec in (status or {}).items():
+    for key, rec in (status or {}).items():
+        brand_l, _, plat_l = str(key).partition("\x01")
         at = str(rec.get("sweep_at") or "")
-        plat = str(rec.get("platform") or "")
-        if not at or not (after <= at <= before) or plat.lower() not in want:
+        if not at or not (after <= at <= before) or plat_l not in want:
             continue
-        out.append((str(rec.get("brand") or ""), plat, str(rec.get("handle") or ""), at, str(rec.get("sweep_note") or "")))
+        out.append((names.get(brand_l, brand_l), want[plat_l], str(rec.get("handle") or ""), at, str(rec.get("sweep_note") or "")))
     return sorted(out)
 
 
@@ -50,9 +53,10 @@ def main():
     client = AppsScriptClient()
     admin = client._post({"action": "targets_admin"}, retries=3)
     status = admin.get("status") or {}
+    names = {str(t.get("name") or "").lower(): str(t.get("name") or "") for t in admin.get("targets") or []}
     sample = next(iter(status.values()), {})
     print("status records: %d; fields seen: %s" % (len(status), sorted(sample.keys())), flush=True)
-    records = pick(status, args.after, args.before, args.platforms.split(","))
+    records = pick(status, args.after, args.before, args.platforms.split(","), names)
     for b, p, h, at, note in records:
         print("CLEAR %-22s %-10s @%-26s swept %s note=%r" % (b, p, h, at, note[:60]), flush=True)
     print("%d record(s) match %s..%s on %s" % (len(records), args.after, args.before, args.platforms), flush=True)
@@ -67,7 +71,7 @@ def main():
     print("cleared %d record(s)" % done, flush=True)
     # read back: none of them may still carry a stamp
     after = client._post({"action": "targets_admin"}, retries=3).get("status") or {}
-    left = pick(after, args.after, args.before, args.platforms.split(","))
+    left = pick(after, args.after, args.before, args.platforms.split(","), names)
     print("read back: %d record(s) still stamped in that window (expect 0)" % len(left), flush=True)
     return 1 if left else 0
 
