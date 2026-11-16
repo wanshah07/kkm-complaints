@@ -7,6 +7,10 @@ personal Facebook login does not belong in an automated scraper), drops the brow
 checks that each login is really in the file and prints how long it lasts. It prints names and days, never a value.
 
     py session_pack.py storage_state.json            (Windows: the text is copied to the clipboard)
+    py session_pack.py storage_state.json --file     (always writes session_b64.txt instead; for the GitHub CLI below)
+
+Without pasting anything, if the GitHub CLI (gh) is installed and signed in on your PC:
+    Get-Content session_b64.txt -Raw | gh secret set PW_STORAGE_STATE_B64 --repo wanshah07/kkm-complaints
     python3 session_pack.py storage_state.json       (elsewhere: written to session_b64.txt, delete it afterwards)
 
 Then GitHub -> repo -> Settings -> Secrets and variables -> Actions -> PW_STORAGE_STATE_B64 -> Update -> paste -> save.
@@ -41,8 +45,10 @@ def pack(state):
 
 
 def main(argv):
+    to_file = "--file" in argv
+    argv = [a for a in argv if a != "--file"]
     if len(argv) != 2 or not os.path.exists(argv[1]):
-        print("usage: session_pack.py storage_state.json")
+        print("usage: session_pack.py storage_state.json [--file]")
         return 2
     state = json.load(open(argv[1], "r", encoding="utf-8"))
     info = describe(state)
@@ -65,7 +71,7 @@ def main(argv):
         print("TOO LARGE for a GitHub secret; tell Claude")
         return 1
     done = False
-    if os.name == "nt":
+    if os.name == "nt" and not to_file:
         try:
             subprocess.run(["clip"], input=text.encode("utf-16le"), check=True)
             done = True
