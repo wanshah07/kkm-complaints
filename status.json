@@ -1,14 +1,13 @@
 {
- "checked_at": "2026-11-16T16:10:55Z",
+ "checked_at": "2026-11-16T22:16:31Z",
  "platforms": [
   {
    "key": "instagram",
    "label": "Instagram",
    "state": "live",
-   "detail": "Signed in and reading posts: the sweep that finished 2026-11-16 14:57 UTC read 8 account(s) on Instagram.",
-   "links": 8,
-   "at": "2026-11-16T14:57:34Z",
-   "carried": false
+   "detail": "Signed in and reading posts normally.",
+   "links": 40,
+   "at": "2026-11-16T22:16:57Z"
   },
   {
    "key": "facebook",
@@ -16,7 +15,7 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-16T16:11:11Z"
+   "at": "2026-11-16T22:17:36Z"
   },
   {
    "key": "threads",
@@ -24,16 +23,15 @@
    "state": "live",
    "detail": "Signed in and reading posts normally.",
    "links": 40,
-   "at": "2026-11-16T11:14:55Z",
-   "carried": true
+   "at": "2026-11-16T22:18:59Z"
   },
   {
    "key": "tiktok",
    "label": "TikTok links",
    "links": null,
    "state": "live",
-   "at": "2026-11-16T06:51:46Z",
-   "detail": "The link checker is running (last run 2026-11-16 06:51). Works on links you paste into the Links tab."
+   "at": "2026-11-16T16:37:24Z",
+   "detail": "The link checker is running (last run 2026-11-16 16:37). Works on links you paste into the Links tab."
   },
   {
    "key": "tiktok_auto",
@@ -44,17 +42,15 @@
    "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-16 12:20). Only an account's ten newest are visible at a time."
   }
  ],
- "notes": [
-  "Instagram and Threads were not probed: a sweep or an account check was using the login. Their state comes from the last finished sweep."
- ],
+ "notes": [],
  "session_days_left": {
-  "instagram": 364.7,
+  "instagram": 364.5,
   "facebook": null,
-  "threads": 364.7
+  "threads": 364.5
  },
  "last_sweep": {
   "conclusion": "success",
-  "at": "2026-11-16T14:57:34Z",
+  "at": "2026-11-16T17:48:46Z",
   "title": "KKM complaint scraper"
  },
  "overall": "live"
