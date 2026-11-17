@@ -1,18 +1,28 @@
 # KKM Cosmetic Complaint System — weekly scrape + NPRA review + push to Google Sheets.
 #
-# Runs by itself every Friday 23:30 MYT (cron '30 15 * * 5', which is 15:30 UTC; GitHub reads cron as
-# UTC only). Wan, 6 Nov 2026: "kkm complaints make it auto run". Run workflow below still works for a
-# one-off, batched (only_type / offset) or dry run.
+# Runs by itself on two schedules (GitHub reads cron as UTC only):
+#   - DAILY BRAND SWEEP, 04:07 MYT on Sun, Mon, Tue, Wed, Thu and Fri mornings (cron '7 20 * * 0-4,6' = 20:07
+#     UTC the evening before; Saturday morning is skipped because Friday 23:30 MYT has the weekly run). Wan, 17 Nov 2026: "set up the daily sweep schedule ... leave them daily run" (the accounts
+#     that hit the per-visit cap are left to this run). Brand accounts only, oldest-swept first, at most
+#     15 new posts per account per visit: each run carries on where the last one stopped, so the whole
+#     brand list comes round about every 4 to 7 days and a capped account is simply visited again. The person
+#     sweep is NOT part of it (it needs Wan's go-ahead). It ends well before the morning (100 min budget).
+#   - WEEKLY FULL RUN, every Friday 23:30 MYT (cron '30 15 * * 5' = 15:30 UTC). Wan, 6 Nov 2026: "kkm
+#     complaints make it auto run". Every target type, as before.
+# Run workflow below still works for a one-off, batched (only_type / offset) or dry run.
 #
-# A scheduled run has NO inputs, so every input below falls back to its dispatch default: a live run
-# (not dry), every target type, offset 0, unjudged targets included, LLM reviewer on. It is the same
-# run as pressing Run workflow and changing nothing. It stops starting new targets at
-# run.max_run_minutes (config.yaml) and lists what it did not reach.
+# A scheduled run has NO inputs, so every input below falls back to its dispatch default, except that the
+# daily run's own defaults are set in the env block of the Run scraper step (keyed on github.event.schedule,
+# so the string there must match the cron line below exactly). The Friday run is still the same as pressing
+# Run workflow and changing nothing: a live run (not dry), every target type, offset 0, unjudged targets
+# included, LLM reviewer on. Either stops starting new targets at run.max_run_minutes (config.yaml) and lists
+# what it did not reach.
 #
 # History: from 19 Sep to 6 Nov 2026 there was no cron here, because a Claude routine dispatched this
 # workflow in batches and a cron competed with it for the runner (run 35381137970 held it 2h42m and
-# filed nothing). That chain is paused. If it is ever re-enabled, take the schedule below out first:
-# one cron per job, never two drivers of the same sweep.
+# filed nothing). That chain finished its first full pass of the brand list on 17 Nov 2026 (runs 15 to 23) and
+# is stopped, so the schedules below are the only driver. If a Claude routine is ever made to dispatch sweeps
+# again, take the daily schedule out first: one cron per job, never two drivers of the same sweep.
 #
 # The concurrency group below means a scheduled run and a manual run never overlap, so the sheet is
 # never written by two runs at once. A run that arrives while one is going waits for it.
@@ -30,7 +40,8 @@ name: KKM complaint scraper
 
 on:
   schedule:
-    - cron: '30 15 * * 5'   # Friday 15:30 UTC = Friday 23:30 MYT
+    - cron: '30 15 * * 5'       # Friday 15:30 UTC = Friday 23:30 MYT: the weekly full run
+    - cron: '7 20 * * 0-4,6'    # 20:07 UTC = 04:07 MYT next day, Sun-Thu + Sat UTC: the daily brand sweep
   workflow_dispatch:
     inputs:
       dry_run:
@@ -155,10 +166,10 @@ jobs:
           IN_DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
           IN_BRAND: ${{ inputs.brand || '' }}
           IN_PLATFORM: ${{ inputs.platform || '' }}
-          IN_ONLY_TYPE: ${{ inputs.only_type || '' }}
+          IN_ONLY_TYPE: ${{ inputs.only_type || (github.event.schedule == '7 20 * * 0-4,6' && 'brand') || '' }}
           IN_OFFSET: ${{ inputs.offset || '0' }}
-          IN_ORDER: ${{ inputs.order || '' }}
-          IN_MAX_OPEN: ${{ inputs.max_open || '' }}
+          IN_ORDER: ${{ inputs.order || (github.event.schedule == '7 20 * * 0-4,6' && 'oldest') || '' }}
+          IN_MAX_OPEN: ${{ inputs.max_open || (github.event.schedule == '7 20 * * 0-4,6' && '15') || '' }}
           IN_SKIP_UNJUDGED: ${{ inputs.skip_unjudged && 'true' || 'false' }}
           IN_COMPARE: ${{ inputs.compare && 'true' || 'false' }}
           IN_FOCUS: ${{ inputs.focus || '' }}
