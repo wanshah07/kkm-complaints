@@ -1,13 +1,14 @@
 {
- "checked_at": "2026-11-16T22:16:31Z",
+ "checked_at": "2026-11-17T08:05:27Z",
  "platforms": [
   {
    "key": "instagram",
    "label": "Instagram",
    "state": "live",
-   "detail": "Signed in and reading posts normally.",
-   "links": 40,
-   "at": "2026-11-16T22:16:57Z"
+   "detail": "Signed in and reading posts: the sweep that finished 2026-11-17 06:16 UTC read 3 account(s) on Instagram.",
+   "links": 3,
+   "at": "2026-11-17T06:16:06Z",
+   "carried": false
   },
   {
    "key": "facebook",
@@ -15,42 +16,45 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-16T22:17:36Z"
+   "at": "2026-11-17T08:06:03Z"
   },
   {
    "key": "threads",
    "label": "Threads",
    "state": "live",
-   "detail": "Signed in and reading posts normally.",
-   "links": 40,
-   "at": "2026-11-16T22:18:59Z"
+   "detail": "Signed in and reading posts: the sweep that finished 2026-11-17 06:16 UTC read 1 account(s) on Threads.",
+   "links": 1,
+   "at": "2026-11-17T06:16:06Z",
+   "carried": false
   },
   {
    "key": "tiktok",
    "label": "TikTok links",
    "links": null,
    "state": "live",
-   "at": "2026-11-16T16:37:24Z",
-   "detail": "The link checker is running (last run 2026-11-16 16:37). Works on links you paste into the Links tab."
+   "at": "2026-11-17T00:30:51Z",
+   "detail": "The link checker is running (last run 2026-11-17 00:30). Works on links you paste into the Links tab."
   },
   {
    "key": "tiktok_auto",
    "label": "TikTok accounts",
    "links": null,
    "state": "live",
-   "at": "2026-11-16T12:20:14Z",
-   "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-16 12:20). Only an account's ten newest are visible at a time."
+   "at": "2026-11-16T22:34:49Z",
+   "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-16 22:34). Only an account's ten newest are visible at a time."
   }
  ],
- "notes": [],
+ "notes": [
+  "Instagram and Threads were not probed: a sweep or an account check was using the login. Their state comes from the last finished sweep."
+ ],
  "session_days_left": {
-  "instagram": 364.5,
+  "instagram": 364.1,
   "facebook": null,
-  "threads": 364.5
+  "threads": 364.1
  },
  "last_sweep": {
   "conclusion": "success",
-  "at": "2026-11-16T17:48:46Z",
+  "at": "2026-11-17T06:16:06Z",
   "title": "KKM complaint scraper"
  },
  "overall": "live"
