@@ -1,5 +1,5 @@
 {
- "checked_at": "2026-11-18T20:39:53Z",
+ "checked_at": "2026-11-19T07:37:51Z",
  "platforms": [
   {
    "key": "instagram",
@@ -7,7 +7,7 @@
    "state": "degraded",
    "detail": "No working login (Instagram ended the saved login). Still reading the newest 6 posts of each account through Instagram's public embed; older posts need the session recorded again (guide section 4).",
    "links": 6,
-   "at": "2026-11-18T20:40:06Z"
+   "at": "2026-11-19T07:38:06Z"
   },
   {
    "key": "facebook",
@@ -15,7 +15,7 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-18T20:40:28Z"
+   "at": "2026-11-19T07:38:45Z"
   },
   {
    "key": "threads",
@@ -23,34 +23,34 @@
    "state": "live",
    "detail": "Signed in and reading posts normally.",
    "links": 40,
-   "at": "2026-11-18T20:41:48Z"
+   "at": "2026-11-19T07:39:59Z"
   },
   {
    "key": "tiktok",
    "label": "TikTok links",
    "links": null,
    "state": "live",
-   "at": "2026-11-18T16:44:05Z",
-   "detail": "The link checker is running (last run 2026-11-18 16:44). Works on links you paste into the Links tab."
+   "at": "2026-11-19T04:15:49Z",
+   "detail": "The link checker is running (last run 2026-11-19 04:15). Works on links you paste into the Links tab."
   },
   {
    "key": "tiktok_auto",
    "label": "TikTok accounts",
    "links": null,
    "state": "live",
-   "at": "2026-11-18T12:31:57Z",
-   "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-18 12:31). Only an account's ten newest are visible at a time."
+   "at": "2026-11-19T02:57:24Z",
+   "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-19 02:57). Only an account's ten newest are visible at a time."
   }
  ],
  "notes": [],
  "session_days_left": {
-  "instagram": 362.5,
+  "instagram": 362.1,
   "facebook": null,
-  "threads": 362.5
+  "threads": 362.1
  },
  "last_sweep": {
   "conclusion": "success",
-  "at": "2026-11-18T04:02:00Z",
+  "at": "2026-11-19T03:31:32Z",
   "title": "KKM complaint scraper"
  },
  "overall": "degraded"
