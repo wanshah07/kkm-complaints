@@ -36,4 +36,8 @@ jobs:
           python-version: '3.12'
       - run: pip install -q requests
       - name: Read the form
-        run: python tools/form_schema.py ${{ inputs.url }}
+        # The input travels as env, never pasted into the shell line (a URL with ; or $( ) would run as a command
+        # beside the two secrets above). Blank = no argument, as before.
+        env:
+          FORM_URL: ${{ inputs.url }}
+        run: python tools/form_schema.py ${FORM_URL:+"$FORM_URL"}

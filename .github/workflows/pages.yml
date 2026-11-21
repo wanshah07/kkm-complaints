@@ -25,6 +25,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 30  # a deploy is under a minute; without this a stuck one holds the runner for GitHub's 6 hours
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
