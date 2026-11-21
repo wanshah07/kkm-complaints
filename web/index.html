@@ -381,7 +381,7 @@
       </div>
       <div class="sm:col-span-2">
         <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Extracted text</div>
-        <pre id="dText" class="whitespace-pre-wrap text-sm bg-slate-50 rounded-xl border border-slate-200 p-3 max-h-64 overflow-auto"></pre>
+        <pre id="dText" tabindex="0" role="region" aria-label="Extracted text" class="whitespace-pre-wrap text-sm bg-slate-50 rounded-xl border border-slate-200 p-3 max-h-64 overflow-auto"></pre>
       </div>
     </div>
 
@@ -522,7 +522,7 @@
             <th class="text-left px-3 py-2 font-semibold">Link</th>
             <th class="text-left px-3 py-2 font-semibold">Status</th>
             <th class="text-left px-3 py-2 font-semibold">Result</th>
-            <th class="px-3 py-2"></th></tr></thead>
+            <th class="px-3 py-2"><span class="sr-only">Actions</span></th></tr></thead>
           <tbody id="lRows" class="divide-y divide-slate-100"></tbody>
         </table>
         <div id="lEmpty" class="hidden p-6 text-center text-slate-500 text-sm">No links yet.</div>
@@ -2297,7 +2297,7 @@ function renderTargets() {
     }).join('');
     const web = !Object.keys(t.handles || {}).length ? `<div class="text-xs text-slate-500 break-all">Website row${t.website_feed ? ' · ' + esc(t.website_feed) : ''}</div>` : '';
     const acts = tg.canEdit ? `<div class="flex gap-1 shrink-0"><button type="button" class="tgEdit text-xs rounded border border-slate-300 px-2 py-1 hover:bg-slate-50" data-name="${esc(t.name)}">Edit</button><button type="button" class="tgToggle text-xs rounded border border-slate-300 px-2 py-1 hover:bg-slate-50" data-name="${esc(t.name)}">${t.active ? 'Pause' : 'Resume'}</button><button type="button" class="tgDel text-xs rounded border border-red-200 text-red-700 px-2 py-1 hover:bg-red-50" data-name="${esc(t.name)}">Remove</button></div>` : '';
-    return `<div class="p-3 ${t.active ? '' : 'bg-slate-50 opacity-80'}"><div class="flex flex-wrap items-center gap-2">
+    return `<div class="p-3 ${t.active ? '' : 'bg-slate-50'}"><div class="flex flex-wrap items-center gap-2">
         <span class="font-semibold text-sm break-all">${esc(t.name)}</span>${t.type ? `<span class="text-xs text-slate-500">${esc(t.type)}</span>` : ''}
         ${t.active ? '' : '<span class="badge bg-slate-200 text-slate-700">Paused</span>'}<span class="ml-auto"></span>${acts}</div>
       <div class="mt-1">${lines}${web}</div>${t.notes ? `<div class="mt-1 text-[11px] text-slate-500">${esc(t.notes)}</div>` : ''}</div>`;
@@ -2421,7 +2421,7 @@ function renderOwn() {
     const actions = st === 'New'
       ? btn('dismiss', 'Dismissed', 'bg-slate-900 text-white hover:bg-slate-800') + btn('taken', 'Action taken', 'bg-violet-700 text-white hover:bg-violet-600') + btn('not_own', 'Not own brand', 'border border-slate-300 bg-white hover:bg-slate-50')
       : btn('reopen', 'Reopen', 'border border-slate-300 bg-white hover:bg-slate-50');
-    return `<div class="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+    return `<div class="rounded-xl border border-slate-200 bg-white p-3 space-y-2 min-w-0 break-words">
       <div class="flex items-center gap-2 flex-wrap">
         <span class="badge ${OWN_BADGE[r._ownBrand] || 'bg-slate-100 text-slate-700'}">${esc(r._ownBrand || 'Own brand')}</span>
         <span class="badge ${STATUS_STYLE[st] || 'bg-slate-100 text-slate-700'}">${esc(st)}</span>
@@ -2461,7 +2461,7 @@ function renderChecks() {
   const routeOpts = ROUTES.filter(r => r.value !== 'Iklan Kosmetik').map(r => `<option value="${esc(r.value)}">${esc(r.value)}</option>`).join('');
   $('checkList').innerHTML = list.map((h, i) => {
     const risky = h.verdict === 'Risky';
-    return `<div class="rounded-xl border border-slate-200 bg-white p-3 space-y-2" data-hi="${i}">
+    return `<div class="rounded-xl border border-slate-200 bg-white p-3 space-y-2 min-w-0 break-words" data-hi="${i}">
       <div class="flex items-center gap-2 flex-wrap">
         <span class="badge ${risky ? 'bg-amber-100 text-amber-900' : 'bg-red-100 text-red-800'}">${esc(h.verdict || 'Unacceptable')}</span>
         <span class="text-xs text-slate-500">${h.confidence !== '' && h.confidence != null ? 'confidence ' + esc(h.confidence) + ' · ' : ''}@${esc(h.account)} · ${esc(h.platform)}${h.found ? ' · held ' + esc(h.found) : ''}</span>

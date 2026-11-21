@@ -13,6 +13,8 @@
 <style>
   body { font-family: Inter, ui-sans-serif, system-ui; }
   ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+  /* A wide table scrolls inside itself. Before, six of the tables were wider than a 390px phone and the whole page slid 160px sideways. */
+  article table { display: block; max-width: 100%; overflow-x: auto; }
 </style>
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen">
@@ -318,6 +320,13 @@
     var p = <?!= passcodeJson ?>;
     if (p) { try { localStorage.setItem('kkm.guidepass', p); } catch (e) {} }
   })();
+  // A table or code block that scrolls sideways can be reached and scrolled from the keyboard.
+  function markScrollers() {
+    document.querySelectorAll('article table, article pre').forEach(function (el) {
+      if (el.scrollWidth > el.clientWidth + 1) el.tabIndex = 0; else el.removeAttribute('tabindex');
+    });
+  }
+  window.addEventListener('load', markScrollers); window.addEventListener('resize', markScrollers);
 </script>
 </body>
 </html>
