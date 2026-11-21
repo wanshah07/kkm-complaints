@@ -1,5 +1,5 @@
 {
- "checked_at": "2026-11-21T19:25:50Z",
+ "checked_at": "2026-11-21T19:51:10Z",
  "platforms": [
   {
    "key": "instagram",
@@ -7,7 +7,7 @@
    "state": "degraded",
    "detail": "No working login (Instagram ended the saved login). Still reading the newest 6 posts of each account through Instagram's public embed; older posts need the session recorded again (guide section 4).",
    "links": 6,
-   "at": "2026-11-21T19:26:02Z"
+   "at": "2026-11-21T19:51:22Z"
   },
   {
    "key": "facebook",
@@ -15,15 +15,15 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-21T19:26:25Z"
+   "at": "2026-11-21T19:51:45Z"
   },
   {
    "key": "threads",
    "label": "Threads",
    "state": "live",
    "detail": "Signed in and reading posts normally.",
-   "links": 35,
-   "at": "2026-11-21T19:27:11Z"
+   "links": 40,
+   "at": "2026-11-21T19:53:04Z"
   },
   {
    "key": "tiktok",
@@ -38,8 +38,8 @@
    "label": "TikTok accounts",
    "links": null,
    "state": "live",
-   "at": "2026-11-21T11:55:17Z",
-   "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-21 11:55). Only an account's ten newest are visible at a time."
+   "at": "2026-11-21T19:50:21Z",
+   "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-21 19:50). Only an account's ten newest are visible at a time."
   }
  ],
  "notes": [],
