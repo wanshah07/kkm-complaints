@@ -469,6 +469,8 @@ Setting, in `scraper/config.yaml` under `run:`: `instagram_source: auto` (the de
 
 The strip at the top shows when each platform was last tested. While a sweep or an account check runs, the status check does not open a second browser on the same login (two at once is what gets a session signed out), so it kept the last result and its time, and a pill older than 14 hours shows **old**. With sweeps running back to back that was most of the day (15 Nov 2026: Instagram and Threads read *old* while both were being read all day). Now, while the login is busy, Instagram and Threads take their state from **the last finished sweep**: *live* with the number of accounts it read and the time it finished, or *down* if Instagram signed the session out during it. If the sweep read none, the old result and its time stay, and the pill goes *old*.
 
+**The "TikTok accounts" pill** (21 Nov 2026) is built from the last finished run of *TikTok auto discovery*. That workflow's cron fires late and not every time, and the status check's own cron does too, so a discovery could finish and the pill still read **old** for hours. The workflow *TikTok status refresh* (`tiktok-status-refresh.yml`) now asks for a fresh measurement the moment a discovery run finishes, whatever its result, so the pill follows the run within a few minutes. It only reads and republishes the dashboard.
+
 ### Facebook is read through Meta's Ad Library (15 Nov 2026)
 
 **Facebook pages are no longer opened with a login, and Facebook does not need to be in the recorded session.**

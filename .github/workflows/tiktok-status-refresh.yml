@@ -1,0 +1,31 @@
+# Keep the "TikTok accounts" pill current (Wan, 21 Nov 2026: the pill read "old" while discovery was running fine).
+#
+# The pill is built by platform-status.yml from the last COMPLETED run of "TikTok auto discovery". That workflow's own
+# cron fires late and not every time (this repository's schedules often run hours after their slot), so a discovery
+# could finish and sit for more than the pill's 14 hours before anything measured again. This one asks for a fresh
+# measurement as soon as a discovery run has finished, whatever its result (a failed run should turn the pill red
+# at once too).
+#
+# It only reads and republishes: platform-status writes the status branch and redeploys the dashboard. It writes
+# nothing to the sheet, loads no login of ours and shares no concurrency group with the sweep. It does not run for
+# anything but "TikTok auto discovery".
+
+name: TikTok status refresh
+
+on:
+  workflow_run:
+    workflows: ['TikTok auto discovery']
+    types: [completed]
+
+permissions:
+  actions: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Measure the platforms again
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run platform-status.yml --ref main --repo "${{ github.repository }}"
