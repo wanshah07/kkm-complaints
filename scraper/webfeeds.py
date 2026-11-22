@@ -24,10 +24,12 @@ target and the rest of that host's rows are skipped for the run (one note, not f
 import csv
 import html as _html
 import io
+import ipaddress
 import json
 import logging
 import os
 import re
+import socket
 import subprocess
 import time
 import unicodedata
@@ -101,6 +103,33 @@ def html_to_text(s: str, cap: int = MAX_TEXT) -> str:
 def _clean_url(u: str) -> str:
     p = urlsplit(u)
     return urlunsplit((p.scheme, p.netloc, p.path, "", ""))
+
+
+# Feed URLs come from the Targets sheet (owner-controlled), but a fetch of an arbitrary host is
+# still a fetch this machine makes: reject non-http(s) schemes and any host that resolves to a
+# private / loopback / link-local / reserved / metadata address before a single byte is sent.
+def _assert_safe_url(u: str) -> None:
+    p = urlsplit(u)
+    if p.scheme not in ("http", "https"):
+        raise ValueError(f"unsafe URL scheme {p.scheme!r} (http/https only)")
+    host = (p.hostname or "").lower()
+    if not host:
+        raise ValueError("URL has no host")
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None
+    if ip is not None:
+        addrs = [ip]
+    else:
+        try:
+            addrs = [ipaddress.ip_address(a[0]) for a in socket.getaddrinfo(host, p.port or (443 if p.scheme == "https" else 80), proto=socket.IPPROTO_TCP)]
+        except socket.gaierror as e:
+            raise ValueError(f"cannot resolve host {host!r}") from e
+    for a in addrs:
+        if a.is_private or a.is_loopback or a.is_link_local or a.is_reserved or a.is_multicast or a.is_unspecified:
+            raise ValueError(f"host {host!r} resolves to a blocked address {a}")
+    return None
 
 
 # --- the rows -----------------------------------------------------------------------------------
@@ -304,6 +333,7 @@ class WebCollector:
 
     # -- network ---------------------------------------------------------------------------------
     def _get(self, url: str, **kw) -> requests.Response:
+        _assert_safe_url(url)
         wait = self.delay - (time.time() - self._last_at)
         if wait > 0:
             time.sleep(wait)

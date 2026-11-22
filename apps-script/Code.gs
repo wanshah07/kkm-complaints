@@ -5,8 +5,9 @@
  *            the expandable Brand / Platform / Violation-type lists.
  * Webhook  : doPost(e) — JSON from the Python scraper (or any client) with a
  *            shared-secret token. Actions: insert | known_urls | update_status.
- * Web app  : doGet(e)  — serves the dashboard (Index.html) or, with ?action=…,
- *            a JSON API (list | get | known_urls | stats). The standalone dashboard in
+ * Web app  : doGet(e)  — serves the key-entry page for the dashboard (Index.html) and the
+ *            guide; doPost(e) handles the JSON API and the dashboard key form. Credentials
+ *            travel in the request body, never in a URL. The standalone dashboard in
  *            web/ (hosted on your own domain) talks to doPost with the DASHBOARD_KEY.
  * UI RPC   : the dashboard calls api* functions through google.script.run.
  * Routes   : ROUTES below is the catalogue of where a complaint goes (NPRA, BPF, MDA,
@@ -25,8 +26,7 @@
  *      Script Properties. Read them from  Project Settings → Script properties.
  *   2. Deploy → New deployment → Web app → Execute as: Me, Access: Anyone.
  *   3. Give the scraper the /exec URL + API_TOKEN. Open the dashboard at
- *      <exec URL>?key=<DASHBOARD_KEY>  (or without the key when you are logged in
- *      as OWNER_EMAIL — see Script Properties).
+ *      <exec URL> and enter DASHBOARD_KEY when prompted (see Script Properties).
  */
 
 // ---------------------------------------------------------------------------
@@ -411,8 +411,9 @@ function setup() {
   if (!PROPS.getProperty('KKM_FORM_URL')) PROPS.setProperty('KKM_FORM_URL', '');
   if (!PROPS.getProperty('ROUTE_FORMS')) PROPS.setProperty('ROUTE_FORMS', '{}');
   if (!PROPS.getProperty('SCHEMA_VERSION')) PROPS.setProperty('SCHEMA_VERSION', '1');
-  Logger.log('Setup complete.\nAPI_TOKEN=%s\nDASHBOARD_KEY=%s\nOWNER_EMAIL=%s',
-    PROPS.getProperty('API_TOKEN'), PROPS.getProperty('DASHBOARD_KEY'), PROPS.getProperty('OWNER_EMAIL'));
+  // Never log the token values: exceptionLogging:STACKDRIVER forwards logs to the cloud.
+  Logger.log('Setup complete. API_TOKEN present=%s, DASHBOARD_KEY present=%s, OWNER_EMAIL=%s',
+    !!PROPS.getProperty('API_TOKEN'), !!PROPS.getProperty('DASHBOARD_KEY'), PROPS.getProperty('OWNER_EMAIL'));
   return { ok: true, apiToken: PROPS.getProperty('API_TOKEN'), dashboardKey: PROPS.getProperty('DASHBOARD_KEY') };
 }
 
@@ -454,7 +455,7 @@ function onEdit(e) {
 function showSecrets_() {
   SpreadsheetApp.getUi().alert(
     'API_TOKEN (scraper):\n' + PROPS.getProperty('API_TOKEN') +
-    '\n\nDASHBOARD_KEY (append ?key=… to the web app URL):\n' + PROPS.getProperty('DASHBOARD_KEY'));
+    '\n\nDASHBOARD_KEY (enter it at the dashboard prompt):\n' + PROPS.getProperty('DASHBOARD_KEY'));
 }
 
 function rotateApiToken_() {
@@ -641,40 +642,86 @@ function doGet(e) {
   if (p.view === 'guide') {
     return serveGuide_(p);
   }
-  if (p.action) {
-    return jsonResponse_(handleApi_(p.action, p, p));
+  // Only the credential-free ping is served over GET (the scraper's reachability check).
+  // Every other action needs the token/key in the POST body; none are accepted via query string.
+  if (p.action === 'ping') {
+    return jsonResponse_(handleApi_('ping', {}, {}));
   }
-  if (!isAuthorisedViewer_(p.key)) {
+  return serveDashboard_();
+}
+
+function doPost(e) {
+  var raw = (e && e.postData && e.postData.contents) || '';
+  // The dashboard key-entry page posts a plain form (urlencoded); the API posts JSON.
+  if ((e && e.postData && e.postData.type === 'application/x-www-form-urlencoded') || raw.indexOf('key=') === 0) {
+    var formKey = '';
+    try { formKey = decodeURIComponent(String(raw).replace(/^key=/, '').replace(/\+/g, ' ')); } catch (err) { formKey = ''; }
+    return serveDashboard_(formKey);
+  }
+  var body;
+  try {
+    body = JSON.parse(raw || '{}');
+  } catch (err) {
+    return jsonResponse_({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
+  // Credentials arrive in the body only. The query string (e.parameter) is never trusted:
+  // keys there leak into browser history, Referer and access logs.
+  var token = body.token;
+  var key = body.key;
+  if (body.action === 'unlock_dashboard') {
+    return serveDashboard_(key);
+  }
+  var action = body.action || 'insert';
+  if (action !== 'ping' && !checkToken_(token) && !isAuthorisedViewer_(key)) {
+    return jsonResponse_({ ok: false, error: 'Unauthorised' }, 401);
+  }
+  return jsonResponse_(handleApi_(action, body, { token: token, key: key }));
+}
+
+// The Apps Script-hosted dashboard is served only after the DASHBOARD_KEY is verified in the
+// request body. doGet shows a key-entry page instead of gating on ?key= in the URL, so the key
+// never sits in the address bar.
+function serveDashboard_(key) {
+  if (!isAuthorisedViewer_(key)) {
     return HtmlService.createHtmlOutput(
-      '<!doctype html><html><body style="font-family:system-ui;padding:40px;color:#0f172a">' +
-      '<h2>KKM Complaint Dashboard</h2><p>Access key missing or wrong. Open the URL with ' +
-      '<code>?key=&lt;DASHBOARD_KEY&gt;</code> (see Script Properties).</p></body></html>')
-      .setTitle('KKM Complaints — locked');
+      '<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">' +
+      '<style>body{font-family:system-ui,sans-serif;background:#f8fafc;color:#0f172a;margin:0;' +
+      'display:grid;place-items:center;min-height:100vh}' +
+      '.card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:28px;max-width:380px;width:90%;' +
+      'box-shadow:0 10px 30px rgba(15,23,42,.06)}h2{margin:0 0 6px;font-size:18px}' +
+      'p{font-size:14px;color:#475569;margin:6px 0 14px}' +
+      'input{width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;font-size:14px}' +
+      'button{margin-top:10px;width:100%;padding:10px 12px;border:0;border-radius:10px;background:#0f172a;color:#fff;' +
+      'font-size:14px;font-weight:600;cursor:pointer}.err{color:#b91c1c;font-size:13px;min-height:18px}</style></head>' +
+      '<body><div class="card"><h2>KKM Cosmetic Complaints</h2>' +
+      '<p>Enter the dashboard key to open the dashboard (see Script Properties).</p>' +
+      '<div class="err" id="err"></div>' +
+      '<form id="f"><input id="key" type="password" name="key" placeholder="Dashboard key" autofocus ' +
+      'autocomplete="current-password"><button type="submit">Open dashboard</button></form></div>' +
+      // POST as text/plain: a "simple" request, so no CORS preflight; Apps Script answers with a
+      // 302 that fetch follows and serves the already-rendered dashboard (same pattern as web/).
+      '<script>(function(){var f=document.getElementById("f"),k=document.getElementById("key"),' +
+      'err=document.getElementById("err");f.addEventListener("submit",function(ev){ev.preventDefault();' +
+      'var btn=f.querySelector("button");btn.disabled=true;err.textContent="";' +
+      'fetch(window.location.href,{method:"POST",redirect:"follow",' +
+      'headers:{"Content-Type":"text/plain;charset=utf-8"},' +
+      'body:JSON.stringify({action:"unlock_dashboard",key:k.value})}).then(function(r){' +
+      'return r.text().then(function(t){return{ok:r.ok,t:t};});}).then(function(x){' +
+      'if(x.ok&&/<html/i.test(x.t)){document.open();document.write(x.t);document.close();' +
+      'try{history.replaceState(null,"",window.location.pathname);}catch(e){}}else{btn.disabled=false;' +
+      'err.textContent="Key missing or wrong.";}}).catch(function(){btn.disabled=false;' +
+      'err.textContent="Could not reach the backend.";});});})();<\/script>' +
+      '</body></html>')
+      .setTitle('KKM Cosmetic Complaints — locked');
   }
   var t = HtmlService.createTemplateFromFile('Index');
-  t.dashboardKey = p.key || '';
+  t.dashboardKey = key || '';
   t.kkmFormUrl = PROPS.getProperty('KKM_FORM_URL') || '';
   t.guideUrl = ScriptApp.getService().getUrl() + '?view=guide';
   return t.evaluate()
     .setTitle('KKM Cosmetic Complaints')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-}
-
-function doPost(e) {
-  var body;
-  try {
-    body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
-  } catch (err) {
-    return jsonResponse_({ ok: false, error: 'Invalid JSON body' }, 400);
-  }
-  var token = body.token || (e.parameter && e.parameter.token);
-  var key = body.key || (e.parameter && e.parameter.key);
-  var action = body.action || 'insert';
-  if (action !== 'ping' && !checkToken_(token) && !isAuthorisedViewer_(key)) {
-    return jsonResponse_({ ok: false, error: 'Unauthorised' }, 401);
-  }
-  return jsonResponse_(handleApi_(action, body, { token: token, key: key }));
 }
 
 function handleApi_(action, body, p) {
@@ -1810,10 +1857,20 @@ function makeId_() {
 }
 
 function randomToken_(n) {
+  // Crypto-random tokens. Math.random() is not a CSPRNG; Utilities.getUuid() is. Each UUID is
+  // 32 hex chars from the CSPRNG. Reject-and-sample maps bytes onto the original [a-zA-Z0-9]
+  // alphabet unbiasedly (248 = 62 * 4), so the shape AND length of API_TOKEN / DASHBOARD_KEY and
+  // the makeId_() row-ID suffix are unchanged.
   var chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   var out = '';
-  for (var i = 0; i < n; i++) out += chars.charAt(Math.floor(Math.random() * chars.length));
-  return out;
+  while (out.length < n) {
+    var hex = Utilities.getUuid().replace(/-/g, '');
+    for (var i = 0; i + 1 < hex.length && out.length < n; i += 2) {
+      var v = parseInt(hex.substr(i, 2), 16);
+      if (v < 248) out += chars.charAt(v % 62);
+    }
+  }
+  return out.slice(0, n);
 }
 
 function canonicalUrl_(u) {
