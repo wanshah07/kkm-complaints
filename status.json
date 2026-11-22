@@ -1,5 +1,5 @@
 {
- "checked_at": "2026-11-22T12:07:19Z",
+ "checked_at": "2026-11-22T19:48:34Z",
  "platforms": [
   {
    "key": "instagram",
@@ -7,7 +7,7 @@
    "state": "degraded",
    "detail": "No working login (Instagram ended the saved login). Still reading the newest 6 posts of each account through Instagram's public embed; older posts need the session recorded again (guide section 4).",
    "links": 6,
-   "at": "2026-11-22T12:07:32Z"
+   "at": "2026-11-22T19:48:46Z"
   },
   {
    "key": "facebook",
@@ -15,7 +15,7 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-22T12:07:56Z"
+   "at": "2026-11-22T19:49:09Z"
   },
   {
    "key": "threads",
@@ -23,15 +23,15 @@
    "state": "live",
    "detail": "Signed in and reading posts normally.",
    "links": 40,
-   "at": "2026-11-22T12:09:14Z"
+   "at": "2026-11-22T19:50:25Z"
   },
   {
    "key": "tiktok",
    "label": "TikTok links",
    "links": null,
    "state": "live",
-   "at": "2026-11-22T08:11:42Z",
-   "detail": "The link checker is running (last run 2026-11-22 08:11). Works on links you paste into the Links tab."
+   "at": "2026-11-22T16:26:31Z",
+   "detail": "The link checker is running (last run 2026-11-22 16:26). Works on links you paste into the Links tab."
   },
   {
    "key": "tiktok_auto",
@@ -44,9 +44,9 @@
  ],
  "notes": [],
  "session_days_left": {
-  "instagram": 358.9,
+  "instagram": 358.6,
   "facebook": null,
-  "threads": 358.9
+  "threads": 358.6
  },
  "last_sweep": {
   "conclusion": "success",
