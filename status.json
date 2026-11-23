@@ -1,5 +1,5 @@
 {
- "checked_at": "2026-11-23T16:30:33Z",
+ "checked_at": "2026-11-23T18:28:44Z",
  "platforms": [
   {
    "key": "instagram",
@@ -7,7 +7,7 @@
    "state": "live",
    "detail": "Signed in and reading posts normally.",
    "links": 40,
-   "at": "2026-11-23T16:30:57Z"
+   "at": "2026-11-23T18:29:13Z"
   },
   {
    "key": "facebook",
@@ -15,7 +15,7 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-23T16:31:19Z"
+   "at": "2026-11-23T18:29:57Z"
   },
   {
    "key": "threads",
@@ -23,7 +23,7 @@
    "state": "live",
    "detail": "Signed in and reading posts normally.",
    "links": 40,
-   "at": "2026-11-23T16:32:39Z"
+   "at": "2026-11-23T18:31:21Z"
   },
   {
    "key": "tiktok",
@@ -44,13 +44,13 @@
  ],
  "notes": [],
  "session_days_left": {
-  "instagram": 365.0,
+  "instagram": 364.9,
   "facebook": null,
-  "threads": 365.0
+  "threads": 364.9
  },
  "last_sweep": {
   "conclusion": "success",
-  "at": "2026-11-23T02:25:50Z",
+  "at": "2026-11-23T18:21:02Z",
   "title": "KKM complaint scraper"
  },
  "overall": "live"
