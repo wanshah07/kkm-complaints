@@ -477,6 +477,8 @@ The strip at the top shows when each platform was last tested. While a sweep or 
 
 Only **confident** matches are written: an *exact* name, or (for a named brand) *strong*, meaning at least 80% of the words are shared, the brand is in the entry, and no form word (gel, cream, serum…) differs. A doctor's or shop's account needs an exact name. Never matched: a name that is a category, a range or several products; a tie between products or companies; one product under several numbers; a product notified **after** the post. Those are listed for a person.
 
+**It runs by itself** (a daily scheduled task in the working session, not a GitHub workflow, because the sheet is written through Composio and the repository has no key for it): it exports the open rows that have a product name but no number (`tools/not_workbench.py`), matches them (`tools/not_match.py`), writes the confident ones and reports how many became Ready to file. 23 Nov 2026, first run: 4,287 rows with a product name and no number, 121 matched confidently (93 exact, 28 strong), all 121 now Ready to file. The other rows stay as they are: 4,133 have no confident entry in the open data (a name that is a category or only a brand, or a product not notified), and 33 are held (a tie, one product under several numbers, or notified after the post).
+
 Each row written gets the number in **Nombor Notifikasi**, a Remarks note (*NOT dipadankan … daripada data.gov.my … sahkan di QUEST3+ sebelum failkan*), and its `[SAHKAN: semak QUEST3+]` marker replaced with the number. **It is still a match, not a verification: check the number on QUEST3+ before you file.** A wrong number in a complaint is worse than a blank one.
 
 ### Facebook is read through Meta's Ad Library (15 Nov 2026)
