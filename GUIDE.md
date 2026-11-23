@@ -471,6 +471,14 @@ The strip at the top shows when each platform was last tested. While a sweep or 
 
 **The "TikTok accounts" pill** (21 Nov 2026) is built from the last finished run of *TikTok auto discovery*. That workflow's cron fires late and not every time, and the status check's own cron does too, so a discovery could finish and the pill still read **old** for hours. The workflow *TikTok status refresh* (`tiktok-status-refresh.yml`) now asks for a fresh measurement the moment a discovery run finishes, whatever its result, so the pill follows the run within a few minutes. It only reads and republishes the dashboard.
 
+### Notification numbers for "Ready to file" (23 Nov 2026)
+
+**Ready to file** needs a notification number (`NOT…`) on the row, and the scraper never invents one. `tools/not_match.py` finds it from Malaysia's open data: data.gov.my publishes every notified cosmetic product (`cosmetic_notifications.parquet`: number, product, company). The tool matches the row's **Nama Kosmetik** to an entry and writes a plan; it never touches the sheet.
+
+Only **confident** matches are written: an *exact* name, or (for a named brand) *strong*, meaning at least 80% of the words are shared, the brand is in the entry, and no form word (gel, cream, serum…) differs. A doctor's or shop's account needs an exact name. Never matched: a name that is a category, a range or several products; a tie between products or companies; one product under several numbers; a product notified **after** the post. Those are listed for a person.
+
+Each row written gets the number in **Nombor Notifikasi**, a Remarks note (*NOT dipadankan … daripada data.gov.my … sahkan di QUEST3+ sebelum failkan*), and its `[SAHKAN: semak QUEST3+]` marker replaced with the number. **It is still a match, not a verification: check the number on QUEST3+ before you file.** A wrong number in a complaint is worse than a blank one.
+
 ### Facebook is read through Meta's Ad Library (15 Nov 2026)
 
 **Facebook pages are no longer opened with a login, and Facebook does not need to be in the recorded session.**
