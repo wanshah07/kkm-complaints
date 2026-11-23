@@ -1,5 +1,5 @@
 {
- "checked_at": "2026-11-22T20:04:29Z",
+ "checked_at": "2026-11-23T02:05:52Z",
  "platforms": [
   {
    "key": "instagram",
@@ -7,7 +7,8 @@
    "state": "degraded",
    "detail": "No working login (Instagram ended the saved login). Still reading the newest 6 posts of each account through Instagram's public embed; older posts need the session recorded again (guide section 4).",
    "links": 6,
-   "at": "2026-11-22T20:04:41Z"
+   "at": "2026-11-22T20:04:41Z",
+   "carried": true
   },
   {
    "key": "facebook",
@@ -15,7 +16,7 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-22T20:05:04Z"
+   "at": "2026-11-23T02:06:08Z"
   },
   {
    "key": "threads",
@@ -23,30 +24,33 @@
    "state": "live",
    "detail": "Signed in and reading posts normally.",
    "links": 40,
-   "at": "2026-11-22T20:06:21Z"
+   "at": "2026-11-22T20:06:21Z",
+   "carried": true
   },
   {
    "key": "tiktok",
    "label": "TikTok links",
    "links": null,
    "state": "live",
-   "at": "2026-11-22T16:26:31Z",
-   "detail": "The link checker is running (last run 2026-11-22 16:26). Works on links you paste into the Links tab."
+   "at": "2026-11-22T21:58:49Z",
+   "detail": "The link checker is running (last run 2026-11-22 21:58). Works on links you paste into the Links tab."
   },
   {
    "key": "tiktok_auto",
    "label": "TikTok accounts",
    "links": null,
    "state": "live",
-   "at": "2026-11-22T20:03:44Z",
-   "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-22 20:03). Only an account's ten newest are visible at a time."
+   "at": "2026-11-23T02:04:56Z",
+   "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-23 02:04). Only an account's ten newest are visible at a time."
   }
  ],
- "notes": [],
+ "notes": [
+  "Instagram and Threads were not probed: a sweep or an account check was using the login."
+ ],
  "session_days_left": {
-  "instagram": 358.6,
+  "instagram": 358.3,
   "facebook": null,
-  "threads": 358.6
+  "threads": 358.3
  },
  "last_sweep": {
   "conclusion": "success",
