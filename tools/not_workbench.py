@@ -28,8 +28,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 SID = "10ZgXAzG3b3cTp_0vHAymhBZEb_LzwYH3BXNvP8ubyhs"
 ACC = "googlesheets_serau-tucker"
-OWN = ["facerinna", "facerina", "valorith", "skintific", "lumixpert", "bodibreze", "nextprime", "body breze",
-       "bodybreze", "next prime"]
+# the own-brand list of apps-script/Code.gs (Skintific came off it on 2 Nov 2026) plus Valorith, which is Wan's too
+OWN = ["facerinna", "facerina", "valorith", "lumixpert", "bodibreze", "nextprime", "body breze", "bodybreze",
+       "next prime"]
 NOT_NUM = re.compile(r"^NOT\s*\d", re.I)
 QM = re.compile(r"\[(?:SAHKAN|VERIFY)[^\]]*(?:QUEST3|\bNOT\b|notifikasi)[^\]]*\]", re.I)
 
@@ -113,7 +114,10 @@ def start_writer(plan, today, done_path="/mnt/files/nw_done.json"):
                     r, rid, L, notif, prod, comp, cls, diff = w
                     try:
                         a, (I, J, K, L2, M, N, O) = cur[r]
-                        resumed = (M or "").strip() == notif and "NOT dipadankan" not in K
+                        has_note = "NOT dipadankan" in K
+                        left = bool(QM.search(I) or QM.search(K) or QM.search(O))
+                        # a number already in M is finished, not skipped, when the note or a marker replacement is missing
+                        resumed = (M or "").strip() == notif and (not has_note or left)
                         if a != rid or J not in ("New", "In-Progress") or L2 != L or N not in ("", "Iklan Kosmetik") \
                                 or ((M or "").strip() and not resumed):
                             st["log"].append((r, "skip", a == rid, J, (M or "")[:12], L2 == L, N)); st["done"].add(r); return
@@ -121,10 +125,11 @@ def start_writer(plan, today, done_path="/mnt/files/nw_done.json"):
                         if cls == "s":
                             note += f"; padanan hampir (nama dalam aduan: '{L}', beza: {diff or 'susunan perkataan'})"
                         note += "; sahkan di QUEST3+ sebelum failkan"
-                        K2, O2, I2 = repl(K, notif) + note, repl(O, notif), repl(I, notif)
+                        K2, O2, I2 = repl(K, notif) + ("" if has_note else note), repl(O, notif), repl(I, notif)
                         if not resumed:
                             put(f"M{r}", notif)
-                        put(f"K{r}", K2)
+                        if K2 != K:
+                            put(f"K{r}", K2)
                         if O2 != O:
                             put(f"O{r}", O2)
                         if I2 != I:
