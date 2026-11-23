@@ -58,6 +58,11 @@ def tokens(s, brand_tokens=frozenset()):
     return [t for t in norm(s).split() if t not in STOP and t not in brand_tokens]
 
 
+def _numbers(toks):
+    """Tokens with a digit that say something about the product (SPF50, 10, 5d), not its pack size (30ml, 100g)."""
+    return {t for t in toks if re.search(r"\d", t) and not re.fullmatch(r"\d+(ml|g|gm|kg|l|oz)", t)}
+
+
 def not_month(num):
     m = NOT_RE.match(num or "")
     return (2000 + int(m.group(1)), int(m.group(2))) if m else None
@@ -124,6 +129,8 @@ def match_one(row, entries, idx):
             tier = "exact"
         elif (want ^ et) & VARIANT:
             continue                                   # one says lotion, the other serum
+        elif _numbers(want) ^ _numbers(et):
+            continue                                   # SPF 30 is not SPF 50, 15% is not 10%
         elif bt and jac >= 0.8:
             tier = "strong"
         else:                                           # an account that is not a brand: exact names only

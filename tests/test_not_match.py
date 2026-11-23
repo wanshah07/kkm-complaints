@@ -13,6 +13,8 @@ PRODUCTS = [
     ("NOT250301002K", "ABC Matte Lipstick Rose (A02)", "ABC SDN BHD"),
     ("NOT260101001K", "Eucerin Eye Cream Special", "BEIERSDORF (MALAYSIA) SDN BHD"),
     ("NOT210404318K", "Uriage Bariederm Cica-Daily Serum", "BETIME MARKETING SDN. BHD"),
+    ("NOT250101001K", "Eucerin Sun Serum Oil Control Fluid SPF50+ PA++++", "BEIERSDORF (MALAYSIA) SDN BHD"),
+    ("NOT250101002K", "Eucerin Sun Serum Oil Control Fluid SPF30 PA+++", "BEIERSDORF (MALAYSIA) SDN BHD"),
 ]
 ENTRIES, IDX = nm.build_index(PRODUCTS)
 
@@ -65,6 +67,17 @@ class NotMatch(unittest.TestCase):
         # "Cica Daily Serum" from Cetaphil must not take Uriage's entry
         r = run("Cica Daily Serum", "Cetaphil")
         self.assertIsNone(r["tier"])
+
+    def test_a_different_spf_is_a_different_product(self):
+        # long names share more than 80% of their words; the SPF number still decides
+        r = run("Eucerin Sun Serum Oil Control Fluid SPF50+ PA++++ 50ml")
+        self.assertEqual(r["no"], "NOT250101001K")
+        r = run("Eucerin Sun Serum Oil Control Fluid SPF40 PA++++")
+        self.assertIsNone(r["tier"])
+
+    def test_pack_size_is_not_a_difference(self):
+        r = run("Eucerin Sun Serum Oil Control Fluid SPF30 PA+++ 100ml")
+        self.assertEqual(r["no"], "NOT250101002K")
 
     def test_not_month(self):
         self.assertEqual(nm.not_month("NOT230805974K"), (2023, 8))
