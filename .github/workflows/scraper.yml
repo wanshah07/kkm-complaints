@@ -82,6 +82,14 @@ on:
         description: 'Only review posts published on/after this date, YYYY-MM-DD, for this run only (blank = the config.yaml floor, 2024-06-01). Skintific this year: 2026-01-01.'
         type: string
         default: ''
+      hashtag:
+        description: 'Instead of walking Targets rows: review the posts Instagram lists under these hashtags, space separated, no # (e.g. skintificmy skintificmalaysia). Use with since, focus and exclude_owner; max_open caps the posts opened per tag (default 40).'
+        type: string
+        default: ''
+      exclude_owner:
+        description: 'With hashtag: skip posts whose account handle contains this word (the official accounts, e.g. skintific)'
+        type: string
+        default: ''
       focus:
         description: 'Only review NEW posts whose text contains this word (e.g. skintific: matches @skintific.my, #skintific, the plain word). Known/ledgered posts are skipped as always; non-matching new posts are not reviewed and not ledgered.'
         type: string
@@ -178,6 +186,8 @@ jobs:
           IN_COMPARE: ${{ inputs.compare && 'true' || 'false' }}
           IN_FOCUS: ${{ inputs.focus || '' }}
           IN_SINCE: ${{ inputs.since || '' }}
+          IN_HASHTAG: ${{ inputs.hashtag || '' }}
+          IN_EXCLUDE_OWNER: ${{ inputs.exclude_owner || '' }}
           IN_SELFTEST: ${{ inputs.selftest || '' }}
         run: |
           echo "trigger: ${{ github.event_name }}"
@@ -193,6 +203,8 @@ jobs:
           if [ "$IN_COMPARE" = "true" ]; then ARGS+=(--compare); fi
           if [ -n "$IN_FOCUS" ]; then ARGS+=(--focus "$IN_FOCUS"); fi
           if [ -n "$IN_SINCE" ]; then ARGS+=(--since "$IN_SINCE"); fi
+          if [ -n "$IN_HASHTAG" ]; then read -ra H <<< "$IN_HASHTAG"; ARGS+=(--hashtag "${H[@]}"); fi
+          if [ -n "$IN_EXCLUDE_OWNER" ]; then read -ra X <<< "$IN_EXCLUDE_OWNER"; ARGS+=(--exclude-owner "${X[@]}"); fi
           # A selftest replaces the run rather than adding to it: no browser, no scrape, no writes.
           if [ -n "$IN_SELFTEST" ]; then
             if [ "$IN_SELFTEST" = "1" ]; then ARGS=(--selftest)

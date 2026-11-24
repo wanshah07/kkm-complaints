@@ -41,6 +41,7 @@ from evaluator import ReviewInput, review
 from scraper import Scraper, canonical_url, date_allowed
 from webfeeds import WEB_TYPE_LABEL, WebCollector, load_web_rows
 from tiktok_links import TikTokLinks, link_meta, parse_links
+from ig_hashtag import InstagramHashtag, clean_tags
 from uploader import AppsScriptClient, DriveUploader, attach_screenshot
 
 def _myt():
@@ -343,6 +344,14 @@ def main(argv: Optional[List[str]] = None) -> int:
                          "on every run and are mostly rows that cannot produce one (private, "
                          "wrong handle, nothing in the date window). Do NOT pass this on a run "
                          "after handles have been added: a new handle is unjudged too")
+    ap.add_argument("--hashtag", nargs="+", metavar="TAG",
+                    help="review the posts Instagram lists under these hashtags (no #), from any account, instead of "
+                         "walking Targets rows. Combine with --since (date window) and --focus (caption must mention "
+                         "it); --max-open caps the posts opened per tag (default 40). Posts by an official account "
+                         "whose handle contains --exclude-owner are never reviewed.")
+    ap.add_argument("--exclude-owner", nargs="+", metavar="WORD", default=[],
+                    help="with --hashtag: skip posts whose account handle contains this word (the subject's own "
+                         "official accounts, e.g. skintific)")
     ap.add_argument("--since", metavar="YYYY-MM-DD",
                     help="review only posts published on/after this date, for this run only (overrides "
                          "run.min_post_date in config.yaml; a post with no readable date is judged as before). "
@@ -447,11 +456,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         report["web_rows_set_aside"] = len(web_rows)
     web_mode = args.only_type == "web"
     tt_mode = bool(args.tiktok_links)
+    ht_mode = bool(args.hashtag)
+    link_mode = tt_mode or ht_mode     # posts are named by link / hashtag, not walked from Targets rows
     tt_links: List[str] = []
     # Links-tab runs HOLD what they find instead of filing it (Wan, 5 Oct 2026): an Unacceptable or Risky verdict
     # waits in the panel with an "Add to database" button, and only his click files it.
     tt_hold = tt_mode and os.environ.get("LINKS_REPORT") == "1" and not args.dry_run and client is not None
     held_records: Dict[str, dict] = {}
+    if ht_mode:
+        brands = []
     if tt_mode:
         tt_links, tt_bad = parse_links(os.environ.get("TIKTOK_LINKS", ""))
         for text, why in tt_bad:
@@ -517,7 +530,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     # scraped. The alternative cost a three-hour run: everything was scraped first, the job
     # timeout cut in with one target left, and not a single post had been reviewed or filed.
     oldest_order = False
-    if args.order == "oldest" and not web_mode and not tt_mode:
+    if args.order == "oldest" and not web_mode and not link_mode:
         try:
             status = (client or AppsScriptClient())._post({"action": "targets_admin"}, retries=2).get("status") or {}
             brands, never, total_pairs = order_oldest(brands, set(cfg.get("platforms", {})), status)
@@ -529,7 +542,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         except Exception as e:
             # A backend deployed before Targets.gs, or one that is not answering: the old order still works.
             log.warning("--order oldest needs the account status (%s); using the legacy order", str(e)[:120])
-    if known and not web_mode and not tt_mode and not oldest_order:
+    if known and not web_mode and not link_mode and not oldest_order:
         total_rows = len(brands)
         brands_before = brands
         brands, fresh = sweep_order(brands, known, offset=args.offset,
@@ -558,6 +571,19 @@ def main(argv: Optional[List[str]] = None) -> int:
         scraper = TikTokLinks(cfg, os.path.join(run_dir, "screenshots"), tt_links)
         scraper.known_urls = known
         planned = scraper.plan(brands)
+    elif ht_mode:
+        tags = clean_tags(args.hashtag)
+        if not tags:
+            log.error("--hashtag needs at least one hashtag, e.g. --hashtag skintificmy")
+            report["errors"].append("no usable hashtag")
+            _write_report(run_dir, report)
+            return 1
+        cap = run_cfg.get("max_new_posts_per_visit") or 40
+        scraper = InstagramHashtag(cfg, os.path.join(run_dir, "screenshots"), tags,
+                                   exclude_words=[w.lower() for w in (args.exclude_owner or [])], max_posts=cap)
+        scraper.known_urls = known
+        planned = scraper.plan(brands)
+        log.info("hashtag review: %s (at most %d new post(s) opened per tag)", ", ".join("#" + t for t in tags), cap)
     elif web_mode:
         scraper = _wc
         scraper.known_urls = known
@@ -573,7 +599,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                  len(planned), budget_min,
                  datetime.fromtimestamp(deadline, MYT).strftime("%H:%M"))
     _stop = (lambda: deadline is not None and time.time() >= deadline)
-    if tt_mode:
+    if link_mode:
         results = scraper.iter_run(None, should_stop=_stop)
     elif web_mode:
         results = scraper.iter_run(brands, should_stop=_stop)
@@ -584,7 +610,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     hints = {b["name"]: b.get("product_hints", []) for b in brands}
     types = {b["name"]: (WEB_TYPE_LABEL if web_mode else b.get("type", "")) for b in brands}
-    if tt_mode:
+    if link_mode:
         class _AllKOL(dict):
             # A linked video is somebody's post, not a brand's own page: the person-promoting test applies
             # (endorsement, partnership, product shown). The account is only known once the page is read.
@@ -907,7 +933,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                          "rows_skipped": len(report.get("web_rows_skipped", []))}
         if scraper.walled:
             log.warning("walled website host(s): %s", "; ".join(f"{h} ({w})" for h, w in scraper.walled.items()))
-    missed = [] if tt_mode else [{"brand": b, "platform": p} for b, p, _ in planned if (b, p) not in reached]
+    missed = [] if link_mode else [{"brand": b, "platform": p} for b, p, _ in planned if (b, p) not in reached]
     if missed:
         report["not_reached"] = missed
         log.warning("%d of %d target(s) not reached this run; the next run picks them up",
@@ -946,7 +972,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     for plat, why in report["public_mode"].items():
         print(f"::warning title={plat} was read with no login::{why}. Only each account's newest posts were read "
               f"(public embed). Record the session again to reach older posts (GUIDE section 4).", flush=True)
-    if client is not None and not args.dry_run and not tt_mode and not web_mode:
+    if client is not None and not args.dry_run and not link_mode and not web_mode:
         _record_sweep_status(client, report, brands)
     report["finished_myt"] = datetime.now(MYT).isoformat()
     report["duration_s"] = round(time.time() - started.timestamp(), 1)
