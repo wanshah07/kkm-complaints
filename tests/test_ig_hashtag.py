@@ -66,6 +66,15 @@ class Wiring(unittest.TestCase):
         self.assertIn("ht_mode = bool(args.hashtag)", main)
         self.assertIn("link_mode = tt_mode or ht_mode", main)
 
+    def test_results_are_yielded_per_tag_not_at_the_end(self):
+        # run 45382645330 (24 Nov 2026) yielded nothing until all six tags were scraped; a run cut by the job timeout
+        # would have filed nothing. The generator must hand over each tag's findings inside the tag loop.
+        src = (ROOT / "scraper" / "ig_hashtag.py").read_text(encoding="utf-8")
+        body = src[src.index("def iter_run("):]
+        loop = body[body.index("for tag in self.tags:"):]
+        self.assertIn("yield from self._by_owner(posts)", loop)
+        self.assertLess(loop.index("yield from self._by_owner(posts)"), loop.index("ctx.close()"))
+
 
 if __name__ == "__main__":
     unittest.main()
