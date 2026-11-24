@@ -32,10 +32,13 @@ ID_WORDS = {"banget", "bgt", "nggak", "gak", "enggak", "kamu", "kulitmu", "kulit
             "cuma", "tenang", "dapet", "gemoy", "kebutuhan", "rahasia", "toko", "masker", "lembar", "berupa",
             "berfungsi", "bingung", "menyelamatkan", "ternyata", "bermasalah", "kusam", "jerawatku", "jerawatnya", "seperti",
             "habis", "senin", "sabtu", "jumat", "selasa", "rabu", "kamis", "minggu", "inbox", "pemesanan", "pesan",
-            "bestie", "kuy", "ayo", "pengen", "banyak2", "murah", "terbaru", "sekali", "lagi", "emang", "pas"}
+            "bestie", "kuy", "ayo", "pengen", "banyak2", "murah", "terbaru", "sekali", "lagi", "emang", "pas",
+            "bisa", "meresap", "detik", "digunakan", "dilengkapi", "menggabungkan", "membantu", "melindungi", "menjadikan",
+            "dapat", "bebas", "mengontrol", "produksi", "menggunakan"}
 # only count the ID words that are not also common Malaysian ones
 ID_WORDS -= {"terbaru", "sekali", "lagi", "banyak2", "murah", "pas", "habis", "pesan", "inbox", "ternyata", "kusam",
-             "seperti", "mau", "bestie", "emang", "cuma"}
+             "seperti", "mau", "bestie", "emang", "cuma", "dapat", "bebas", "produksi", "membantu", "melindungi",
+             "menjadikan", "menggunakan", "digunakan", "mengontrol", "dilengkapi", "menggabungkan"}  # also Malaysian
 ID_PLACES = {"indonesia", "jakarta", "surabaya", "bandung", "semarang", "jogja", "yogyakarta", "bali", "medan",
              "makassar", "jatim", "jateng", "jabar", "maospati", "tangerang", "bekasi", "depok", "bogor", "malang"}
 FIL_WORDS = {"mga", "naman", "talaga", "kasi", "yung", "sana", "pesos", "pilipinas", "philippines", "manila", "cebu",
@@ -47,7 +50,8 @@ MY_PLACES = {"malaysia", "kuala", "lumpur", "selangor", "johor", "penang", "saba
 MY_PLACES -= {"kota", "alam", "shah", "kuala"}      # too common alone; "kuala lumpur" is matched by "lumpur"
 # hashtags / handles that name a country
 COUNTRY_TAGS_NOT_MY = ("skintificid", "skintificph", "skintificthai", "skintificth", "skintificsg", "skintificvn",
-                       "skintificindonesia", "skintificphilippines", "skintificsingapore")
+                       "skintificindonesia", "skintificphilippines", "skintificsingapore",
+                       "skintific.id", "skintific.ph", "skintific.th", "skintific.sg", "skintific.vn")
 COUNTRY_TAGS_MY = ("skintificmy", "skintific.my", "skintificmalaysia")
 
 _THAI = re.compile(r"[฀-๿]")
