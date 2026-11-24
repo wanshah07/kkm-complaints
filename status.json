@@ -1,13 +1,13 @@
 {
- "checked_at": "2026-11-23T18:28:44Z",
+ "checked_at": "2026-11-24T00:00:28Z",
  "platforms": [
   {
    "key": "instagram",
    "label": "Instagram",
-   "state": "live",
-   "detail": "Signed in and reading posts normally.",
-   "links": 40,
-   "at": "2026-11-23T18:29:13Z"
+   "state": "degraded",
+   "detail": "Signed in, but no posts were offered. It may be a page change or a short block; the next check will say.",
+   "links": 0,
+   "at": "2026-11-24T00:00:55Z"
   },
   {
    "key": "facebook",
@@ -15,23 +15,23 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-23T18:29:57Z"
+   "at": "2026-11-24T00:01:18Z"
   },
   {
    "key": "threads",
    "label": "Threads",
-   "state": "live",
-   "detail": "Signed in and reading posts normally.",
-   "links": 40,
-   "at": "2026-11-23T18:31:21Z"
+   "state": "degraded",
+   "detail": "Signed in, but no posts were offered. It may be a page change or a short block; the next check will say.",
+   "links": 0,
+   "at": "2026-11-24T00:01:52Z"
   },
   {
    "key": "tiktok",
    "label": "TikTok links",
    "links": null,
    "state": "live",
-   "at": "2026-11-23T11:14:41Z",
-   "detail": "The link checker is running (last run 2026-11-23 11:14). Works on links you paste into the Links tab."
+   "at": "2026-11-23T22:44:41Z",
+   "detail": "The link checker is running (last run 2026-11-23 22:44). Works on links you paste into the Links tab."
   },
   {
    "key": "tiktok_auto",
@@ -44,14 +44,14 @@
  ],
  "notes": [],
  "session_days_left": {
-  "instagram": 364.9,
+  "instagram": 364.7,
   "facebook": null,
-  "threads": 364.9
+  "threads": 364.7
  },
  "last_sweep": {
   "conclusion": "success",
   "at": "2026-11-23T18:21:02Z",
   "title": "KKM complaint scraper"
  },
- "overall": "live"
+ "overall": "degraded"
 }
