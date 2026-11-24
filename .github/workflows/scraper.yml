@@ -78,6 +78,10 @@ on:
         description: 'Skip targets we have never judged a post from. They are walked first on every run and are mostly rows that cannot produce one (private, wrong handle, nothing in the date window) - two thirds of run 6 went on them. Do NOT tick this on the first run after adding handles: a new handle is unjudged too.'
         type: boolean
         default: false
+      since:
+        description: 'Only review posts published on/after this date, YYYY-MM-DD, for this run only (blank = the config.yaml floor, 2024-06-01). Skintific this year: 2026-01-01.'
+        type: string
+        default: ''
       focus:
         description: 'Only review NEW posts whose text contains this word (e.g. skintific: matches @skintific.my, #skintific, the plain word). Known/ledgered posts are skipped as always; non-matching new posts are not reviewed and not ledgered.'
         type: string
@@ -173,6 +177,7 @@ jobs:
           IN_SKIP_UNJUDGED: ${{ inputs.skip_unjudged && 'true' || 'false' }}
           IN_COMPARE: ${{ inputs.compare && 'true' || 'false' }}
           IN_FOCUS: ${{ inputs.focus || '' }}
+          IN_SINCE: ${{ inputs.since || '' }}
           IN_SELFTEST: ${{ inputs.selftest || '' }}
         run: |
           echo "trigger: ${{ github.event_name }}"
@@ -187,6 +192,7 @@ jobs:
           if [ "$IN_SKIP_UNJUDGED" = "true" ]; then ARGS+=(--skip-unjudged); fi
           if [ "$IN_COMPARE" = "true" ]; then ARGS+=(--compare); fi
           if [ -n "$IN_FOCUS" ]; then ARGS+=(--focus "$IN_FOCUS"); fi
+          if [ -n "$IN_SINCE" ]; then ARGS+=(--since "$IN_SINCE"); fi
           # A selftest replaces the run rather than adding to it: no browser, no scrape, no writes.
           if [ -n "$IN_SELFTEST" ]; then
             if [ "$IN_SELFTEST" = "1" ]; then ARGS=(--selftest)

@@ -38,6 +38,17 @@ class WorkflowSchedule(unittest.TestCase):
         m = re.search(r"IN_ONLY_TYPE: (.*)", self.text).group(1)
         self.assertNotIn("person", m)
 
+    def test_since_input_reaches_the_scraper_and_never_defaults_on_a_schedule(self):
+        # Wan, 24 Nov 2026: "Skintific ... focus only this year". A one-off date floor for a dispatch; the
+        # scheduled runs must keep the config.yaml floor, so the env default is blank on every cron.
+        on = self.doc.get("on") or self.doc[True]
+        self.assertIn("since", on["workflow_dispatch"]["inputs"])
+        m = re.search(r"IN_SINCE: (.*)", self.text).group(1)
+        self.assertNotIn("schedule", m)
+        self.assertIn('--since "$IN_SINCE"', self.text)
+        main = (WF.parent.parent.parent / "scraper" / "main.py").read_text(encoding="utf-8")
+        self.assertIn('run_cfg["min_post_date"] = args.since.strip()', main)
+
 
 if __name__ == "__main__":
     unittest.main()
