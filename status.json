@@ -1,14 +1,13 @@
 {
- "checked_at": "2026-11-24T14:37:19Z",
+ "checked_at": "2026-11-24T22:34:20Z",
  "platforms": [
   {
    "key": "instagram",
    "label": "Instagram",
-   "state": "live",
-   "detail": "Signed in and reading posts: the sweep that finished 2026-11-24 13:29 UTC read 112 account(s) on Instagram.",
-   "links": 112,
-   "at": "2026-11-24T13:29:33Z",
-   "carried": false
+   "state": "degraded",
+   "detail": "No working login (Instagram ended the saved login). Still reading the newest 6 posts of each account through Instagram's public embed; older posts need the session recorded again (guide section 4).",
+   "links": 6,
+   "at": "2026-11-24T22:34:33Z"
   },
   {
    "key": "facebook",
@@ -16,24 +15,23 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-24T14:37:35Z"
+   "at": "2026-11-24T22:34:56Z"
   },
   {
    "key": "threads",
    "label": "Threads",
    "state": "live",
-   "detail": "Signed in and reading posts: the sweep that finished 2026-11-24 11:03 UTC read 4 account(s) on Threads.",
-   "links": 4,
-   "at": "2026-11-24T11:03:23Z",
-   "carried": false
+   "detail": "Signed in and reading posts normally.",
+   "links": 40,
+   "at": "2026-11-24T22:36:16Z"
   },
   {
    "key": "tiktok",
    "label": "TikTok links",
    "links": null,
    "state": "live",
-   "at": "2026-11-24T06:30:54Z",
-   "detail": "The link checker is running (last run 2026-11-24 06:30). Works on links you paste into the Links tab."
+   "at": "2026-11-24T18:14:08Z",
+   "detail": "The link checker is running (last run 2026-11-24 18:14). Works on links you paste into the Links tab."
   },
   {
    "key": "tiktok_auto",
@@ -44,18 +42,16 @@
    "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-24 14:36). Only an account's ten newest are visible at a time."
   }
  ],
- "notes": [
-  "Instagram and Threads were not probed: a sweep or an account check was using the login. Their state comes from the last finished sweep."
- ],
+ "notes": [],
  "session_days_left": {
-  "instagram": 364.5,
+  "instagram": 364.2,
   "facebook": null,
-  "threads": 364.5
+  "threads": 364.2
  },
  "last_sweep": {
   "conclusion": "success",
-  "at": "2026-11-24T13:29:33Z",
+  "at": "2026-11-24T18:57:07Z",
   "title": "KKM complaint scraper"
  },
- "overall": "live"
+ "overall": "degraded"
 }
