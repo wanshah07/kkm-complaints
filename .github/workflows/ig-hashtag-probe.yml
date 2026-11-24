@@ -1,0 +1,52 @@
+# Read-only: opens Instagram hashtag pages with the sweep's recorded session and prints what a hashtag mode could read
+# (tools/ig_hashtag_probe.py). Writes nothing to the sheet. Manual only. Wan, 24 Nov 2026: Skintific from doctors / KOLs.
+#
+# It shares the scraper's concurrency group on purpose: the same Instagram login must never be used by two runners at
+# once (a second runner opening pages with the same session is what makes Instagram suspicious), so this waits for a
+# sweep to finish and a sweep waits for it.
+name: Instagram hashtag probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      tags:
+        description: 'Hashtags to read, space separated, no #'
+        type: string
+        required: true
+        default: 'skintific skintificmy skintificmalaysia'
+      posts:
+        description: 'Posts to open per tag'
+        type: string
+        default: '4'
+
+concurrency:
+  group: kkm-complaint-scraper
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scraper/requirements.txt
+      - name: Install Playwright
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r scraper/requirements.txt
+          python -m playwright install --with-deps chromium
+      - name: Probe
+        env:
+          TAGS: ${{ github.event.inputs.tags }}
+          PROBE_POSTS: ${{ github.event.inputs.posts }}
+          PW_STORAGE_STATE_B64: ${{ secrets.PW_STORAGE_STATE_B64 }}
+        run: |
+          read -ra T <<< "$TAGS"
+          python tools/ig_hashtag_probe.py "${T[@]}"
