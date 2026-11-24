@@ -1,5 +1,5 @@
 {
- "checked_at": "2026-11-24T00:00:28Z",
+ "checked_at": "2026-11-24T02:28:03Z",
  "platforms": [
   {
    "key": "instagram",
@@ -7,7 +7,7 @@
    "state": "degraded",
    "detail": "Signed in, but no posts were offered. It may be a page change or a short block; the next check will say.",
    "links": 0,
-   "at": "2026-11-24T00:00:55Z"
+   "at": "2026-11-24T02:28:33Z"
   },
   {
    "key": "facebook",
@@ -15,7 +15,7 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-24T00:01:18Z"
+   "at": "2026-11-24T02:29:11Z"
   },
   {
    "key": "threads",
@@ -23,7 +23,7 @@
    "state": "degraded",
    "detail": "Signed in, but no posts were offered. It may be a page change or a short block; the next check will say.",
    "links": 0,
-   "at": "2026-11-24T00:01:52Z"
+   "at": "2026-11-24T02:29:44Z"
   },
   {
    "key": "tiktok",
@@ -44,13 +44,13 @@
  ],
  "notes": [],
  "session_days_left": {
-  "instagram": 364.7,
+  "instagram": 364.6,
   "facebook": null,
-  "threads": 364.7
+  "threads": 364.6
  },
  "last_sweep": {
   "conclusion": "success",
-  "at": "2026-11-23T18:21:02Z",
+  "at": "2026-11-24T02:13:28Z",
   "title": "KKM complaint scraper"
  },
  "overall": "degraded"
