@@ -86,6 +86,11 @@ on:
         description: 'Instead of walking Targets rows: review the posts Instagram lists under these hashtags, space separated, no # (e.g. skintificmy skintificmalaysia). Use with since, focus and exclude_owner; max_open caps the posts opened per tag (default 40).'
         type: string
         default: ''
+      malaysia:
+        description: 'With hashtag: loose = drop posts that show another country (Indonesian words, Thai script, #skintificph, Rp prices); strict = keep only posts with a Malaysian signal. Accounts in the Targets tab are always kept.'
+        type: choice
+        options: ['', 'loose', 'strict']
+        default: ''
       exclude_owner:
         description: 'With hashtag: skip posts whose account handle contains this word (the official accounts, e.g. skintific)'
         type: string
@@ -188,6 +193,7 @@ jobs:
           IN_SINCE: ${{ inputs.since || '' }}
           IN_HASHTAG: ${{ inputs.hashtag || '' }}
           IN_EXCLUDE_OWNER: ${{ inputs.exclude_owner || '' }}
+          IN_MALAYSIA: ${{ inputs.malaysia || '' }}
           IN_SELFTEST: ${{ inputs.selftest || '' }}
         run: |
           echo "trigger: ${{ github.event_name }}"
@@ -204,6 +210,7 @@ jobs:
           if [ -n "$IN_FOCUS" ]; then ARGS+=(--focus "$IN_FOCUS"); fi
           if [ -n "$IN_SINCE" ]; then ARGS+=(--since "$IN_SINCE"); fi
           if [ -n "$IN_HASHTAG" ]; then read -ra H <<< "$IN_HASHTAG"; ARGS+=(--hashtag "${H[@]}"); fi
+          if [ -n "$IN_MALAYSIA" ]; then ARGS+=(--malaysia "$IN_MALAYSIA"); fi
           if [ -n "$IN_EXCLUDE_OWNER" ]; then read -ra X <<< "$IN_EXCLUDE_OWNER"; ARGS+=(--exclude-owner "${X[@]}"); fi
           # A selftest replaces the run rather than adding to it: no browser, no scrape, no writes.
           if [ -n "$IN_SELFTEST" ]; then
