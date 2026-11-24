@@ -1,13 +1,14 @@
 {
- "checked_at": "2026-11-24T02:47:32Z",
+ "checked_at": "2026-11-24T10:02:54Z",
  "platforms": [
   {
    "key": "instagram",
    "label": "Instagram",
    "state": "live",
-   "detail": "Signed in and reading posts normally.",
-   "links": 40,
-   "at": "2026-11-24T02:47:56Z"
+   "detail": "Signed in and reading posts: the sweep that finished 2026-11-24 09:07 UTC read 5 account(s) on Instagram.",
+   "links": 5,
+   "at": "2026-11-24T09:07:47Z",
+   "carried": false
   },
   {
    "key": "facebook",
@@ -15,23 +16,24 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-24T02:48:19Z"
+   "at": "2026-11-24T10:03:09Z"
   },
   {
    "key": "threads",
    "label": "Threads",
    "state": "live",
-   "detail": "Signed in and reading posts normally.",
-   "links": 40,
-   "at": "2026-11-24T02:49:36Z"
+   "detail": "Signed in and reading posts: the sweep that finished 2026-11-24 09:07 UTC read 4 account(s) on Threads.",
+   "links": 4,
+   "at": "2026-11-24T09:07:47Z",
+   "carried": false
   },
   {
    "key": "tiktok",
    "label": "TikTok links",
    "links": null,
    "state": "live",
-   "at": "2026-11-23T22:44:41Z",
-   "detail": "The link checker is running (last run 2026-11-23 22:44). Works on links you paste into the Links tab."
+   "at": "2026-11-24T06:30:54Z",
+   "detail": "The link checker is running (last run 2026-11-24 06:30). Works on links you paste into the Links tab."
   },
   {
    "key": "tiktok_auto",
@@ -42,15 +44,17 @@
    "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-24 02:43). Only an account's ten newest are visible at a time."
   }
  ],
- "notes": [],
+ "notes": [
+  "Instagram and Threads were not probed: a sweep or an account check was using the login. Their state comes from the last finished sweep."
+ ],
  "session_days_left": {
-  "instagram": 365.0,
+  "instagram": 364.7,
   "facebook": null,
-  "threads": 365.0
+  "threads": 364.7
  },
  "last_sweep": {
   "conclusion": "success",
-  "at": "2026-11-24T02:13:28Z",
+  "at": "2026-11-24T09:07:47Z",
   "title": "KKM complaint scraper"
  },
  "overall": "live"
