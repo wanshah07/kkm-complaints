@@ -27,6 +27,13 @@ class Classify(unittest.TestCase):
         self.assertEqual(self.v("skin looking expensive #SKINTIFICPH #SKINTIFICGlow"), "not_my")
         self.assertEqual(self.v("Skintific event in Surabaya next week"), "not_my")
 
+    def test_philippine_and_indonesian_official_handles_in_a_caption(self):
+        # 24 Nov 2026, found reading the 46 filed posts: @skintific.ph (dotted) and an all-Indonesian product text
+        self.assertEqual(self.v("Here's to giving our skin the treatment it deserves 💖 @skintific.ph @skintificofficial"),
+                         "not_my")
+        self.assertEqual(self.v("Sunscreen dengan tekstur ringan, hasil matte yang cepat meresap dalam 60 detik, bisa "
+                                "digunakan di bawah makeup"), "not_my")
+
     def test_unclear(self):
         self.assertEqual(self.v("Harsh truth about PDRN skincare: not every formula is the same."), "unclear")
         self.assertEqual(self.v(""), "unclear")
