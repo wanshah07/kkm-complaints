@@ -99,10 +99,29 @@ class InstagramHashtag(Scraper):
         finally:
             page.close()
 
+    def _by_owner(self, posts: List[Post]) -> Iterator[TargetResult]:
+        """One result per owning account, so the sheet's Brand column carries the account."""
+        by: Dict[str, List[Post]] = {}
+        for p in posts:
+            owner = p.owner or "unknown_instagram_account"
+            p.brand = owner
+            by.setdefault(owner, []).append(p)
+        for owner, ps in by.items():
+            tr = TargetResult(brand=owner, platform="Instagram", profile_url=f"https://www.instagram.com/{owner}/",
+                              posts=ps)
+            if all(x.blocked for x in ps):
+                tr.error = "login wall on every post (Instagram session expired?)"
+            yield tr
+
     def iter_run(self, brands=None, platform_filter=None, brand_filter=None,
                  should_stop: Optional[Callable[[], bool]] = None) -> Iterator[TargetResult]:
+        """
+        Yields after EACH tag, not at the end. main.py reviews and files what a result carries before it asks for the
+        next one, so a tag's findings reach the sheet before the next tag is scraped. The first live run (45382645330,
+        24 Nov 2026) collected six tags before yielding anything: it was still reviewing 2 hours in, and a run cut by
+        the job timeout would have filed nothing at all.
+        """
         self.should_stop = should_stop
-        posts: List[Post] = []
         with sync_playwright() as pw:
             launch = dict(headless=bool(self.run_cfg.get("headless", True)))
             path = env_str("PW_CHROMIUM_PATH")
@@ -127,6 +146,7 @@ class InstagramHashtag(Scraper):
                         if "Instagram" in self.session_lost:
                             break
                         continue
+                    posts: List[Post] = []
                     opened = 0
                     for link in links:
                         url = clean_post_url(link)
@@ -157,19 +177,9 @@ class InstagramHashtag(Scraper):
                                             "people's posts - not reviewed")
                             info["official"] += 1
                         posts.append(p)
-                    log.info("[#%s/Instagram] done in %.1fs", tag, time.time() - t0)
+                    log.info("[#%s/Instagram] done in %.1fs: %d opened, %d already known, %d official skipped",
+                             tag, time.time() - t0, info["opened"], info["known"], info["official"])
+                    yield from self._by_owner(posts)
                 ctx.close()
             finally:
                 browser.close()
-        # One result per owning account, so the sheet's Brand column carries the account.
-        by: Dict[str, List[Post]] = {}
-        for p in posts:
-            owner = p.owner or "unknown_instagram_account"
-            p.brand = owner
-            by.setdefault(owner, []).append(p)
-        for owner, ps in by.items():
-            tr = TargetResult(brand=owner, platform="Instagram", profile_url=f"https://www.instagram.com/{owner}/",
-                              posts=ps)
-            if all(x.blocked for x in ps):
-                tr.error = "login wall on every post (Instagram session expired?)"
-            yield tr
