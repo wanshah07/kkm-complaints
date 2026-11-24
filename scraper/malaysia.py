@@ -34,13 +34,17 @@ ID_WORDS = {"banget", "bgt", "nggak", "gak", "enggak", "kamu", "kulitmu", "kulit
             "habis", "senin", "sabtu", "jumat", "selasa", "rabu", "kamis", "minggu", "inbox", "pemesanan", "pesan",
             "bestie", "kuy", "ayo", "pengen", "banyak2", "murah", "terbaru", "sekali", "lagi", "emang", "pas",
             "bisa", "meresap", "detik", "digunakan", "dilengkapi", "menggabungkan", "membantu", "melindungi", "menjadikan",
-            "dapat", "bebas", "mengontrol", "produksi", "menggunakan"}
+            "dapat", "bebas", "mengontrol", "produksi", "menggunakan", "memberikan", "menyamarkan"}
 # only count the ID words that are not also common Malaysian ones
+# words that Malaysian Malay also uses (found in H2 of 24 Nov 2026, where a single shared word such as "kamu" or
+# "sekaligus" dropped a post on its own): they never count as Indonesian evidence
+ID_WORDS -= {"kamu", "sekaligus", "tenang", "tampil", "berupa", "berfungsi", "kenalan", "bermasalah", "menyelamatkan"}
 ID_WORDS -= {"terbaru", "sekali", "lagi", "banyak2", "murah", "pas", "habis", "pesan", "inbox", "ternyata", "kusam",
              "seperti", "mau", "bestie", "emang", "cuma", "dapat", "bebas", "produksi", "membantu", "melindungi",
              "menjadikan", "menggunakan", "digunakan", "mengontrol", "dilengkapi", "menggabungkan"}  # also Malaysian
 ID_PLACES = {"indonesia", "jakarta", "surabaya", "bandung", "semarang", "jogja", "yogyakarta", "bali", "medan",
              "makassar", "jatim", "jateng", "jabar", "maospati", "tangerang", "bekasi", "depok", "bogor", "malang"}
+ID_PLACES -= {"bali", "malang", "medan"}      # also Malay words / Malaysian destinations
 FIL_WORDS = {"mga", "naman", "talaga", "kasi", "yung", "sana", "pesos", "pilipinas", "philippines", "manila", "cebu",
              "davao", "luzon", "quezon", "makati"}
 OTHER_PLACES = {"singapore", "brunei", "bangkok", "thailand", "vietnam", "hanoi", "saigon", "cambodia", "myanmar"}

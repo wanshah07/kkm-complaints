@@ -34,6 +34,12 @@ class Classify(unittest.TestCase):
         self.assertEqual(self.v("Sunscreen dengan tekstur ringan, hasil matte yang cepat meresap dalam 60 detik, bisa "
                                 "digunakan di bawah makeup"), "not_my")
 
+    def test_one_shared_word_never_drops_a_post(self):
+        # H2 (24 Nov 2026) dropped posts on a single word that Malaysian Malay also uses
+        for t in ("Pilih sunscreen yang sesuai untuk kamu", "Pelembap dan sunscreen sekaligus dalam satu produk",
+                  "Cuti ke Bali dengan kulit yang terjaga", "Tenang, kulit tampil berseri"):
+            self.assertNotEqual(self.v(t), "not_my", t)
+
     def test_unclear(self):
         self.assertEqual(self.v("Harsh truth about PDRN skincare: not every formula is the same."), "unclear")
         self.assertEqual(self.v(""), "unclear")
