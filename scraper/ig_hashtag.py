@@ -25,6 +25,7 @@ from typing import Callable, Dict, Iterator, List, Optional, Tuple
 
 from playwright.sync_api import sync_playwright
 
+from malaysia import classify, keep as keep_verdict
 from scraper import (Post, Scraper, TargetResult, _collect_links, _dismiss_dialogs, _is_login_wall, _pace,
                      canonical_url, clean_post_url, env_str)
 
@@ -68,13 +69,17 @@ class InstagramHashtag(Scraper):
     """Reads the posts Instagram lists under each hashtag and yields one TargetResult per owning account."""
 
     def __init__(self, cfg: dict, out_dir: str, tags: List[str], exclude_words: Optional[List[str]] = None,
-                 max_posts: int = 40):
+                 max_posts: int = 40, malaysia: str = "", keep_owners=None):
         super().__init__(cfg, out_dir)
         self.tags = tags
         self.max_posts = max(1, int(max_posts))
         # Official accounts are the ones whose handle carries the hashtag's own brand word.
         self.exclude_words = [w for w in (exclude_words or []) if w]
         self.report_tags: Dict[str, dict] = {}
+        # "strict" keeps only posts that show a Malaysian signal, "loose" drops only posts that show another country's;
+        # an account already in the Targets tab is kept whatever its caption says (malaysia.py).
+        self.malaysia = malaysia if malaysia in ("strict", "loose") else ""
+        self.keep_owners = {str(o).lower() for o in (keep_owners or []) if o}
 
     def plan(self, brands=None, platform_filter=None, brand_filter=None) -> List[Tuple[str, str, str]]:
         return [(f"#{t}", "Instagram", t) for t in self.tags]
@@ -137,7 +142,7 @@ class InstagramHashtag(Scraper):
                         break
                     t0 = time.time()
                     links, err = self._links_for(ctx, tag)
-                    info = {"links": len(links), "opened": 0, "known": 0, "official": 0, "error": err}
+                    info = {"links": len(links), "opened": 0, "known": 0, "official": 0, "not_my": 0, "error": err}
                     self.report_tags[tag] = info
                     log.info("[#%s/Instagram] %d post link(s)%s", tag, len(links), f" - {err}" if err else "")
                     if err:
@@ -176,9 +181,17 @@ class InstagramHashtag(Scraper):
                             p.errors.append(f"official account (@{owner}): not wanted here, this run reads other "
                                             "people's posts - not reviewed")
                             info["official"] += 1
+                        elif self.malaysia and owner not in self.keep_owners:
+                            verdict, why = classify(p.text)
+                            if not keep_verdict(verdict, self.malaysia):
+                                p.not_owned = True
+                                p.errors.append(f"not clearly Malaysian ({verdict}: {why}) - not reviewed "
+                                                f"(Malaysia filter, {self.malaysia})")
+                                info["not_my"] += 1
+                                log.info("[#%s/Instagram] dropped @%s: %s (%s)", tag, owner or "?", verdict, why)
                         posts.append(p)
-                    log.info("[#%s/Instagram] done in %.1fs: %d opened, %d already known, %d official skipped",
-                             tag, time.time() - t0, info["opened"], info["known"], info["official"])
+                    log.info("[#%s/Instagram] done in %.1fs: %d opened, %d already known, %d official skipped, %d not Malaysian",
+                             tag, time.time() - t0, info["opened"], info["known"], info["official"], info["not_my"])
                     yield from self._by_owner(posts)
                 ctx.close()
             finally:

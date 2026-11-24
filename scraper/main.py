@@ -349,6 +349,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                          "walking Targets rows. Combine with --since (date window) and --focus (caption must mention "
                          "it); --max-open caps the posts opened per tag (default 40). Posts by an official account "
                          "whose handle contains --exclude-owner are never reviewed.")
+    ap.add_argument("--malaysia", choices=["loose", "strict"], default="",
+                    help="with --hashtag: keep only posts that look Malaysian. loose drops posts that show another "
+                         "country (Indonesian words, Thai script, #skintificph, Rp prices) and keeps the unclear ones; "
+                         "strict keeps only posts with a Malaysian signal (#...my, Malaysia, RM, Malaysian Malay). "
+                         "Accounts already in the Targets tab are always kept. See scraper/malaysia.py.")
     ap.add_argument("--exclude-owner", nargs="+", metavar="WORD", default=[],
                     help="with --hashtag: skip posts whose account handle contains this word (the subject's own "
                          "official accounts, e.g. skintific)")
@@ -463,7 +468,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     # waits in the panel with an "Add to database" button, and only his click files it.
     tt_hold = tt_mode and os.environ.get("LINKS_REPORT") == "1" and not args.dry_run and client is not None
     held_records: Dict[str, dict] = {}
+    ht_keep_owners = set()
     if ht_mode:
+        # accounts Wan put in the Targets tab are kept whatever their caption looks like
+        ht_keep_owners = {str(h).lower() for b in brands for plat, h in (b.get("handles") or {}).items()
+                          if plat == "Instagram" and h}
         brands = []
     if tt_mode:
         tt_links, tt_bad = parse_links(os.environ.get("TIKTOK_LINKS", ""))
@@ -580,7 +589,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 1
         cap = run_cfg.get("max_new_posts_per_visit") or 40
         scraper = InstagramHashtag(cfg, os.path.join(run_dir, "screenshots"), tags,
-                                   exclude_words=[w.lower() for w in (args.exclude_owner or [])], max_posts=cap)
+                                   exclude_words=[w.lower() for w in (args.exclude_owner or [])], max_posts=cap,
+                                   malaysia=args.malaysia, keep_owners=ht_keep_owners)
         scraper.known_urls = known
         planned = scraper.plan(brands)
         log.info("hashtag review: %s (at most %d new post(s) opened per tag)", ", ".join("#" + t for t in tags), cap)
