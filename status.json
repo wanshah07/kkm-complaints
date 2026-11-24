@@ -1,13 +1,13 @@
 {
- "checked_at": "2026-11-24T02:44:49Z",
+ "checked_at": "2026-11-24T02:47:32Z",
  "platforms": [
   {
    "key": "instagram",
    "label": "Instagram",
-   "state": "degraded",
-   "detail": "No working login (Instagram ended the saved login). Still reading the newest 6 posts of each account through Instagram's public embed; older posts need the session recorded again (guide section 4).",
-   "links": 6,
-   "at": "2026-11-24T02:45:01Z"
+   "state": "live",
+   "detail": "Signed in and reading posts normally.",
+   "links": 40,
+   "at": "2026-11-24T02:47:56Z"
   },
   {
    "key": "facebook",
@@ -15,7 +15,7 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-24T02:45:24Z"
+   "at": "2026-11-24T02:48:19Z"
   },
   {
    "key": "threads",
@@ -23,7 +23,7 @@
    "state": "live",
    "detail": "Signed in and reading posts normally.",
    "links": 40,
-   "at": "2026-11-24T02:46:42Z"
+   "at": "2026-11-24T02:49:36Z"
   },
   {
    "key": "tiktok",
@@ -44,14 +44,14 @@
  ],
  "notes": [],
  "session_days_left": {
-  "instagram": 364.6,
+  "instagram": 365.0,
   "facebook": null,
-  "threads": 364.6
+  "threads": 365.0
  },
  "last_sweep": {
   "conclusion": "success",
   "at": "2026-11-24T02:13:28Z",
   "title": "KKM complaint scraper"
  },
- "overall": "degraded"
+ "overall": "live"
 }
