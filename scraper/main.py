@@ -343,6 +343,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                          "on every run and are mostly rows that cannot produce one (private, "
                          "wrong handle, nothing in the date window). Do NOT pass this on a run "
                          "after handles have been added: a new handle is unjudged too")
+    ap.add_argument("--since", metavar="YYYY-MM-DD",
+                    help="review only posts published on/after this date, for this run only (overrides "
+                         "run.min_post_date in config.yaml; a post with no readable date is judged as before). "
+                         "Wan, 24 Nov 2026: Skintific, this year only (--since 2026-01-01).")
     ap.add_argument("--focus", metavar="TEXT",
                     help="review only NEW posts whose caption/text contains TEXT (case-insensitive; e.g. 'skintific' "
                          "matches @skintific.my, #skintific and the plain word). Posts already in the sheet or the "
@@ -366,6 +370,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     run_cfg = cfg.setdefault("run", {})
     if args.max_open is not None:
         run_cfg["max_new_posts_per_visit"] = max(0, args.max_open)
+    if args.since:
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", args.since.strip()):
+            ap.error("--since must be a date like 2026-01-01")
+        run_cfg["min_post_date"] = args.since.strip()
     run_dir = os.path.join(args.out, started.strftime("%Y%m%d_%H%M%S"))
     os.makedirs(run_dir, exist_ok=True)
     report: Dict = {"started_myt": started.isoformat(), "targets": [], "pushed": [], "skipped": [],
