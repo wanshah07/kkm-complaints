@@ -1,21 +1,21 @@
 {
- "checked_at": "2026-11-25T09:30:02Z",
+ "checked_at": "2026-11-25T13:47:16Z",
  "platforms": [
   {
    "key": "instagram",
    "label": "Instagram",
-   "state": "degraded",
-   "detail": "No working login (Instagram ended the saved login). Still reading the newest 6 posts of each account through Instagram's public embed; older posts need the session recorded again (guide section 4).",
-   "links": 6,
-   "at": "2026-11-25T09:30:14Z"
+   "state": "live",
+   "detail": "Signed in and reading posts normally.",
+   "links": 40,
+   "at": "2026-11-25T13:47:40Z"
   },
   {
    "key": "facebook",
    "label": "Facebook",
    "state": "live",
-   "detail": "Read through Meta's Ad Library, which needs no login: 0 advertisement(s) listed for the test page.",
-   "links": 0,
-   "at": "2026-11-25T09:30:34Z"
+   "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
+   "links": 4,
+   "at": "2026-11-25T13:48:03Z"
   },
   {
    "key": "threads",
@@ -23,15 +23,15 @@
    "state": "live",
    "detail": "Signed in and reading posts normally.",
    "links": 40,
-   "at": "2026-11-25T09:31:51Z"
+   "at": "2026-11-25T13:49:22Z"
   },
   {
    "key": "tiktok",
    "label": "TikTok links",
    "links": null,
    "state": "live",
-   "at": "2026-11-25T02:36:44Z",
-   "detail": "The link checker is running (last run 2026-11-25 02:36). Works on links you paste into the Links tab."
+   "at": "2026-11-25T11:43:01Z",
+   "detail": "The link checker is running (last run 2026-11-25 11:43). Works on links you paste into the Links tab."
   },
   {
    "key": "tiktok_auto",
@@ -44,14 +44,14 @@
  ],
  "notes": [],
  "session_days_left": {
-  "instagram": 363.7,
+  "instagram": 365.0,
   "facebook": null,
-  "threads": 363.7
+  "threads": 365.0
  },
  "last_sweep": {
   "conclusion": "success",
   "at": "2026-11-25T05:09:41Z",
   "title": "KKM complaint scraper"
  },
- "overall": "degraded"
+ "overall": "live"
 }
