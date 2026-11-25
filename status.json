@@ -1,14 +1,13 @@
 {
- "checked_at": "2026-11-25T20:41:13Z",
+ "checked_at": "2026-11-25T21:48:14Z",
  "platforms": [
   {
    "key": "instagram",
    "label": "Instagram",
-   "state": "live",
-   "detail": "Signed in and reading posts: the sweep that finished 2026-11-25 20:35 UTC read 2 account(s) on Instagram.",
-   "links": 2,
-   "at": "2026-11-25T20:35:14Z",
-   "carried": false
+   "state": "degraded",
+   "detail": "Signed in, but no posts were offered. It may be a page change or a short block; the next check will say.",
+   "links": 0,
+   "at": "2026-11-25T21:48:40Z"
   },
   {
    "key": "facebook",
@@ -16,7 +15,7 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-25T20:41:29Z"
+   "at": "2026-11-25T21:49:03Z"
   },
   {
    "key": "threads",
@@ -24,16 +23,15 @@
    "state": "live",
    "detail": "Signed in and reading posts normally.",
    "links": 40,
-   "at": "2026-11-25T13:49:22Z",
-   "carried": true
+   "at": "2026-11-25T21:50:23Z"
   },
   {
    "key": "tiktok",
    "label": "TikTok links",
    "links": null,
    "state": "live",
-   "at": "2026-11-25T11:43:01Z",
-   "detail": "The link checker is running (last run 2026-11-25 11:43). Works on links you paste into the Links tab."
+   "at": "2026-11-25T20:42:58Z",
+   "detail": "The link checker is running (last run 2026-11-25 20:42). Works on links you paste into the Links tab."
   },
   {
    "key": "tiktok_auto",
@@ -44,9 +42,7 @@
    "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-25 19:52). Only an account's ten newest are visible at a time."
   }
  ],
- "notes": [
-  "Instagram and Threads were not probed: a sweep or an account check was using the login. Their state comes from the last finished sweep."
- ],
+ "notes": [],
  "session_days_left": {
   "instagram": 364.7,
   "facebook": null,
@@ -57,5 +53,5 @@
   "at": "2026-11-25T20:35:14Z",
   "title": "KKM complaint scraper"
  },
- "overall": "live"
+ "overall": "degraded"
 }
