@@ -1030,6 +1030,11 @@ class Scraper:
             self._report_session_age(open(here, "rb").read())
             return here
         b64 = env_str("PW_STORAGE_STATE_B64")
+        ig_b64 = env_str("PW_STORAGE_STATE_IG_B64")
+        if ig_b64:
+            from session_state import combined_b64
+            b64 = combined_b64(b64, ig_b64) or b64
+            log.info("Instagram login taken from PW_STORAGE_STATE_IG_B64, laid over the main saved session")
         if b64:
             try:
                 raw = base64.b64decode(b64)

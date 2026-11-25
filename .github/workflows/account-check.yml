@@ -61,6 +61,7 @@ jobs:
       APPS_SCRIPT_WEBHOOK_URL: ${{ secrets.APPS_SCRIPT_WEBHOOK_URL }}
       APPS_SCRIPT_API_TOKEN: ${{ secrets.APPS_SCRIPT_API_TOKEN }}
       PW_STORAGE_STATE_B64: ${{ secrets.PW_STORAGE_STATE_B64 }}
+      PW_STORAGE_STATE_IG_B64: ${{ secrets.PW_STORAGE_STATE_IG_B64 }}
       MAX_MINUTES: ${{ github.event.inputs.max_minutes || '40' }}
       LIMIT: ${{ github.event.inputs.limit || '0' }}
       OFFSET: ${{ github.event.inputs.offset || '0' }}

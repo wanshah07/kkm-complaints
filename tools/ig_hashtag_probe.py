@@ -24,6 +24,9 @@ POST_RE = re.compile(r"/(?:[A-Za-z0-9_.]+/)?(?:p|reel|reels)/([A-Za-z0-9_-]{5,})
 
 def state_path():
     raw = (os.environ.get("PW_STORAGE_STATE_B64") or "").strip()
+    if (os.environ.get("PW_STORAGE_STATE_IG_B64") or "").strip():
+        from session_state import combined_b64
+        raw = combined_b64(raw, os.environ["PW_STORAGE_STATE_IG_B64"])
     if not raw:
         return None
     b = base64.b64decode(raw)
