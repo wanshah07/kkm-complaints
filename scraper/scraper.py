@@ -1393,6 +1393,20 @@ class Scraper:
                 hint = _diagnose_empty(page, self.out_dir, f"{brand}_{platform}")
                 res.error = "no post links found" + (f" — {hint}" if hint else " (layout change or restricted profile)")
                 log.warning("[%s/%s] %s", brand, platform, res.error)
+                if platform == "Instagram" and self._instagram_login_recorded():
+                    # 26 Nov 2026 (run 45679734647): Instagram kept the session cookie but answered every profile with a
+                    # login prompt from the 3rd account on, so 36 accounts were "swept" with nothing read, each one
+                    # stamped as swept and the 70 minutes spent. The cookie check cannot see that. Three in a row can.
+                    self._ig_prompt_streak = (getattr(self, "_ig_prompt_streak", 0) + 1) if hint == "page shows a login prompt" else 0
+                    if self._ig_prompt_streak >= 3:
+                        why = ("Instagram signed the saved login out (a login prompt on 3 profiles in a row) - not swept. "
+                               "Record the session again (GUIDE section 4) and update PW_STORAGE_STATE_IG_B64")
+                        self.session_lost[platform] = why
+                        res.error = why
+                        res.truncated = True
+                        log.error("[%s/%s] %s", brand, platform, why)
+            elif platform == "Instagram":
+                self._ig_prompt_streak = 0
             # A post already in the sheet or the Reviewed ledger is never opened: opening it costs a
             # page load and 8-25 s of pacing to learn what main.py already knows. At 60 posts a
             # profile that is the difference between 19 targets a run and three.

@@ -1058,8 +1058,8 @@ def sweep_status_updates(report: dict, brands: List[dict]) -> List[dict]:
     for t in report.get("targets") or []:
         key = (t.get("brand"), t.get("platform"))
         err = str(t.get("error") or "")
-        if key not in handles or "signed" in err.lower():
-            continue
+        if key not in handles or "signed" in err.lower() or "login prompt" in err.lower():
+            continue                    # a login prompt says nothing about the account either (26 Nov 2026)
         opened = int(t.get("opened") or 0)
         if t.get("truncated") and not opened:
             continue                    # the run budget ended before anything of this account was judged
