@@ -1,13 +1,13 @@
 {
- "checked_at": "2026-11-25T19:53:23Z",
+ "checked_at": "2026-11-25T20:41:13Z",
  "platforms": [
   {
    "key": "instagram",
    "label": "Instagram",
    "state": "live",
-   "detail": "Signed in and reading posts: the sweep that finished 2026-11-25 18:49 UTC read 11 account(s) on Instagram.",
-   "links": 11,
-   "at": "2026-11-25T18:49:30Z",
+   "detail": "Signed in and reading posts: the sweep that finished 2026-11-25 20:35 UTC read 2 account(s) on Instagram.",
+   "links": 2,
+   "at": "2026-11-25T20:35:14Z",
    "carried": false
   },
   {
@@ -16,7 +16,7 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-25T19:53:38Z"
+   "at": "2026-11-25T20:41:29Z"
   },
   {
    "key": "threads",
@@ -54,7 +54,7 @@
  },
  "last_sweep": {
   "conclusion": "success",
-  "at": "2026-11-25T18:49:30Z",
+  "at": "2026-11-25T20:35:14Z",
   "title": "KKM complaint scraper"
  },
  "overall": "live"
