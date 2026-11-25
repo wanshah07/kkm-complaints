@@ -24,6 +24,7 @@ jobs:
       TZ: Asia/Kuala_Lumpur
       PYTHONUNBUFFERED: '1'
       PW_STORAGE_STATE_B64: ${{ secrets.PW_STORAGE_STATE_B64 }}
+      PW_STORAGE_STATE_IG_B64: ${{ secrets.PW_STORAGE_STATE_IG_B64 }}
       HANDLE: ${{ inputs.handle }}
     steps:
       - uses: actions/checkout@v5

@@ -47,6 +47,7 @@ jobs:
           TAGS: ${{ github.event.inputs.tags }}
           PROBE_POSTS: ${{ github.event.inputs.posts }}
           PW_STORAGE_STATE_B64: ${{ secrets.PW_STORAGE_STATE_B64 }}
+          PW_STORAGE_STATE_IG_B64: ${{ secrets.PW_STORAGE_STATE_IG_B64 }}
         run: |
           read -ra T <<< "$TAGS"
           python tools/ig_hashtag_probe.py "${T[@]}"

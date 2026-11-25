@@ -32,6 +32,7 @@ jobs:
         env:
           URLS: ${{ github.event.inputs.urls }}
           PW_STORAGE_STATE_B64: ${{ secrets.PW_STORAGE_STATE_B64 }}
+          PW_STORAGE_STATE_IG_B64: ${{ secrets.PW_STORAGE_STATE_IG_B64 }}
         run: |
           mapfile -t ARR < <(printf '%s\n' "$URLS" | sed '/^\s*$/d')
           python tools/ig_dom_probe.py "${ARR[@]}"

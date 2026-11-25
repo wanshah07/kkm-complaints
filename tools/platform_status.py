@@ -321,6 +321,10 @@ def main():
 
     result = {"checked_at": now_iso(), "platforms": [], "notes": []}
     raw_b64 = os.environ.get("PW_STORAGE_STATE_B64", "")
+    if (os.environ.get("PW_STORAGE_STATE_IG_B64") or "").strip():
+        # the Instagram secret is laid over the main state inside the scraper, so the days left must read the same mix
+        from session_state import combined_b64
+        raw_b64 = combined_b64(raw_b64, os.environ["PW_STORAGE_STATE_IG_B64"])
     shop_b64 = os.environ.get("PW_STORAGE_STATE_SHOP_B64", "")
 
     carried = carry_previous(args.carry) if args.carry else None

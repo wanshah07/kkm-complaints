@@ -147,6 +147,7 @@ jobs:
       GDRIVE_SA_JSON: ${{ secrets.GDRIVE_SA_JSON }}
       GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
       PW_STORAGE_STATE_B64: ${{ secrets.PW_STORAGE_STATE_B64 }}
+      PW_STORAGE_STATE_IG_B64: ${{ secrets.PW_STORAGE_STATE_IG_B64 }}
 
     steps:
       - name: Checkout
