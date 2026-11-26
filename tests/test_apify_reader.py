@@ -75,7 +75,7 @@ class Feed(unittest.TestCase):
         body = http.bodies[0]
         self.assertEqual(body["resultsType"], "posts")
         self.assertEqual(len(body["directUrls"]), 3)
-        self.assertEqual(body["resultsLimit"], 8)
+        self.assertEqual(body["resultsLimit"], 6)
         self.assertRegex(body["onlyPostsNewerThan"], r"^\d{4}-\d{2}-\d{2}$")
 
     def test_batches_are_fetched_only_as_the_sweep_reaches_them(self):
@@ -143,7 +143,7 @@ class Feed(unittest.TestCase):
                 mock.patch.object(ar.ApifyFeed, "check_plan", lambda self: None):
             f = ar.ApifyFeed.from_env(["A", "b"])
             self.assertEqual(f.plan, ["a", "b"])
-            self.assertEqual((f.per_profile, f.newer_than_days, f.batch), (8, 14, 20))
+            self.assertEqual((f.per_profile, f.newer_than_days, f.batch), (6, 3, 20))
         self.assertIsNone(ar.ApifyFeed.from_env([]))
 
 

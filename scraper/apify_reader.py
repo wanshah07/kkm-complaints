@@ -10,11 +10,11 @@ records (code, address, caption, date, owner, pictures). scraper.py turns them i
 embed (no login) or, failing that, from the picture Apify returned. EVERY failure here means "not served": the target goes down the old route
 (saved login, then public embed), so an Apify outage, a missing token, an exhausted plan or a refused account never stops a sweep.
 
-Cost control (the free plan is small): one run reads a BATCH of accounts (the start-up cost is shared), batches are fetched only as the sweep
+Cost control (the free plan is small; measured 26 Nov 2026: 8 posts of one account US$0.019, 4 posts US$0.008, about US$0.003 a post): one run reads a BATCH of accounts (the start-up cost is shared), batches are fetched only as the sweep
 reaches them (a sweep cut short by its time budget never paid for accounts it did not reach), each account is asked for at most
 APIFY_POSTS_PER_PROFILE posts newer than APIFY_NEWER_THAN_DAYS, and the sweep stops asking once it has spent APIFY_MAX_USD_PER_RUN or the
-month's plan is 90% used. Env: APIFY_TOKEN, APIFY_MODE (auto | off), APIFY_IG_ACTOR, APIFY_POSTS_PER_PROFILE (8), APIFY_NEWER_THAN_DAYS (14),
-APIFY_BATCH (20), APIFY_MAX_USD_PER_RUN (1.0), APIFY_RUN_TIMEOUT_S (600).
+month's plan is 90% used. Env: APIFY_TOKEN, APIFY_MODE (auto | off), APIFY_IG_ACTOR, APIFY_POSTS_PER_PROFILE (6), APIFY_NEWER_THAN_DAYS (3),
+APIFY_BATCH (20), APIFY_MAX_USD_PER_RUN (0.6), APIFY_RUN_TIMEOUT_S (600).
 """
 from __future__ import annotations
 
@@ -82,8 +82,8 @@ def handle_of_item(it: dict) -> str:
 class ApifyFeed:
     """Instagram accounts read through Apify, a batch at a time, only as the sweep reaches them."""
 
-    def __init__(self, token: str, plan: List[str], actor: str = DEFAULT_IG_ACTOR, per_profile: int = 8, newer_than_days: int = 14,
-                 batch: int = 20, max_usd: float = 1.0, run_timeout_s: int = 600, session: Optional[requests.Session] = None,
+    def __init__(self, token: str, plan: List[str], actor: str = DEFAULT_IG_ACTOR, per_profile: int = 6, newer_than_days: int = 3,
+                 batch: int = 20, max_usd: float = 0.6, run_timeout_s: int = 600, session: Optional[requests.Session] = None,
                  sleep: Callable[[float], None] = time.sleep, clock: Callable[[], float] = time.time):
         self.token = token
         self.actor = actor.replace("/", "~")
@@ -112,8 +112,8 @@ class ApifyFeed:
                 log.info("Apify: no APIFY_TOKEN, so Instagram is read the old way (saved login, then public embed)")
             return None
         feed = cls(tok, plan, actor=(os.getenv("APIFY_IG_ACTOR") or DEFAULT_IG_ACTOR).strip(),
-                   per_profile=int(_num("APIFY_POSTS_PER_PROFILE", 8)), newer_than_days=int(_num("APIFY_NEWER_THAN_DAYS", 14)),
-                   batch=int(_num("APIFY_BATCH", 20)), max_usd=_num("APIFY_MAX_USD_PER_RUN", 1.0),
+                   per_profile=int(_num("APIFY_POSTS_PER_PROFILE", 6)), newer_than_days=int(_num("APIFY_NEWER_THAN_DAYS", 3)),
+                   batch=int(_num("APIFY_BATCH", 20)), max_usd=_num("APIFY_MAX_USD_PER_RUN", 0.6),
                    run_timeout_s=int(_num("APIFY_RUN_TIMEOUT_S", 600)), **kw)
         feed.check_plan()
         return feed

@@ -664,15 +664,15 @@ How a sweep reads an Instagram account now:
 | Repository variable (all optional) | Default | What it does |
 |---|---|---|
 | `APIFY_MODE` | `auto` | `off` = never use Apify (the old behaviour) |
-| `APIFY_POSTS_PER_PROFILE` | 8 | posts asked for per account (every post returned is billed, known ones too) |
-| `APIFY_NEWER_THAN_DAYS` | 14 | only posts newer than this |
+| `APIFY_POSTS_PER_PROFILE` | 6 | posts asked for per account (every post returned is billed, known ones too) |
+| `APIFY_NEWER_THAN_DAYS` | 3 | only posts newer than this |
 | `APIFY_BATCH` | 20 | accounts per Apify run |
-| `APIFY_MAX_USD_PER_RUN` | 1.0 | the sweep stops asking Apify after this much; the rest is read the old way |
+| `APIFY_MAX_USD_PER_RUN` | 0.6 | the sweep stops asking Apify after this much; the rest is read the old way |
 | `APIFY_IG_ACTOR` | `apify/instagram-scraper` | the actor |
 
 The secret is `APIFY_TOKEN`. The dashboard strip has an **Apify** pill (live / degraded / down, with the month's usage), and Instagram shows **live**
 while Apify answers even if the saved login has ended. Check the token any time with the **Apify token check** workflow; **Apify probe** shows what an
-actor returns for one account. The free plan is small (US$10 a month cap, first probe 0.8 cents): watch the pill, and lower `APIFY_POSTS_PER_PROFILE`
+actor returns for one account. Measured cost: about US$0.003 a post (8 posts of one account: 1.9 cents). The free plan's cap is US$10 a month, so a daily sweep of the 45 brand accounts at 3 days / 6 posts is about US$0.3 a day, near the cap; a bigger plan lets you widen it.  watch the pill, and lower `APIFY_POSTS_PER_PROFILE`
 or `APIFY_NEWER_THAN_DAYS` before raising the cap. Not yet moved to Apify: Instagram hashtag runs, Threads, TikTok accounts (they still use Playwright).
 
 ### Making the saved Instagram login last (26 Nov 2026)
