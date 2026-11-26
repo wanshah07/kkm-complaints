@@ -1,0 +1,54 @@
+# Is the Apify token live? (Wan, 26 Nov 2026: "check APIFY_TOKEN and make sure it's live"). Manual and read-only: asks Apify's API whether
+# the secret is accepted and how much of the plan is used. It prints ONLY: whether the secret is set, the HTTP status, the plan name and the
+# month's usage against its limit. Not one character of the token, and no username or e-mail: the logs of a public repository are public.
+name: Apify token check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+    steps:
+      - name: Ask Apify
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request, urllib.error
+          tok = (os.environ.get("APIFY_TOKEN") or "").strip()
+          if not tok:
+              print("RESULT not_set  the secret APIFY_TOKEN is empty or missing in this repository")
+              raise SystemExit(0)
+          print("secret APIFY_TOKEN is set")
+          def get(path):
+              req = urllib.request.Request("https://api.apify.com/v2/" + path, headers={"Authorization": "Bearer " + tok})
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as r:
+                      return r.status, json.load(r)
+              except urllib.error.HTTPError as e:
+                  return e.code, {"error": (e.read() or b"")[:200].decode("utf-8", "replace")}
+              except Exception as e:
+                  return 0, {"error": type(e).__name__}
+          st, me = get("users/me")
+          if st != 200:
+              print(f"RESULT rejected  users/me answered HTTP {st}")
+              raise SystemExit(0)
+          d = me.get("data", {})
+          plan = d.get("plan")
+          print(f"RESULT live  users/me HTTP 200; plan={(plan.get('id') if isinstance(plan, dict) else plan) or '?'}")
+          st2, lim = get("users/me/limits")
+          if st2 == 200:
+              ld = lim.get("data", {})
+              cur = ld.get("current") or {}
+              lm = ld.get("limits") or {}
+              print(f"usage this cycle: monthlyUsageUsd={cur.get('monthlyUsageUsd')} of maxMonthlyUsageUsd={lm.get('maxMonthlyUsageUsd')}; "
+                    f"activeActorJobCount={cur.get('activeActorJobCount')} of {lm.get('maxConcurrentActorJobs')}")
+              print("cycle ends:", (ld.get("monthlyUsageCycle") or {}).get("endAt"))
+          else:
+              print(f"limits endpoint HTTP {st2}")
+          PY
