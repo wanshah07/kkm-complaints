@@ -1,5 +1,5 @@
 {
- "checked_at": "2026-11-26T14:38:36Z",
+ "checked_at": "2026-11-26T17:36:19Z",
  "platforms": [
   {
    "key": "instagram",
@@ -7,7 +7,7 @@
    "state": "live",
    "detail": "Read through Apify, so no login of ours is needed. The saved login (the fallback) is not working: No working login (Instagram ended the saved login). Still reading the newest 6 posts of each account through Instagram's public embed; older posts need the session recorded again (",
    "links": 6,
-   "at": "2026-11-26T14:38:49Z"
+   "at": "2026-11-26T17:36:31Z"
   },
   {
    "key": "facebook",
@@ -15,7 +15,7 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-26T14:39:11Z"
+   "at": "2026-11-26T17:36:54Z"
   },
   {
    "key": "threads",
@@ -23,7 +23,7 @@
    "state": "live",
    "detail": "Signed in and reading posts normally.",
    "links": 40,
-   "at": "2026-11-26T14:40:32Z"
+   "at": "2026-11-26T17:38:10Z"
   },
   {
    "key": "tiktok",
@@ -38,23 +38,23 @@
    "label": "TikTok accounts",
    "links": null,
    "state": "live",
-   "at": "2026-11-26T04:00:35Z",
-   "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-26 12:00 MYT). Only an account's ten newest are visible at a time."
+   "at": "2026-11-26T17:35:27Z",
+   "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-27 01:35 MYT). Only an account's ten newest are visible at a time."
   },
   {
    "key": "apify",
    "label": "Apify",
    "links": null,
    "state": "live",
-   "at": "2026-11-26T14:40:32Z",
+   "at": "2026-11-26T17:38:10Z",
    "detail": "Apify is the main Instagram reader, no login of ours needed (0.03 of 10.00 USD used this month). Playwright is only the fallback."
   }
  ],
  "notes": [],
  "session_days_left": {
-  "instagram": 364.6,
+  "instagram": 364.5,
   "facebook": null,
-  "threads": 364.6
+  "threads": 364.5
  },
  "last_sweep": {
   "conclusion": "success",
