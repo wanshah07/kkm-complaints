@@ -16,6 +16,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
+import model_fallback
 from npra_rules import RULEBOOK, acceptable_hints, offline_verdict, prescreen
 
 log = logging.getLogger("kkm.evaluator")
@@ -303,11 +304,22 @@ def _image_block_anthropic(path: str) -> Optional[dict]:
     return {"type": "image", "source": {"type": "base64", "media_type": mime, "data": data}}
 
 
+# Used only when ANTHROPIC_MODEL_FALLBACKS is not set. Cheapest first; an id that does not exist just answers 404 and is skipped.
+ANTHROPIC_DEFAULT_FALLBACKS = ("claude-haiku-5-5", "claude-sonnet-4-6", "claude-sonnet-5-5")
+
+
 def _review_anthropic(inp: ReviewInput) -> dict:
+    """One review, on the first Anthropic model that is on (ANTHROPIC_MODEL, then ANTHROPIC_MODEL_FALLBACKS), see model_fallback."""
     import anthropic
 
     client = anthropic.Anthropic()
-    model = env_str("ANTHROPIC_MODEL", "claude-haiku-4-5")
+    primary = env_str("ANTHROPIC_MODEL", "claude-haiku-4-5")
+    models = model_fallback.chain(primary, env_str("ANTHROPIC_MODEL_FALLBACKS"), ANTHROPIC_DEFAULT_FALLBACKS)
+    data = model_fallback.run("anthropic", models, lambda m: _anthropic_call(client, anthropic, inp, m))
+    return data
+
+
+def _anthropic_call(client, anthropic, inp: ReviewInput, model: str) -> dict:
     content = []
     if inp.screenshot_path and env_str("LLM_USE_SCREENSHOT", "1") == "1":
         blk = _image_block_anthropic(inp.screenshot_path)
@@ -421,11 +433,21 @@ def _review_openai(inp: ReviewInput, alt: bool = False) -> dict:
     if alt:
         base_url = env_str("OPENAI_ALT_BASE_URL")
         client = OpenAI(base_url=base_url, api_key=env_str("OPENAI_ALT_API_KEY"))
-        model = env_str("OPENAI_ALT_MODEL", env_str("OPENAI_MODEL", "gpt-4.1"))
+        primary = env_str("OPENAI_ALT_MODEL", env_str("OPENAI_MODEL", "gpt-4.1"))
+        fallbacks = env_str("OPENAI_ALT_MODEL_FALLBACKS")
     else:
         base_url = env_str("OPENAI_BASE_URL")
         client = OpenAI(base_url=base_url) if base_url else OpenAI()
-        model = env_str("OPENAI_MODEL", "gpt-4.1")
+        primary = env_str("OPENAI_MODEL", "gpt-4.1")
+        fallbacks = env_str("OPENAI_MODEL_FALLBACKS")
+    # The first model that is on answers: OPENAI_MODEL, then OPENAI_MODEL_FALLBACKS (OPENAI_ALT_* for the second gateway).
+    # No default fallbacks: model names are the gateway's own and cannot be guessed. See model_fallback.
+    models = model_fallback.chain(primary, fallbacks)
+    provider = "openai-alt" if alt else f"openai@{base_url or 'default'}"
+    return model_fallback.run(provider, models, lambda m: _openai_call(client, inp, alt, base_url, m))
+
+
+def _openai_call(client, inp: ReviewInput, alt: bool, base_url: str, model: str) -> dict:
     where = f" via {base_url}" if base_url else ""
 
     text_part = {"type": "text", "text": _user_prompt(inp) + "\n\n" + _SCHEMA_HINT}
@@ -455,6 +477,8 @@ def _review_openai(inp: ReviewInput, alt: bool = False) -> dict:
                 resp = client.chat.completions.create(**kwargs)
                 break
             except Exception as e:
+                if model_fallback.is_off(e):
+                    raise       # the model itself is off, not the request shape: let the chain move on
                 last_err = e
                 log.info("reviewer%s: %s rejected %s (%s)", where, model,
                          (mode or {}).get("type", "plain request"), str(e)[:160])

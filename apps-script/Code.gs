@@ -874,7 +874,8 @@ function draftReview_(body) {
   if (oaKey) {
     var gw = draftViaGateway_(oaKey, parts.join('\n'), b64, String(body.imageMime || 'image/png'));
     out = gw.text;
-    if (gw.imageDropped) notes = 'The gateway would not take the screenshot, so this draft was read from the pasted text alone; claims on the artwork were not seen. ';
+    if (gw.fellBackTo) notes += 'Model fallback: the first model was off, so ' + gw.fellBackTo + ' answered. ';
+    if (gw.imageDropped) notes += 'The gateway would not take the screenshot, so this draft was read from the pasted text alone; claims on the artwork were not seen. ';
   } else {
     var content = [];
     if (b64) {
@@ -885,18 +886,30 @@ function draftReview_(body) {
     }
     content.push({ type: 'text', text: parts.join('\n') });
 
-    var res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
-      method: 'post',
-      contentType: 'application/json',
-      muteHttpExceptions: true,
-      headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-      payload: JSON.stringify({
-        model: PROPS.getProperty('ANTHROPIC_MODEL') || 'claude-haiku-4-5',
-        max_tokens: 2000,
-        system: NPRA_SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: content }]
-      })
-    });
+    // ANTHROPIC_MODEL first, then ANTHROPIC_MODEL_FALLBACKS (Script Property, comma list; default below). A model that is off
+    // (404, 429, 5xx, "model not found") hands over to the next one; a 401 is the key and stops at once.
+    var aModels = modelChain_(PROPS.getProperty('ANTHROPIC_MODEL') || 'claude-haiku-4-5', PROPS.getProperty('ANTHROPIC_MODEL_FALLBACKS'),
+                              ['claude-haiku-5-5', 'claude-sonnet-4-6', 'claude-sonnet-5-5']);
+    var res = null;
+    for (var am = 0; am < aModels.length; am++) {
+      res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+        method: 'post',
+        contentType: 'application/json',
+        muteHttpExceptions: true,
+        headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+        payload: JSON.stringify({
+          model: aModels[am],
+          max_tokens: 2000,
+          system: NPRA_SYSTEM_PROMPT,
+          messages: [{ role: 'user', content: content }]
+        })
+      });
+      if (res.getResponseCode() === 200) {
+        if (am > 0) notes += 'Model fallback: the first model was off, so ' + aModels[am] + ' answered. ';
+        break;
+      }
+      if (!modelOffResponse_(res.getResponseCode(), res.getContentText()) || am === aModels.length - 1) break;
+    }
     if (res.getResponseCode() !== 200) {
       throw new Error('Reviewer API ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 300));
     }
@@ -926,9 +939,45 @@ function draftReview_(body) {
 // rejected, so it retries plain (no response_format) and then without the screenshot.
 // A timeout or 5xx is not retried: each call can be slow and Apps Script has a hard limit.
 function draftViaGateway_(key, userText, b64, mime) {
+  // 26 Nov 2026 (Wan: change model automatically when the current one is off): OPENAI_MODEL first, then the comma list in the
+  // Script Property OPENAI_MODEL_FALLBACKS. A model that is off (404, 429, 5xx, "model not found") hands over to the next one.
+  var models = modelChain_(reviewerConfig_().model, PROPS.getProperty('OPENAI_MODEL_FALLBACKS'), []);
+  var lastOff = null;
+  for (var m = 0; m < models.length; m++) {
+    try {
+      var r = draftViaGatewayModel_(key, userText, b64, mime, models[m]);
+      if (m > 0) r.fellBackTo = models[m];
+      return r;
+    } catch (e) {
+      if (!e || !e.modelOff) throw e;
+      lastOff = e;
+    }
+  }
+  throw lastOff;
+}
+
+// [first, ...fallbacks] with blanks and repeats dropped; `defaults` is used only when the property is empty.
+function modelChain_(primary, fallbacksProp, defaults) {
+  var raw = String(fallbacksProp || '').split(/[\s,;]+/).filter(function (x) { return x; });
+  var list = [primary].concat(raw.length ? raw : defaults), out = [];
+  for (var i = 0; i < list.length; i++) {
+    var v = String(list[i] || '').trim();
+    if (v && out.indexOf(v) < 0) out.push(v);
+  }
+  return out;
+}
+
+// True for the answers that mean "this model is off" (not a bad key, not a bad request): 404, 429, 5xx, or a 400/403 that says
+// the model does not exist, is deprecated or not allowed.
+function modelOffResponse_(code, txt) {
+  if (code === 404 || code === 429 || code >= 500) return true;
+  return (code === 400 || code === 403) &&
+    /model[_ ]?not[_ ]?found|does not exist|deprecated|retired|unknown model|invalid model|no available (channel|provider)|not (available|supported)/i.test(String(txt || ''));
+}
+
+function draftViaGatewayModel_(key, userText, b64, mime, model) {
   var cfg = reviewerConfig_();
   var base = cfg.baseUrl;
-  var model = cfg.model;
   var withImages = b64 ? [true, false] : [false];
   var lastErr = '';
   for (var i = 0; i < withImages.length; i++) {
@@ -961,6 +1010,11 @@ function draftViaGateway_(key, userText, b64, mime) {
         return { text: String((msg && msg.content) || '').trim(), imageDropped: !!b64 && !withImages[i] };
       }
       lastErr = code + ': ' + txt.slice(0, 200);
+      if (modelOffResponse_(code, txt)) {
+        var off = new Error('Reviewer gateway ' + lastErr + ' (model ' + model + ' is off)');
+        off.modelOff = true;
+        throw off;
+      }
       if (code === 401 || code === 403) throw new Error('Reviewer gateway ' + lastErr + ' (check the key in the Admin panel)');
       if (code < 400 || code >= 500) throw new Error('Reviewer gateway ' + lastErr);
     }

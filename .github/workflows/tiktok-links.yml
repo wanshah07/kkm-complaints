@@ -71,8 +71,10 @@ jobs:
       LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'anthropic' }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL || 'claude-haiku-4-5' }}
+      ANTHROPIC_MODEL_FALLBACKS: ${{ vars.ANTHROPIC_MODEL_FALLBACKS }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4.1' }}
+      OPENAI_MODEL_FALLBACKS: ${{ vars.OPENAI_MODEL_FALLBACKS }}
       OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
       LLM_USE_SCREENSHOT: ${{ vars.LLM_USE_SCREENSHOT || '1' }}
       SCREENSHOT_MODE: ${{ vars.SCREENSHOT_MODE || 'apps_script' }}
