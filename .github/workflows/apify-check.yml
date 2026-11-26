@@ -1,0 +1,58 @@
+name: Apify check
+
+# Is the Apify token alive, and how much of the monthly cap is spent? (Wan, 26 Nov 2026: "make sure the Apify key alive".)
+# Reads the secret APIFY_TOKEN and makes TWO read-only calls (/v2/users/me and /v2/users/me/limits). It runs no actor, spends no
+# credit, posts nothing and prints neither the token nor the account's e-mail. Run it from the Actions tab (Run workflow).
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/apify-check]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ask Apify
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys, urllib.error, urllib.request
+
+          tok = os.environ.get("APIFY_TOKEN", "").strip()
+          if not tok:
+              print("APIFY_TOKEN: NOT SET in this repository's secrets")
+              sys.exit(1)
+          print(f"APIFY_TOKEN: set ({len(tok)} characters)")
+
+          def get(path):
+              req = urllib.request.Request("https://api.apify.com" + path,
+                                           headers={"Authorization": "Bearer " + tok, "User-Agent": "kkm-apify-check"})
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as r:
+                      return r.status, json.load(r)
+              except urllib.error.HTTPError as e:
+                  return e.code, {}
+              except Exception as e:  # noqa: BLE001
+                  return 0, {"error": f"{type(e).__name__}: {e}"}
+
+          code, me = get("/v2/users/me")
+          print(f"/v2/users/me -> HTTP {code}")
+          if code != 200:
+              print("RESULT: the token is NOT alive" if code in (401, 403) else f"RESULT: could not read the account ({me})")
+              sys.exit(1)
+          d = me.get("data") or {}
+          print("username:", d.get("username"), "| plan:", (d.get("plan") or {}).get("id"))
+          code, lim = get("/v2/users/me/limits")
+          print(f"/v2/users/me/limits -> HTTP {code}")
+          d = lim.get("data") or {}
+          cap = (d.get("limits") or {}).get("maxMonthlyUsageUsd")
+          used = (d.get("current") or {}).get("monthlyUsageUsd")
+          print("monthly usage so far (USD):", used)
+          print("monthly usage cap on the account (USD):", cap)
+          print("RESULT: the token is alive" + ("" if cap else "; NO monthly cap is set on the account: set one in Apify Console"))
+          PY
