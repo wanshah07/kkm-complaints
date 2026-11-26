@@ -1,14 +1,13 @@
 {
- "checked_at": "2026-11-26T04:01:32Z",
+ "checked_at": "2026-11-26T06:05:05Z",
  "platforms": [
   {
    "key": "instagram",
    "label": "Instagram",
-   "state": "degraded",
-   "detail": "No working login (Instagram ended the saved login). Still reading the newest 6 posts of each account through Instagram's public embed; older posts need the session recorded again (guide section 4).",
-   "links": 6,
-   "at": "2026-11-26T01:52:08Z",
-   "carried": true
+   "state": "live",
+   "detail": "Signed in and reading posts normally.",
+   "links": 40,
+   "at": "2026-11-26T06:05:30Z"
   },
   {
    "key": "facebook",
@@ -16,16 +15,15 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-26T04:01:48Z"
+   "at": "2026-11-26T06:05:54Z"
   },
   {
    "key": "threads",
    "label": "Threads",
-   "state": "degraded",
-   "detail": "No working login (The saved login is no longer held after loading the page). Still reading the newest 9 posts of each account as any visitor may; older posts need the session recorded again (guide section 4).",
-   "links": 9,
-   "at": "2026-11-26T01:53:20Z",
-   "carried": true
+   "state": "live",
+   "detail": "Signed in and reading posts normally.",
+   "links": 40,
+   "at": "2026-11-26T06:07:08Z"
   },
   {
    "key": "tiktok",
@@ -44,18 +42,16 @@
    "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-26 04:00). Only an account's ten newest are visible at a time."
   }
  ],
- "notes": [
-  "Instagram and Threads were not probed: a sweep or an account check was using the login."
- ],
+ "notes": [],
  "session_days_left": {
-  "instagram": 364.4,
+  "instagram": 365.0,
   "facebook": null,
-  "threads": 364.4
+  "threads": 365.0
  },
  "last_sweep": {
   "conclusion": "success",
-  "at": "2026-11-25T20:35:14Z",
+  "at": "2026-11-26T04:26:17Z",
   "title": "KKM complaint scraper"
  },
- "overall": "degraded"
+ "overall": "live"
 }
