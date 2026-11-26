@@ -123,16 +123,36 @@ if __name__ == "__main__":
 class RealSdkErrors(unittest.TestCase):
     """The classification is only worth anything if it reads the exceptions the SDKs really raise."""
 
+    class Req:                      # what the SDKs read off an httpx request when they build an error
+        headers, url, method = {}, "https://example.test/v1", "POST"
+
     class Resp:
         def __init__(self, c):
-            self.status_code, self.headers, self.request = c, {}, object()
+            self.status_code, self.headers, self.request = c, {}, RealSdkErrors.Req()
+
+    @classmethod
+    def response(cls, code):
+        """A real httpx response when httpx is installed (CI has it), else the stub: the SDKs read headers and the request off it."""
+        try:
+            import httpx
+            return httpx.Response(code, request=httpx.Request("POST", "https://example.test/v1"))
+        except ImportError:
+            return cls.Resp(code)
+
+    @classmethod
+    def request(cls):
+        try:
+            import httpx
+            return httpx.Request("POST", "https://example.test/v1")
+        except ImportError:
+            return cls.Req()
 
     def test_anthropic_and_openai(self):
         try:
             import anthropic, openai
         except ImportError:
             self.skipTest("SDKs not installed")
-        R = self.Resp
+        R = self.response
         for cls, code, msg, want in [
                 (anthropic.NotFoundError, 404, "model: claude-x", "permanent"),
                 (anthropic.InternalServerError, 529, "Overloaded", "transient"),
@@ -142,5 +162,5 @@ class RealSdkErrors(unittest.TestCase):
                 (openai.NotFoundError, 404, "The model `kimi-x` does not exist", "permanent"),
                 (openai.AuthenticationError, 401, "bad key", None)]:
             self.assertEqual(mf.is_off(cls(msg, response=R(code), body=None)), want, f"{cls.__name__} {code}")
-        self.assertEqual(mf.is_off(anthropic.APIConnectionError(request=object())), "transient")
-        self.assertEqual(mf.is_off(openai.APITimeoutError(request=object())), "transient")
+        self.assertEqual(mf.is_off(anthropic.APIConnectionError(request=self.request())), "transient")
+        self.assertEqual(mf.is_off(openai.APITimeoutError(request=self.request())), "transient")
