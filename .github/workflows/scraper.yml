@@ -99,6 +99,10 @@ on:
         description: 'Only review NEW posts whose text contains this word (e.g. skintific: matches @skintific.my, #skintific, the plain word). Known/ledgered posts are skipped as always; non-matching new posts are not reviewed and not ledgered.'
         type: string
         default: ''
+      ignore_rest:
+        description: 'Run even if the saved Instagram login has not rested (90 min since its last use) or has used its 24-hour budget (200 min). Only for a reason: this is what wears the login out.'
+        type: boolean
+        default: false
       compare:
         description: 'Review every post with BOTH reviewers and print where they disagree (never pushes)'
         type: boolean
@@ -119,7 +123,35 @@ permissions:
   contents: read
 
 jobs:
+  rest:
+    # Gives the saved Instagram login a rest between runs and a daily budget (tools/login_rest.py, 26 Nov 2026).
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      ok: ${{ steps.rest.outputs.ok }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: rest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          FORCE: ${{ github.event.inputs.ignore_rest }}
+          BYPASS: ${{ github.event.inputs.selftest }}
+          IG_REST_MINUTES: ${{ vars.IG_REST_MINUTES }}
+          IG_DAILY_MINUTES: ${{ vars.IG_DAILY_MINUTES }}
+          IG_REST_GUARD: ${{ vars.IG_REST_GUARD }}
+          IG_LOGIN_SINCE: ${{ vars.IG_LOGIN_SINCE }}
+          PW_STORAGE_STATE_IG_B64: ${{ secrets.PW_STORAGE_STATE_IG_B64 }}
+          PW_STORAGE_STATE_B64: ${{ secrets.PW_STORAGE_STATE_B64 }}
+        run: python3 tools/login_rest.py
+
   scrape:
+    needs: rest
+    if: needs.rest.outputs.ok == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 180  # paced runs are deliberately slow; ~3 min per target, see run.pause_* in config.yaml
     env:

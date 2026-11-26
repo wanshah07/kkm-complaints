@@ -15,6 +15,10 @@ on:
     - cron: '13 20 * * *'
   workflow_dispatch:
     inputs:
+      ignore_rest:
+        description: 'Run even if the saved Instagram login has not rested or has used its 24-hour budget (tools/login_rest.py)'
+        type: boolean
+        default: false
       max_minutes:
         description: 'Stop starting new accounts after this many minutes (job limit is 175)'
         type: string
@@ -52,7 +56,36 @@ permissions:
   contents: read
 
 jobs:
+  rest:
+    # Gives the saved Instagram login a rest between runs and a daily budget (tools/login_rest.py, 26 Nov 2026).
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      ok: ${{ steps.rest.outputs.ok }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: rest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          FORCE: ${{ github.event.inputs.ignore_rest }}
+          BYPASS: ''
+          REST: 'off'      # the account check follows the daily sweep by design; only the 24-hour budget applies to it
+          IG_REST_MINUTES: ${{ vars.IG_REST_MINUTES }}
+          IG_DAILY_MINUTES: ${{ vars.IG_DAILY_MINUTES }}
+          IG_REST_GUARD: ${{ vars.IG_REST_GUARD }}
+          IG_LOGIN_SINCE: ${{ vars.IG_LOGIN_SINCE }}
+          PW_STORAGE_STATE_IG_B64: ${{ secrets.PW_STORAGE_STATE_IG_B64 }}
+          PW_STORAGE_STATE_B64: ${{ secrets.PW_STORAGE_STATE_B64 }}
+        run: python3 tools/login_rest.py
+
   check:
+    needs: rest
+    if: needs.rest.outputs.ok == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 175
     env:

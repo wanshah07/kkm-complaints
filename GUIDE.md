@@ -648,6 +648,30 @@ and the run log says `model X on anthropic is off ... trying the next model`.
 
 How it behaves: a model that does not exist or is retired is skipped for the rest of the run (6 hours); one that is only busy is skipped for 5 minutes and then tried again, so the first choice comes back by itself. A bad API key (401) is NOT treated as a model problem, because every model would fail the same way. If every model in the chain is off, the run behaves as it always did: the post is not filed or ledgered, and the row says `LLM failed`. Cheapest first is the right order, because the later ones cost more per post.
 
+### Making the saved Instagram login last (26 Nov 2026)
+
+Instagram ended the recorded login after about 8, 16 and 5.5 hours of back-to-back sweeps, and once kept the cookie but showed a login
+prompt on every profile for 75 minutes. Nobody outside Instagram can say which signal does it, so the system now limits what it controls:
+how much and how evenly the login is used (`tools/login_rest.py`, the `rest` job of `scraper.yml` and `account-check.yml`).
+
+| Rule | Default | Variable |
+|---|---|---|
+| Rest between runs that use the login | 90 minutes after the last one ended | `IG_REST_MINUTES` |
+| Budget in any rolling 24 hours | 200 minutes (two full sweeps) | `IG_DAILY_MINUTES` |
+| Uses of an older login do not count | not set | `IG_LOGIN_SINCE`, e.g. `2026-11-26T06:00:00Z`: set it each time you record the login again |
+| Turn the whole check off | on | `IG_REST_GUARD` = `off` |
+
+A scheduled run that breaks a rule is skipped and says why and when it may run again. A manual run is not started either, unless you tick
+**ignore_rest**, so you can always override it. The daily account check is held to the budget only (it follows the sweep by design). A run
+under 3 minutes, and a selftest, do not count. Hashtag runs count as sweeps.
+
+Also stop the login being worn out by what the scraper can see: three login prompts in a row end the Instagram part of a run at once
+(PR #50), so a throttled login is not hammered for 70 minutes.
+
+What this cannot fix: the sweeps run on GitHub's data-centre addresses, which change every run, while the login was recorded on your own
+connection. Instagram may dislike that more than anything in this table. The only real fix is a self-hosted runner on a machine with a fixed
+home or office address.
+
 ### Using another provider, or a gateway
 
 Set the **variable** `LLM_PROVIDER` to `openai` and the scraper uses the OpenAI-compatible path instead. That path also speaks to any gateway with a `/v1/chat/completions` endpoint — rootsys, OpenRouter, a local server — which is how GLM, Kimi, DeepSeek and MiniMax are reached:
