@@ -20,7 +20,7 @@ It prints one line per platform and always exits 0, so a down platform never hid
 the dashboard is where it shows.
 """
 import argparse, base64, gzip, json, os, re, subprocess, sys, time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "scraper"))
@@ -32,6 +32,19 @@ PROBES = [
     ("facebook", "Facebook", "Facebook", "cetaphilmalaysia", 1),
     ("threads", "Threads", "Threads", "dr.waninuuha", 25),
 ]
+
+
+def myt(iso):
+    """'2026-11-26 20:52 MYT' for an ISO time the status files hold in UTC. Malaysia has no daylight saving, so a fixed +8 is exact.
+    The status text used to print UTC with no label ('last run 2026-11-26 12:52'), which read as Malaysia time and looked 8 hours behind
+    (Wan, 26 Nov 2026: "fix clock ... follow local device clock or MYT"). A string that cannot be read is returned as it came."""
+    try:
+        t = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=timezone.utc)
+        return (t + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M MYT")
+    except (ValueError, TypeError):
+        return str(iso or "")[:16].replace("T", " ")
 
 
 def now_iso():
@@ -244,14 +257,14 @@ def apply_sweep_evidence(carried, found):
             out.append(c)
             continue
         ev, run_at = hit
-        when = run_at[:16].replace("T", " ")
+        when = myt(run_at)
         q = dict(c)
         if ev["signed_out"]:
             q.update(state="down", at=run_at, carried=False, links=None,
-                     detail="Instagram ended the saved login during the sweep that finished %s UTC. Record the session again (guide section 4)." % when)
+                     detail="Instagram ended the saved login during the sweep that finished %s. Record the session again (guide section 4)." % when)
         elif ev["ok"] >= 1:
             q.update(state="live", at=run_at, carried=False, links=ev["ok"],
-                     detail="Signed in and reading posts: the sweep that finished %s UTC read %d account(s) on %s." % (when, ev["ok"], c.get("label", "")))
+                     detail="Signed in and reading posts: the sweep that finished %s read %d account(s) on %s." % (when, ev["ok"], c.get("label", "")))
         out.append(q)
     return out
 
@@ -402,7 +415,7 @@ def main():
           "detail": "Works on links pasted into the dashboard; the sweep does not read TikTok accounts."}
     if tk.get("conclusion") == "success":
         tt["state"] = "live"
-        tt["detail"] = "The link checker is running (last run %s). Works on links you paste into the Links tab." % tk.get("at", "")[:16].replace("T", " ")
+        tt["detail"] = "The link checker is running (last run %s). Works on links you paste into the Links tab." % myt(tk.get("at", ""))
     elif tk.get("conclusion"):
         tt["state"] = "down"
         tt["detail"] = "The link checker's last run did not succeed (%s)." % tk.get("conclusion")
@@ -423,7 +436,7 @@ def main():
             "at": ta.get("at", ""),
             "detail": ("New videos of the accounts in the Targets tab's TikTok column are found and reviewed "
                        "automatically (last run %s). Only an account's ten newest are visible at a time."
-                       % ta.get("at", "")[:16].replace("T", " ")) if ok else
+                       % myt(ta.get("at", ""))) if ok else
                       ("The automatic TikTok discovery's last run did not succeed (%s). TikTok may have changed its "
                        "embed page, or a video hit a login wall; pasted links still work." % ta.get("conclusion"))})
 
