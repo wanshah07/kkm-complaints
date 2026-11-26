@@ -183,6 +183,13 @@ jobs:
       GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
       PW_STORAGE_STATE_B64: ${{ secrets.PW_STORAGE_STATE_B64 }}
       PW_STORAGE_STATE_IG_B64: ${{ secrets.PW_STORAGE_STATE_IG_B64 }}
+      APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+      APIFY_MODE: ${{ vars.APIFY_MODE }}
+      APIFY_IG_ACTOR: ${{ vars.APIFY_IG_ACTOR }}
+      APIFY_POSTS_PER_PROFILE: ${{ vars.APIFY_POSTS_PER_PROFILE }}
+      APIFY_NEWER_THAN_DAYS: ${{ vars.APIFY_NEWER_THAN_DAYS }}
+      APIFY_BATCH: ${{ vars.APIFY_BATCH }}
+      APIFY_MAX_USD_PER_RUN: ${{ vars.APIFY_MAX_USD_PER_RUN }}
 
     steps:
       - name: Checkout

@@ -648,6 +648,33 @@ and the run log says `model X on anthropic is off ... trying the next model`.
 
 How it behaves: a model that does not exist or is retired is skipped for the rest of the run (6 hours); one that is only busy is skipped for 5 minutes and then tried again, so the first choice comes back by itself. A bad API key (401) is NOT treated as a model problem, because every model would fail the same way. If every model in the chain is off, the run behaves as it always did: the post is not filed or ledgered, and the row says `LLM failed`. Cheapest first is the right order, because the later ones cost more per post.
 
+### Apify reads Instagram first, Playwright is the fallback (26 Nov 2026)
+
+Wan, 26 Nov 2026: *"jadikan APIFY main dan playwright as fallback"*. The saved Instagram login kept dying (about 8, 16 and 5.5 hours, and on 26 Nov
+about 15 minutes after it was recorded, because Instagram does not like a login made at home being used from GitHub's servers). Apify's Instagram
+scraper needs no login of ours, so it now reads Instagram FIRST (`scraper/apify_reader.py`, actor `apify/instagram-scraper`).
+
+How a sweep reads an Instagram account now:
+1. **Apify** gives the account's newest posts (caption, date, owner, pictures): one run reads a batch of 20 accounts, fetched only as the sweep
+   reaches them. In the first probe it answered in 32 seconds for US$0.008 and returned a post 2 hours old.
+2. The **evidence picture** is the post's public embed photographed by Playwright (no login), else the picture Apify returned. The Remarks say which.
+3. Anything Apify does not serve (no token, plan nearly spent, run failed, two failed runs in a row, this run's budget spent) is read **the old way**:
+   the saved login, then the public embed. So an Apify outage never stops a sweep, and a sweep Apify served does not touch the login at all.
+
+| Repository variable (all optional) | Default | What it does |
+|---|---|---|
+| `APIFY_MODE` | `auto` | `off` = never use Apify (the old behaviour) |
+| `APIFY_POSTS_PER_PROFILE` | 8 | posts asked for per account (every post returned is billed, known ones too) |
+| `APIFY_NEWER_THAN_DAYS` | 14 | only posts newer than this |
+| `APIFY_BATCH` | 20 | accounts per Apify run |
+| `APIFY_MAX_USD_PER_RUN` | 1.0 | the sweep stops asking Apify after this much; the rest is read the old way |
+| `APIFY_IG_ACTOR` | `apify/instagram-scraper` | the actor |
+
+The secret is `APIFY_TOKEN`. The dashboard strip has an **Apify** pill (live / degraded / down, with the month's usage), and Instagram shows **live**
+while Apify answers even if the saved login has ended. Check the token any time with the **Apify token check** workflow; **Apify probe** shows what an
+actor returns for one account. The free plan is small (US$10 a month cap, first probe 0.8 cents): watch the pill, and lower `APIFY_POSTS_PER_PROFILE`
+or `APIFY_NEWER_THAN_DAYS` before raising the cap. Not yet moved to Apify: Instagram hashtag runs, Threads, TikTok accounts (they still use Playwright).
+
 ### Making the saved Instagram login last (26 Nov 2026)
 
 Instagram ended the recorded login after about 8, 16 and 5.5 hours of back-to-back sweeps, and once kept the cookie but showed a login

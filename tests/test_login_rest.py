@@ -41,7 +41,7 @@ class Rest(unittest.TestCase):
         self.assertTrue(self.d([run(150, 100)], event="workflow_dispatch", force=True)["ok"])
 
     def test_short_runs_and_old_runs_do_not_count(self):
-        self.assertTrue(self.d([run(10, 2)])["ok"])                       # a 2-minute run (selftest, or a skipped one)
+        self.assertTrue(self.d([run(30, 12)])["ok"])                      # a 12-minute run (selftest, a skipped one, or a sweep Apify served)
         self.assertTrue(self.d([run(30 * 60, 100)])["ok"])                # 30 hours ago
 
     def test_account_check_is_held_to_the_budget_only(self):

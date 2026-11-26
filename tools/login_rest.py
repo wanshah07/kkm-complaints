@@ -14,8 +14,8 @@ can say which signal does it. What we control is how much and how evenly the log
              100-minute sweeps, or one sweep and the daily account check and a short hashtag run).
 
 "Runs that used it" = the sweep (scraper.yml, hashtag runs included), the account check, and the hashtag probe: the workflows
-that share the concurrency group kkm-complaint-scraper. A run shorter than 3 minutes is ignored (a selftest, or a run this very
-guard skipped, which must not restart the rest).
+that share the concurrency group kkm-complaint-scraper. A run shorter than 15 minutes is ignored (a selftest, a run this very guard skipped,
+which must not restart the rest, or a sweep Apify served, which takes minutes and hardly touches the login).
 
 The daily account check (REST=off) is held only to the budget, not the rest: it follows the daily sweep by design and only
 opens profiles, so a rest rule would skip it every night.
@@ -35,7 +35,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 
 WORKFLOWS = ("scraper.yml", "account-check.yml", "ig-hashtag-probe.yml")
-MIN_RUN_MINUTES = 3
+MIN_RUN_MINUTES = 15
 
 
 def parse(ts):
