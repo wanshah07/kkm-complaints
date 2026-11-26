@@ -38,6 +38,7 @@ jobs:
       PYTHONUNBUFFERED: '1'
       PW_STORAGE_STATE_B64: ${{ secrets.PW_STORAGE_STATE_B64 }}
       PW_STORAGE_STATE_IG_B64: ${{ secrets.PW_STORAGE_STATE_IG_B64 }}
+      APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
       PW_STORAGE_STATE_SHOP_B64: ${{ secrets.PW_STORAGE_STATE_SHOP_B64 }}
       GH_TOKEN: ${{ github.token }}
     steps:

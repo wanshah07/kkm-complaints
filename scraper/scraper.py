@@ -28,8 +28,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, Iterator, List, Optional, Tuple
 from urllib.parse import quote, urljoin, urlsplit, urlunsplit
 
+import requests
 from dateutil import parser as dateparser
 from playwright.sync_api import Browser, BrowserContext, Page, TimeoutError as PWTimeout, sync_playwright
+
+from apify_reader import ApifyFeed
 
 log = logging.getLogger("kkm.scraper")
 
@@ -91,6 +94,8 @@ class TargetResult:
     # The visit stopped at run.max_new_posts_per_visit: the newest posts were judged and older unjudged
     # ones remain for a later visit. Not "truncated": the target WAS reached.
     capped: bool = False
+    # Who read this target: "apify" (the main reader, 26 Nov 2026), else "" (Playwright: the saved login, or the public embed)
+    reader: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -971,6 +976,8 @@ class Scraper:
         # on with the newest posts, and says so.
         self.public_mode: Dict[str, str] = {}
         self._recorded_ig_session: Optional[bool] = None
+        # Apify is the MAIN reader of Instagram, Playwright the fallback (apify_reader.py). Set by iter_run once the plan is known.
+        self.apify: Optional[ApifyFeed] = None
 
     def _report_session_age(self, raw: bytes) -> None:
         """
@@ -1243,6 +1250,9 @@ class Scraper:
         targets = self.plan(brands, platform_filter, brand_filter)
         self.should_stop = should_stop
         done = 0
+        self.apify = ApifyFeed.from_env([h for _n, p, h in targets if p == "Instagram"])
+        if self.apify:
+            log.info("Instagram is read through Apify first (%d account(s) in this run); Playwright is the fallback", len(self.apify.plan))
         with sync_playwright() as pw:
             launch_kwargs = dict(headless=bool(self.run_cfg.get("headless", True)),
                                  args=["--disable-blink-features=AutomationControlled"])
@@ -1282,6 +1292,10 @@ class Scraper:
             return res
         if platform == "Facebook" and str(self.run_cfg.get("facebook_source", "ads")).lower() == "ads":
             return self._scrape_facebook_ads(browser, brand, handle, res)
+        if platform == "Instagram" and self.apify:
+            served = self._scrape_instagram_apify(browser, brand, handle, res)
+            if served is not None:
+                return served
         if platform == "Instagram":
             src = self._instagram_source()
             if src == "embed" or (src == "auto" and (platform in self.public_mode or not self._instagram_login_recorded())):
@@ -1626,6 +1640,97 @@ class Scraper:
             for c in (ctx, post_ctx):
                 try:
                     c.close()
+                except Exception:
+                    pass
+        log.info("[%s/%s] done in %.1fs", brand, platform, time.time() - t0)
+        return res
+
+    def _apify_evidence(self, post_ctx: BrowserContext, brand: str, handle: str, ap, post: "Post") -> None:
+        """The picture the reviewer and the complaint need for a post Apify found: the post's public embed photographed (picture, then
+        caption, no login), else the picture Apify returned. Never raises: a post with no picture is still reviewed on its words."""
+        fname = re.sub(r"[^a-z0-9]+", "_", f"{brand}_instagram_{ap.code}".lower()).strip("_")[:90]
+        pg = post_ctx.new_page()
+        try:
+            pg.goto(IG_EMBED_POST.format(code=ap.code), wait_until="domcontentloaded", timeout=45000)
+            pg.wait_for_timeout(2500)
+            if "/accounts/login" not in pg.url.lower() and pg.locator("img").count():
+                path = os.path.join(self.out_dir, f"{fname}.png")
+                pg.screenshot(path=path, full_page=True)
+                post.screenshot_path = path
+                post.notes.append("picture: the post's public embed (a carousel shows its first picture only)")
+                return
+        except Exception as e:  # noqa: BLE001 - fall through to the picture Apify returned
+            log.info("[%s/Instagram] embed picture of %s failed (%s)", brand, ap.code, type(e).__name__)
+        finally:
+            try:
+                pg.close()
+            except Exception:
+                pass
+        for u in ap.images[:1]:
+            try:
+                r = requests.get(u, timeout=30)
+                if r.status_code == 200 and len(r.content) > 2000:
+                    path = os.path.join(self.out_dir, f"{fname}.jpg")
+                    with open(path, "wb") as f:
+                        f.write(r.content)
+                    post.screenshot_path = path
+                    post.notes.append("picture: the post's own image from Apify (the screenshot of the page could not be taken)")
+                    return
+            except requests.RequestException:
+                pass
+        post.errors.append("no picture of the post could be saved - reviewed on its caption alone")
+
+    def _scrape_instagram_apify(self, browser: Browser, brand: str, handle: str, res: TargetResult) -> Optional[TargetResult]:
+        """An Instagram target read through Apify, or None when Apify did not serve it (the caller then reads it the old way:
+        saved login, then public embed). The posts, captions and dates come from Apify; the picture is taken from the public embed."""
+        feed = self.apify
+        posts = feed.posts_for(handle) if feed else None
+        if posts is None:
+            log.info("[%s/Instagram] Apify did not serve @%s (%s): reading it the old way", brand, handle,
+                     feed.why_not(handle) if feed else "no feed")
+            return None
+        platform, t0 = "Instagram", time.time()
+        res.reader = "apify"
+        res.links_found = len(posts)
+        res.profile_url = f"https://www.instagram.com/{handle}/"
+        log.info("[%s/%s] Apify gave %d post(s) for @%s", brand, platform, len(posts), handle)
+        max_open = int(self.run_cfg.get("max_new_posts_per_visit", 0) or 0)
+        opened = 0
+        post_ctx = None
+        try:
+            for ap in sorted(posts, key=lambda p: p.posted_at or "", reverse=True):
+                if any(f in self.known_urls for f in instagram_known_forms(handle, ap.code)):
+                    res.posts.append(Post(brand=brand, platform=platform, url=ap.url, known=True))
+                    continue
+                stop = getattr(self, "should_stop", None)
+                if stop and stop():
+                    res.truncated = True
+                    log.warning("[%s/%s] run budget reached after %d post(s); the rest is left for the next run", brand, platform, opened)
+                    break
+                if max_open and opened >= max_open:
+                    res.capped = True
+                    break
+                post = Post(brand=brand, platform=platform, url=ap.url, text=ap.text,
+                            posted_at=ap.posted_at or instagram_post_date(ap.code), owner=ap.owner or None)
+                post.notes.append("read through Apify, with no login of ours")
+                if ap.owner and not _handles_match(ap.owner, handle):
+                    post.errors.append(f"different account: post is by @{ap.owner}, not @{handle} - not reviewed")
+                    post.not_owned = True
+                else:
+                    if post_ctx is None:
+                        post_ctx = self._context(browser, use_storage=False, viewport={"width": 1080, "height": 1350})
+                    if opened:
+                        _pace([2, 4], "the next post")
+                    self._apify_evidence(post_ctx, brand, handle, ap, post)
+                res.posts.append(post)
+                opened += 1
+        except Exception as e:  # keep the run alive
+            res.error = f"{type(e).__name__}: {e}"
+            log.error("[%s/%s] %s", brand, platform, res.error)
+        finally:
+            if post_ctx is not None:
+                try:
+                    post_ctx.close()
                 except Exception:
                     pass
         log.info("[%s/%s] done in %.1fs", brand, platform, time.time() - t0)

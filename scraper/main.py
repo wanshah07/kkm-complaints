@@ -763,6 +763,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                                       "truncated": bool(getattr(tr, "truncated", False)),
                                       "capped": bool(getattr(tr, "capped", False)),
                                       "public": bool(getattr(tr, "public_view", False)),
+                                      "reader": getattr(tr, "reader", "") or "",
                                       "opened": sum(1 for x in tr.posts if not getattr(x, "known", False)
                                                     and not getattr(x, "not_owned", False))})
             if web_mode and tr.error and not tr.error.startswith("skipped:"):
@@ -1066,6 +1067,8 @@ def sweep_status_updates(report: dict, brands: List[dict]) -> List[dict]:
         note = err.split(" — ")[0][:120]
         if not note and key in renamed:
             note = str(renamed[key].get("note") or "")[:160]
+        if not note and t.get("reader") == "apify":
+            note = "read through Apify"
         if not note and t.get("public"):
             note = "no login: only the newest posts were read (public embed); older ones need a saved login"
         if not note and (t.get("capped") or t.get("truncated")):

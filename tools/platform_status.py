@@ -427,6 +427,17 @@ def main():
                       ("The automatic TikTok discovery's last run did not succeed (%s). TikTok may have changed its "
                        "embed page, or a video hit a login wall; pasted links still work." % ta.get("conclusion"))})
 
+    # Apify (26 Nov 2026) is the MAIN reader of Instagram, Playwright with the saved login the fallback. So Instagram is "live" when
+    # Apify answers, even while the saved login is ended: say so, and keep the login's own state in the words.
+    from apify_reader import plan_status
+    ap = plan_status(os.environ.get("APIFY_TOKEN", ""))
+    if ap:
+        ig = next((p for p in result["platforms"] if p.get("key") == "instagram"), None)
+        if ig is not None and ap[0] == "live" and ig.get("state") != "live":
+            ig["detail"] = "Read through Apify, so no login of ours is needed. The saved login (the fallback) is not working: " + str(ig.get("detail") or "")[:180]
+            ig["state"] = "live"
+        result["platforms"].append({"key": "apify", "label": "Apify", "links": None, "state": ap[0], "at": now_iso(), "detail": ap[1]})
+
     sc_last = last.get("scraper") or {}
     if sc_last:
         result["last_sweep"] = {"conclusion": sc_last.get("conclusion"), "at": sc_last.get("at"), "title": sc_last.get("title", "")}
