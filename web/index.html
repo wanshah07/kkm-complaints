@@ -2515,6 +2515,21 @@ setInterval(() => { if (cfg.key && $('drawer').classList.contains('translate-x-f
 // Platform status pills. status.json is deployed beside this page; a missing or unreadable file hides the strip
 // rather than showing anything that could read as "all live". Older than 14 h is shown as old, never as live.
 let platDetailKey = '';
+let platCheckedAt = '', platFmt = null;
+// "checked 26 Nov, 04:33 pm GMT+8 (6 h ago)": the time the file says, and how old that is NOW. Amber once it is older than 7 hours, because the check
+// runs every 3 hours and GitHub sometimes skips one: an old check must look old, not like today's.
+function showPlatWhen() {
+  const el = $('platWhen');
+  const t = Date.parse(platCheckedAt);
+  if (!el || isNaN(t) || !platFmt) { if (el) el.textContent = ''; return; }
+  const mins = Math.max(0, Math.round((Date.now() - t) / 60000));
+  const age = mins < 2 ? 'just now' : mins < 90 ? mins + ' min ago' : mins < 2880 ? Math.round(mins / 60) + ' h ago' : Math.round(mins / 1440) + ' days ago';
+  el.textContent = (mins > 14 * 60 ? 'last check ' : 'checked ') + platFmt(platCheckedAt) + ' (' + age + ')';
+  el.classList.toggle('text-amber-700', mins > 7 * 60);
+  el.classList.toggle('font-medium', mins > 7 * 60);
+  el.classList.toggle('text-slate-500', mins <= 7 * 60);
+}
+setInterval(showPlatWhen, 60000);
 async function loadPlatStatus() {
   const box = $('platStatus');
   try {
@@ -2525,7 +2540,10 @@ async function loadPlatStatus() {
     // republishes the last real result instead of testing, so the file's own time can be newer than the fact.
     const isOld = (iso) => { const h = (Date.now() - Date.parse(iso)) / 3600000; return !(h >= 0) || h > 14; };
     const stale = isOld(d.checked_at);
-    const fmt = (iso) => { const t = new Date(iso); return isNaN(t) ? '' : t.toLocaleString('en-MY', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); };
+    // Times follow the clock of the device that opens the page (Malaysia time on a Malaysian phone or PC), and name the zone so a device
+    // set to another one is not mistaken for MYT (26 Nov 2026: a status stamped 04:33 pm read as a wrong clock at 10:33 pm; the clock was
+    // right, the check was six hours old). The age is printed beside the time and ticks on.
+    const fmt = (iso) => { const t = new Date(iso); return isNaN(t) ? '' : t.toLocaleString('en-MY', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' }); };
     const cls = { live: 'bg-emerald-100 text-emerald-800', degraded: 'bg-amber-100 text-amber-900', down: 'bg-red-100 text-red-800', unknown: 'bg-slate-100 text-slate-700' };
     const word = { live: 'live', degraded: 'limited', down: 'down', unknown: 'unknown' };
     const dot = { live: '\u25CF', degraded: '\u25D0', down: '\u2715', unknown: '?' };
@@ -2557,8 +2575,8 @@ async function loadPlatStatus() {
       });
       pills.appendChild(b);
     });
-    const when = new Date(d.checked_at);
-    $('platWhen').textContent = isNaN(when) ? '' : (stale ? 'last check ' : 'checked ') + when.toLocaleString('en-MY', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    platCheckedAt = d.checked_at; platFmt = fmt;
+    showPlatWhen();
     box.classList.remove('hidden');
   } catch (e) { box.classList.add('hidden'); }
 }

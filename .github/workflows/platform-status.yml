@@ -2,7 +2,7 @@
 #
 # Opens one stable public profile per platform with the saved login (PW_STORAGE_STATE_B64), writes
 # status.json to the orphan branch `status`, and asks the Pages workflow to redeploy so the dashboard
-# header shows it. Runs every 6 hours and on demand.
+# header shows it. Runs every 3 hours and on demand.
 #
 # It uses the sweep's login, so it must never run a browser beside a sweep or an account check. Until 15 Nov 2026
 # it did that by sharing their concurrency group, which had a cost: GitHub keeps ONE waiting run per group, so a
@@ -10,7 +10,7 @@
 # if a sweep or an account check is running it does not probe, and republishes each platform's last real result
 # with the time that result was measured (tools/platform_status.py --carry).
 #
-# Why a separate branch: a bot commit to main every 6 hours would bury the real history, and Pages only
+# Why a separate branch: a bot commit to main every 3 hours would bury the real history, and Pages only
 # needs the file at deploy time (see pages.yml). The file holds platform names and plain-English states only:
 # no handles of people, no cookie values, no secrets. This repository is PUBLIC.
 
@@ -18,7 +18,7 @@ name: Platform status
 
 on:
   schedule:
-    - cron: '17 */6 * * *'
+    - cron: '17 */3 * * *'
   workflow_dispatch:
 
 concurrency:
