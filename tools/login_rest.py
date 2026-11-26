@@ -6,6 +6,9 @@ Instagram ended the recorded login after about 8 hours (23 Nov), about 16 (24 No
 sweeps, and the last time it kept the cookie but showed a login prompt on every profile for 75 minutes. Nobody outside Instagram
 can say which signal does it. What we control is how much and how evenly the login is used, so this caps both:
 
+  * SINCE    uses of an older login do not count against the current one. The recording time is read off the saved login
+             (the sessionid cookie's expiry minus 365 days), so a login recorded again starts with an empty budget by itself;
+             the repository variable IG_LOGIN_SINCE (YYYY-MM-DDTHH:MM:SSZ) can push it later;
   * REST     the login is not started again until IG_REST_MINUTES (default 90) after the last run that used it ended;
   * BUDGET   across any rolling 24 hours the runs that used it add up to less than IG_DAILY_MINUTES (default 200: two full
              100-minute sweeps, or one sweep and the daily account check and a short hashtag run).
@@ -22,8 +25,10 @@ Scheduled runs that fail the check are skipped. A manual run that fails it is sk
 IG_REST_GUARD=off (repository variable) turns the whole check off.
 
 Writes ok=true|false and reason to $GITHUB_OUTPUT. Always exits 0.
-Env: GH_TOKEN, REPO, EVENT, FORCE, BYPASS, REST (off = no rest gap), IG_REST_MINUTES, IG_DAILY_MINUTES, IG_REST_GUARD
+Env: GH_TOKEN, REPO, EVENT, FORCE, BYPASS, REST (off = no rest gap), IG_LOGIN_SINCE, PW_STORAGE_STATE_IG_B64, PW_STORAGE_STATE_B64, IG_REST_MINUTES, IG_DAILY_MINUTES, IG_REST_GUARD
 """
+import base64
+import gzip
 import json
 import os
 import urllib.request
@@ -37,8 +42,9 @@ def parse(ts):
     return datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
 
 
-def used_intervals(runs, now):
-    """[(start, end)] of the finished runs that really used the login in the last 24 hours."""
+def used_intervals(runs, now, since=None):
+    """[(start, end)] of the finished runs that really used the login in the last 24 hours.
+    `since` (IG_LOGIN_SINCE): when the current login was recorded. Use on an older login is no use of this one, so it is not counted."""
     out = []
     for r in runs:
         if r.get("status") != "completed" or not r.get("run_started_at") or not r.get("updated_at"):
@@ -46,8 +52,35 @@ def used_intervals(runs, now):
         s, e = parse(r["run_started_at"]), parse(r["updated_at"])
         if (e - s) < timedelta(minutes=MIN_RUN_MINUTES) or e < now - timedelta(hours=24):
             continue
-        out.append((max(s, now - timedelta(hours=24)), e))
+        if since and e <= since:
+            continue
+        out.append((max(s, now - timedelta(hours=24), since or s), e))
     return sorted(out)
+
+
+def login_recorded_at(*states_b64, now=None):
+    """
+    When the current Instagram login was recorded, read off the saved login itself so nobody has to remember to say so: Instagram
+    gives `sessionid` a one-year cookie, so (its expiry - 365 days) is the moment it was issued (the status strip read 365.0 days
+    left minutes after the 26 Nov 2026 recording). Takes the newest over the secrets given; None if none can be read.
+    """
+    now = now or datetime.now(timezone.utc)
+    best = None
+    for b64 in states_b64:
+        try:
+            raw = base64.b64decode((b64 or "").strip())
+            raw = gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw
+            cookies = json.loads(raw).get("cookies", []) or []
+        except Exception:
+            continue
+        for c in cookies:
+            if c.get("name") == "sessionid" and c.get("value") and "instagram.com" in str(c.get("domain", "")):
+                exp = c.get("expires")
+                if isinstance(exp, (int, float)) and exp > 0:
+                    t = datetime.fromtimestamp(exp, timezone.utc) - timedelta(days=365)
+                    if t <= now and (best is None or t > best):
+                        best = t.replace(microsecond=0)
+    return best
 
 
 def decide(intervals, now, rest_min=90, daily_min=200, event="schedule", force=False, bypass=False, guard=True, rest=True):
@@ -100,7 +133,13 @@ def main():
     guard = (env("IG_REST_GUARD") or "on").strip().lower() != "off"
     num = lambda k, d: int(float(env(k) or d))
     try:
-        intervals = used_intervals(fetch_runs(env("REPO"), env("GH_TOKEN"), now), now) if guard else []
+        since = login_recorded_at(env("PW_STORAGE_STATE_IG_B64"), env("PW_STORAGE_STATE_B64"), now=now)
+        if (env("IG_LOGIN_SINCE") or "").strip():
+            try:
+                since = max(filter(None, [since, parse(env("IG_LOGIN_SINCE").strip())]))
+            except ValueError:
+                print("IG_LOGIN_SINCE is not YYYY-MM-DDTHH:MM:SSZ; ignored")
+        intervals = used_intervals(fetch_runs(env("REPO"), env("GH_TOKEN"), now), now, since) if guard else []
         res = decide(intervals, now, num("IG_REST_MINUTES", 90), num("IG_DAILY_MINUTES", 200), env("EVENT") or "schedule",
                      (env("FORCE") or "").lower() == "true", bool((env("BYPASS") or "").strip()), guard,
                      (env("REST") or "on").strip().lower() != "off")

@@ -658,6 +658,7 @@ how much and how evenly the login is used (`tools/login_rest.py`, the `rest` job
 |---|---|---|
 | Rest between runs that use the login | 90 minutes after the last one ended | `IG_REST_MINUTES` |
 | Budget in any rolling 24 hours | 200 minutes (two full sweeps) | `IG_DAILY_MINUTES` |
+| Uses of an older login do not count | not set | `IG_LOGIN_SINCE`, e.g. `2026-11-26T06:00:00Z`: set it each time you record the login again |
 | Turn the whole check off | on | `IG_REST_GUARD` = `off` |
 
 A scheduled run that breaks a rule is skipped and says why and when it may run again. A manual run is not started either, unless you tick

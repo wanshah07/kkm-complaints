@@ -48,6 +48,15 @@ class Rest(unittest.TestCase):
         self.assertTrue(self.d([run(150, 100)], rest=False)["ok"])        # right behind a sweep: allowed
         self.assertFalse(self.d([run(700, 105), run(500, 105)], rest=False)["ok"])   # but not past the budget
 
+    def test_use_of_an_older_login_does_not_count(self):
+        runs = [run(700, 105), run(500, 105), run(300, 105)]              # 315 min, the last ended 195 min ago
+        self.assertFalse(self.d(runs)["ok"])
+        since = NOW - timedelta(minutes=100)                              # login re-recorded 100 min ago
+        self.assertTrue(lr.decide(lr.used_intervals(runs, NOW, since), NOW)["ok"])
+        recent = [run(150, 100)]                                          # a run that straddles the re-record: only its tail counts
+        iv = lr.used_intervals(recent, NOW, NOW - timedelta(minutes=70))
+        self.assertEqual(iv[0][0], NOW - timedelta(minutes=70))
+
     def test_bypass_and_guard_off(self):
         self.assertTrue(self.d([run(150, 100)], bypass=True)["ok"])
         self.assertTrue(self.d([run(150, 100)], guard=False)["ok"])
@@ -56,6 +65,27 @@ class Rest(unittest.TestCase):
         iv = lr.used_intervals([run(24 * 60 + 30, 100)], NOW)             # ended 70 min into the window? started 24h30m ago
         self.assertEqual(len(iv), 1)
         self.assertEqual(iv[0][0], NOW - timedelta(hours=24))
+
+
+class RecordedAt(unittest.TestCase):
+    def state(self, exp, gz=False):
+        import base64, gzip, json
+        raw = json.dumps({"cookies": [{"name": "sessionid", "value": "v", "domain": ".instagram.com", "expires": exp},
+                                       {"name": "sessionid", "value": "t", "domain": ".threads.net", "expires": exp + 999}]}).encode()
+        return base64.b64encode(gzip.compress(raw) if gz else raw).decode()
+
+    def test_recorded_time_is_expiry_minus_a_year(self):
+        issued = NOW - timedelta(hours=6)
+        exp = (issued + timedelta(days=365)).timestamp()
+        self.assertEqual(lr.login_recorded_at(self.state(exp, gz=True), now=NOW), issued)
+
+    def test_newest_of_two_secrets_and_junk_ignored(self):
+        old = (NOW - timedelta(days=3) + timedelta(days=365)).timestamp()
+        new = (NOW - timedelta(hours=2) + timedelta(days=365)).timestamp()
+        self.assertEqual(lr.login_recorded_at("junk", self.state(old), self.state(new), now=NOW), NOW - timedelta(hours=2))
+
+    def test_nothing_readable_is_none(self):
+        self.assertIsNone(lr.login_recorded_at("", "junk", now=NOW))
 
 
 if __name__ == "__main__":

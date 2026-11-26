@@ -78,6 +78,9 @@ jobs:
           IG_REST_MINUTES: ${{ vars.IG_REST_MINUTES }}
           IG_DAILY_MINUTES: ${{ vars.IG_DAILY_MINUTES }}
           IG_REST_GUARD: ${{ vars.IG_REST_GUARD }}
+          IG_LOGIN_SINCE: ${{ vars.IG_LOGIN_SINCE }}
+          PW_STORAGE_STATE_IG_B64: ${{ secrets.PW_STORAGE_STATE_IG_B64 }}
+          PW_STORAGE_STATE_B64: ${{ secrets.PW_STORAGE_STATE_B64 }}
         run: python3 tools/login_rest.py
 
   check:
