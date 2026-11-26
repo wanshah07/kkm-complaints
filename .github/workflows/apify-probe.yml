@@ -1,0 +1,35 @@
+# What does an Apify actor return for one public Instagram profile or hashtag, and what does it cost? Manual, read-only, ~US$0.01 a run.
+# Prints status, cost, seconds, field names and a few dates and captions: no token, no account of ours. (tools/apify_probe.py)
+name: Apify probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      actor:
+        description: 'Actor, e.g. apify/instagram-scraper or apify/instagram-hashtag-scraper'
+        type: string
+        default: 'apify/instagram-scraper'
+      target:
+        description: 'Instagram handle (no @) or #hashtag'
+        type: string
+        default: 'cetaphilmy'
+      limit:
+        description: 'Results to ask for'
+        type: string
+        default: '3'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+      ACTOR: ${{ github.event.inputs.actor }}
+      TARGET: ${{ github.event.inputs.target }}
+      LIMIT: ${{ github.event.inputs.limit }}
+    steps:
+      - uses: actions/checkout@v5
+      - run: python3 tools/apify_probe.py "$ACTOR" "$TARGET" "$LIMIT"
