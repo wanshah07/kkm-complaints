@@ -1,5 +1,5 @@
 {
- "checked_at": "2026-11-26T17:36:19Z",
+ "checked_at": "2026-11-26T23:55:54Z",
  "platforms": [
   {
    "key": "instagram",
@@ -7,7 +7,7 @@
    "state": "live",
    "detail": "Read through Apify, so no login of ours is needed. The saved login (the fallback) is not working: No working login (Instagram ended the saved login). Still reading the newest 6 posts of each account through Instagram's public embed; older posts need the session recorded again (",
    "links": 6,
-   "at": "2026-11-26T17:36:31Z"
+   "at": "2026-11-26T23:56:07Z"
   },
   {
    "key": "facebook",
@@ -15,7 +15,7 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-26T17:36:54Z"
+   "at": "2026-11-26T23:56:30Z"
   },
   {
    "key": "threads",
@@ -23,15 +23,15 @@
    "state": "live",
    "detail": "Signed in and reading posts normally.",
    "links": 40,
-   "at": "2026-11-26T17:38:10Z"
+   "at": "2026-11-26T23:57:49Z"
   },
   {
    "key": "tiktok",
    "label": "TikTok links",
    "links": null,
    "state": "live",
-   "at": "2026-11-26T12:52:48Z",
-   "detail": "The link checker is running (last run 2026-11-26 20:52 MYT). Works on links you paste into the Links tab."
+   "at": "2026-11-26T22:15:20Z",
+   "detail": "The link checker is running (last run 2026-11-27 06:15 MYT). Works on links you paste into the Links tab."
   },
   {
    "key": "tiktok_auto",
@@ -46,15 +46,15 @@
    "label": "Apify",
    "links": null,
    "state": "live",
-   "at": "2026-11-26T17:38:10Z",
+   "at": "2026-11-26T23:57:49Z",
    "detail": "Apify is the main Instagram reader, no login of ours needed (0.03 of 10.00 USD used this month). Playwright is only the fallback."
   }
  ],
  "notes": [],
  "session_days_left": {
-  "instagram": 364.5,
+  "instagram": 364.3,
   "facebook": null,
-  "threads": 364.5
+  "threads": 364.3
  },
  "last_sweep": {
   "conclusion": "success",
