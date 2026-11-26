@@ -634,6 +634,20 @@ Set the repository **variable** `ANTHROPIC_MODEL` under Settings → Secrets and
 No code change, takes effect on the next run. Delete the variable to fall back to the default.
 Figures assume no cache hit; a warm cache roughly halves the input side.
 
+**If the model is off, the system changes model by itself** (26 Nov 2026). A model that was retired, is overloaded (529), rate-limited (429),
+unreachable or refuses for lack of access is skipped and the next one in the chain answers. Nothing to switch by hand, and the review is
+still a real review, not the regex rulebook. The row's `reviewer` tag names the model that actually answered (`anthropic:claude-sonnet-4-6`),
+and the run log says `model X on anthropic is off ... trying the next model`.
+
+| Variable | What it is | Default |
+|---|---|---|
+| `ANTHROPIC_MODEL` | First choice | `claude-haiku-4-5` |
+| `ANTHROPIC_MODEL_FALLBACKS` | Next models, in order, comma separated | `claude-haiku-5-5,claude-sonnet-4-6,claude-sonnet-5-5` |
+| `OPENAI_MODEL_FALLBACKS` | Same for the OpenAI-compatible gateway | none (model names are the gateway's own) |
+| `OPENAI_ALT_MODEL_FALLBACKS` | Same for the second gateway | none |
+
+How it behaves: a model that does not exist or is retired is skipped for the rest of the run (6 hours); one that is only busy is skipped for 5 minutes and then tried again, so the first choice comes back by itself. A bad API key (401) is NOT treated as a model problem, because every model would fail the same way. If every model in the chain is off, the run behaves as it always did: the post is not filed or ledgered, and the row says `LLM failed`. Cheapest first is the right order, because the later ones cost more per post.
+
 ### Using another provider, or a gateway
 
 Set the **variable** `LLM_PROVIDER` to `openai` and the scraper uses the OpenAI-compatible path instead. That path also speaks to any gateway with a `/v1/chat/completions` endpoint — rootsys, OpenRouter, a local server — which is how GLM, Kimi, DeepSeek and MiniMax are reached:
