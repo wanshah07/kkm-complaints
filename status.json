@@ -1,5 +1,5 @@
 {
- "checked_at": "2026-11-27T14:07:29Z",
+ "checked_at": "2026-11-27T14:19:42Z",
  "platforms": [
   {
    "key": "instagram",
@@ -7,7 +7,7 @@
    "state": "live",
    "detail": "Read through Apify, so no login of ours is needed. The saved login (the fallback) is not working: No working login (Instagram ended the saved login). Still reading the newest 6 posts of each account through Instagram's public embed; older posts need the session recorded again (",
    "links": 6,
-   "at": "2026-11-27T14:07:42Z"
+   "at": "2026-11-27T14:19:56Z"
   },
   {
    "key": "facebook",
@@ -15,7 +15,7 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-27T14:08:05Z"
+   "at": "2026-11-27T14:20:35Z"
   },
   {
    "key": "threads",
@@ -23,7 +23,7 @@
    "state": "live",
    "detail": "Signed in and reading posts normally.",
    "links": 40,
-   "at": "2026-11-27T14:09:26Z"
+   "at": "2026-11-27T14:21:57Z"
   },
   {
    "key": "tiktok",
@@ -37,16 +37,16 @@
    "key": "tiktok_auto",
    "label": "TikTok accounts",
    "links": null,
-   "state": "live",
-   "at": "2026-11-27T14:06:30Z",
-   "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-27 22:06 MYT). Only an account's ten newest are visible at a time."
+   "state": "down",
+   "at": "2026-11-27T14:18:26Z",
+   "detail": "The automatic TikTok discovery's last run did not succeed (failure). TikTok may have changed its embed page, or a video hit a login wall; pasted links still work."
   },
   {
    "key": "apify",
    "label": "Apify",
    "links": null,
    "state": "live",
-   "at": "2026-11-27T14:09:26Z",
+   "at": "2026-11-27T14:21:57Z",
    "detail": "Apify is the main Instagram reader, no login of ours needed (0.03 of 10.00 USD used this month). Playwright is only the fallback."
   }
  ],
@@ -61,5 +61,5 @@
   "at": "2026-11-27T04:26:42Z",
   "title": "KKM complaint scraper"
  },
- "overall": "live"
+ "overall": "down"
 }
