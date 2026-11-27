@@ -152,8 +152,25 @@ class AppsScriptClient:
                     delay *= 2
         raise RuntimeError(f"webhook failed after {retries} attempts: {last_err}")
 
-    def ping(self) -> dict:
-        r = self.session.get(self.url, params={"action": "ping"}, timeout=self.timeout)
+    def ping(self, retries: int = 3, pause: float = 20.0) -> dict:
+        # The backend can sit silent for two minutes when it is busy (27 Nov 2026: two TikTok runs died on this one
+        # call at 21:13 and 22:16 MYT, while it answered in 2 seconds minutes later). Every other call already waits
+        # and tries again; this one, the first of a run, gave up on its first timeout and took the whole run with it.
+        # Only a connection that fails or times out is tried again: an answer that is not JSON is a deployment
+        # problem, the same on every try, and is reported at once as before.
+        last: Optional[Exception] = None
+        r = None
+        for attempt in range(1, retries + 1):
+            try:
+                r = self.session.get(self.url, params={"action": "ping"}, timeout=min(self.timeout, 60))
+                break
+            except requests.RequestException as e:
+                last = e
+                log.warning("webhook ping %d/%d got no answer: %s", attempt, retries, e)
+                if attempt < retries:
+                    time.sleep(pause)
+        if r is None:
+            raise RuntimeError(f"webhook gave no answer to {retries} pings: {last}")
         try:
             return r.json()
         except ValueError:
