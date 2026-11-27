@@ -745,6 +745,7 @@ function handleApi_(action, body, p) {
                             return markSeen_(body.entries || []);
       // --- dashboard (DASHBOARD_KEY) or scraper ---
       case 'list':          if (!viewer) return deny;
+                            READ_ONCE_ = true;
                             return { ok: true, rows: listRecords_(p.status || body.status, p.brand || body.brand, p.platform || body.platform, p.q || body.q), stats: stats_() };
       case 'get':           if (!viewer) return deny;
                             return { ok: true, row: getRecord_(p.id || body.id) };
@@ -753,8 +754,9 @@ function handleApi_(action, body, p) {
       case 'summary':       if (!viewer) return deny;
                             return { ok: true, summary: summary_() };
       case 'update_status': if (!viewer) return deny;
-                            return updateStatus_(body.id, body.status, body.remarks);
+                            return updateStatus_(body.id, body.status, body.remarks, !!body.lite);
       case 'bootstrap':     if (!viewer) return deny;
+                            READ_ONCE_ = true;
                             return { ok: true, rows: listRecords_(), stats: stats_(), lookups: lookups_(),
                                      kkmFormUrl: PROPS.getProperty('KKM_FORM_URL') || '',
                                      questUrl: 'https://quest3plus.bpfk.gov.my/pmo2/index.php', statuses: STATUSES,
@@ -1134,8 +1136,11 @@ function openRecord_(id) {
   var row = getRecord_(id);
   if (!row) throw new Error('Not found: ' + id);
   if (row['Status'] === 'New') {
-    updateStatus_(id, 'In-Progress');
-    row = getRecord_(id);
+    // lite: the row that was written comes straight back. It used to recount the whole sheet and then read the row a
+    // third time, which is most of what made opening a complaint slow (Wan, 27 Nov 2026).
+    var res = updateStatus_(id, 'In-Progress', null, true);
+    if (!res.ok) throw new Error(res.error || ('Not found: ' + id));
+    row = res.row;
   }
   return row;
 }
@@ -1190,6 +1195,7 @@ function insertManual_(record) {
 // ---------------------------------------------------------------------------
 function apiBootstrap(key) {
   requireViewer_(key);
+  READ_ONCE_ = true;
   return {
     rows: listRecords_(),
     stats: stats_(),
@@ -1205,6 +1211,7 @@ function apiBootstrap(key) {
 function apiList(key, filters) {
   requireViewer_(key);
   filters = filters || {};
+  READ_ONCE_ = true;
   return { rows: listRecords_(filters.status, filters.brand, filters.platform, filters.q), stats: stats_() };
 }
 
@@ -1367,7 +1374,11 @@ function buildComplaintDescription_(rec) {
   return lines.join('\n');
 }
 
-function updateStatus_(id, status, remarks) {
+// lite (Wan, 27 Nov 2026: "why status change ... is too slow"): the answer used to carry stats_(), a read of every
+// column of every row (8,600 rows by then), made while HOLDING the script lock, so one click cost several seconds and
+// kept the scraper's own writes waiting behind it. The dashboard now keeps its tiles itself and asks for lite; the
+// counts are put right by its next list call. Without lite the answer is what it always was.
+function updateStatus_(id, status, remarks, lite) {
   if (STATUSES.indexOf(status) < 0) return { ok: false, error: 'Invalid status. Use one of: ' + STATUSES.join(', ') };
   return withLock_(function () {
     var sheet = sheet_();
@@ -1381,15 +1392,27 @@ function updateStatus_(id, status, remarks) {
     }
     rowVals[COL['Updated At']] = nowIso_();
     sheet.getRange(r, 1, 1, HEADERS.length).setValues([sanitizeRowForSheet_(rowVals)]);
+    if (lite) return { ok: true, row: rowToObject_(rowVals) };
     return { ok: true, row: rowToObject_(rowVals), stats: stats_() };
   });
 }
 
-function listRecords_(status, brand, platform, q) {
+// One read of the sheet per request, for the requests that only READ it. `bootstrap` used to read every cell three
+// times (the list, the tiles, the overview) and `list` twice; each read is the slow part. READ_ONCE_ is switched on
+// only by those read-only calls, and a global lives for one request, so nothing that writes ever sees a stale copy.
+var READ_ONCE_ = false, ALL_ROWS_ = null;
+function allRows_() {
+  if (READ_ONCE_ && ALL_ROWS_) return ALL_ROWS_;
   var sheet = sheet_();
   var last = sheet.getLastRow();
-  if (last < 2) return [];
-  var vals = sheet.getRange(2, 1, last - 1, HEADERS.length).getValues();
+  var vals = last < 2 ? [] : sheet.getRange(2, 1, last - 1, HEADERS.length).getValues();
+  if (READ_ONCE_) ALL_ROWS_ = vals;
+  return vals;
+}
+
+function listRecords_(status, brand, platform, q) {
+  var vals = allRows_();
+  if (!vals.length) return [];
   var query = String(q || '').trim().toLowerCase();
   var out = [];
   for (var i = vals.length - 1; i >= 0; i--) { // newest first
@@ -1494,10 +1517,8 @@ function stats_() {
   counts[ARCHIVED_FILTER] = 0;
   var byBrand = {}, byPlatform = {};
   var own = { total: 0, open: 0 };                       // own-brand rows are counted apart, not in the figures above
-  var sheet = sheet_();
-  var last = sheet.getLastRow();
-  if (last >= 2) {
-    var vals = sheet.getRange(2, 1, last - 1, HEADERS.length).getValues();
+  var vals = allRows_();
+  if (vals.length) {
     vals.forEach(function (row) {
       if (!row[COL['ID']]) return;
       if (isOwnBrandRow_(row)) { own.total++; if (String(row[COL['Status']] || 'New') === 'New') own.open++; return; }
@@ -1518,15 +1539,13 @@ function stats_() {
 // One pass over the sheet; nothing is written.
 // ---------------------------------------------------------------------------
 function summary_() {
-  var sheet = sheet_();
-  var last = sheet.getLastRow();
+  var vals = allRows_();
   var byMonth = {}, byRoute = {}, byPlatform = {}, byBrand = {}, byType = {}, bySource = {}, byStatus = { total: 0 };
   STATUSES.forEach(function (s) { byStatus[s] = 0; }); byStatus[ARCHIVED_FILTER] = 0;
   var filed = 0, replied = 0, lags = [], last7 = 0, last30 = 0, oldestNew = null, newest = '';
   var now = new Date(), day = 86400000;
   JENIS_ADUAN.forEach(function (v) { byRoute[v] = { total: 0, filed: 0, replied: 0, open: 0 }; });
-  if (last >= 2) {
-    var vals = sheet.getRange(2, 1, last - 1, HEADERS.length).getValues();
+  if (vals.length) {
     vals.forEach(function (row) {
       if (!row[COL['ID']]) return;
       if (isOwnBrandRow_(row)) return;                   // own-brand rows are not complaints to file: they have their own segment

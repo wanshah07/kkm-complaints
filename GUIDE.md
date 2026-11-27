@@ -930,6 +930,22 @@ The URL itself is also checked at startup: it should look like `https://script.g
 
 ---
 
+### Clicks show at once (27 Nov 2026)
+
+**What was slow, measured with 8,600 complaints.** Two things, and they added up:
+
+| What | Before | Now |
+|---|---|---|
+| A filter chip, a tile, Refresh | The page rebuilt all 8,600 rows twice (table and phone cards): about 3 seconds frozen on a fast computer, far longer on a phone | 100 rows are drawn; the next 100 arrive as you scroll, or with **Show more**. About 0.05 s |
+| A status button | Waited for the backend, which read every cell of the sheet to recount the tiles, while holding the lock the scraper also needs | The badge, the list row and the tiles change at once; the change is sent behind it |
+| Opening a New complaint | One backend call, then two more reads of the whole list | One backend call; In-Progress shows at once |
+
+**If the backend refuses a change**, the page puts the old status back and says `Status NOT changed (still …)`. A change is never shown as done and then silently lost; closing the tab while one is still being sent asks first.
+
+**Two halves.** The page half is live by itself. The backend half (`Code.gs`: a status change no longer recounts the sheet; `list` reads the sheet once instead of twice, `bootstrap` once instead of three times) needs the usual one-time step: re-paste `Code.gs`, then **Deploy → Manage deployments → New version**. Until then the page is already fast to react; only the background save and the first load stay as slow as before.
+
+**Printing** still prints every matching row: the full list is drawn for the print and the short window comes back after it.
+
 ## 9. Keys and access
 
 | Name | Where it lives | What it is |
