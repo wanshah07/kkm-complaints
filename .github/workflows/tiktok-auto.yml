@@ -91,6 +91,14 @@ jobs:
       OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4.1' }}
       OPENAI_MODEL_FALLBACKS: ${{ vars.OPENAI_MODEL_FALLBACKS }}
       OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+      # Second gateway, the same one the main sweep has (scraper.yml). Without it a TikTok review had nowhere to go
+      # when the first gateway's model was down: on 27 Nov 2026 deepseek-v4-pro answered "503 Maintenance in progress"
+      # and all 20 videos of a run went unreviewed (they are retried, never filed unreviewed, but nothing moved).
+      OPENAI_ALT_BASE_URL: ${{ vars.OPENAI_ALT_BASE_URL }}
+      OPENAI_ALT_API_KEY: ${{ secrets.OPENAI_ALT_API_KEY }}
+      OPENAI_ALT_MODEL: ${{ vars.OPENAI_ALT_MODEL }}
+      OPENAI_ALT_MODEL_FALLBACKS: ${{ vars.OPENAI_ALT_MODEL_FALLBACKS }}
+      OPENAI_ALT_SHARE: ${{ vars.OPENAI_ALT_SHARE }}
       LLM_USE_SCREENSHOT: ${{ vars.LLM_USE_SCREENSHOT || '1' }}
       SCREENSHOT_MODE: ${{ vars.SCREENSHOT_MODE || 'apps_script' }}
       PW_STORAGE_STATE_SHOP_B64: ${{ secrets.PW_STORAGE_STATE_SHOP_B64 }}
