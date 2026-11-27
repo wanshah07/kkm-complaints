@@ -288,6 +288,7 @@
       </div>
       <!-- Cards (phones) -->
       <div id="cards" class="sm:hidden divide-y divide-slate-100"></div>
+      <div id="more" class="hidden p-3 text-center border-t border-slate-100"><button id="moreBtn" type="button" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"></button></div>
       <div id="empty" class="hidden p-10 text-center text-slate-500 text-sm">No complaints match these filters.</div>
       <div id="loading" class="p-10 grid place-items-center"><div class="spinner"></div></div>
     </section>
@@ -815,8 +816,8 @@ function rpc(fn, ...a) {
   switch (fn) {
     case 'apiBootstrap':        return api('bootstrap');
     case 'apiList':             return api('list', a[0] || {});
-    case 'apiOpen':             return api('open', { id: a[0] }).then(d => d.row);
-    case 'apiSetStatus':        return api('update_status', { id: a[0], status: a[1], remarks: a[2] });
+    case 'apiOpen':             return api('open', { id: a[0], lite: 1 }).then(d => d.row);
+    case 'apiSetStatus':        return api('update_status', { id: a[0], status: a[1], remarks: a[2], lite: 1 });
     case 'apiUpdateFields':     return api('update_fields', { id: a[0], fields: a[1] });
     case 'apiCreateManual':     return api('insert_manual', { record: a[0] });
     case 'apiUploadScreenshot': return api('upload_screenshot', { base64: a[0], mime: a[1], filename: a[2] });
@@ -898,12 +899,21 @@ async function boot(rethrow) {
   }
 }
 
-async function refresh(silent) {
-  const btn = $('btnRefresh'); const was = btn.innerHTML;
+// One refresh at a time: a second call while one is on its way joins it instead of asking the backend to read the
+// whole sheet again (Wan, 27 Nov 2026: "when click button the reaction is too slow").
+let refreshing = null;
+function refresh(silent) {
+  if (refreshing) return refreshing;
+  refreshing = doRefresh(silent).finally(() => { refreshing = null; });
+  return refreshing;
+}
+let lastRefreshAt = Date.now();
+async function doRefresh(silent) {
+  const btn = $('btnRefresh'); const was = btn.innerHTML; const started = lastRefreshAt = Date.now();
   btn.disabled = true; btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px"></span>';
   try {
     const r = await rpc('apiList', {});
-    state.rows = r.rows; state.stats = r.stats; renderAll(); loadArchived();
+    state.rows = r.rows; state.stats = r.stats; keepLocal(started); renderAll(); loadArchived();
     if (state.summaryFrom === 'server') { try { state.summary = (await api('summary')).summary; } catch (e) {} }
     if (state.view === 'home') renderHome(); if (state.view === 'routes') renderRoutes();
     if (state.view === 'own') loadOwn(); if (state.view === 'check') loadChecks();
@@ -1183,14 +1193,15 @@ function filtered() {
     (!q || ['Extracted Text','Nama Kosmetik','Violation Reason','Violation Type','Post URL','Remarks','ID','KKM Feedback'].some(k => String(r[k] || '').toLowerCase().includes(q))));
 }
 
-function renderTable() {
-  $('loading').classList.add('hidden');
-  const rows = filtered();
-  const accts = (state.filter.q.trim() || state.filter.type) ? new Set(rows.map(r => r['Brand'])).size : 0;
-  $('count').textContent = `${rows.length} of ${state.filter.status === 'Complete' ? completeCount() : state.rows.length}` + (accts ? ` · ${accts} account${accts === 1 ? '' : 's'}` : '');
-  $('empty').classList.toggle('hidden', rows.length > 0);
-  const routeTag = r => (r['Jenis Aduan'] && r['Jenis Aduan'] !== 'Iklan Kosmetik') ? `<div class="text-[11px] text-sky-700 mt-0.5 truncate">${esc(r['Jenis Aduan'])}</div>` : '';
-  $('rows').innerHTML = rows.map(r => `
+// The list draws a WINDOW of rows, not every row (Wan, 27 Nov 2026: "when click button the reaction is too slow").
+// With 8,600 complaints every click on a chip, a tile, a status button or Refresh rebuilt 17,200 blocks (each row once
+// as a table row and once as a phone card) and wired a handler to each: about 3 seconds of a frozen page on a fast
+// computer, far longer on a phone. Now the first LIST_PAGE rows are drawn and the rest arrive as the list is scrolled
+// (or with the button); the count beside the search still says how many match. Clicks are handled once, on the list.
+const LIST_PAGE = 100;
+let listShown = LIST_PAGE, listKey = '', listRows = [];
+const routeTag = r => (r['Jenis Aduan'] && r['Jenis Aduan'] !== 'Iklan Kosmetik') ? `<div class="text-[11px] text-sky-700 mt-0.5 truncate">${esc(r['Jenis Aduan'])}</div>` : '';
+const rowHtml = r => `
     <tr data-id="${esc(r['ID'])}" class="row-hover cursor-pointer">
       <td class="px-4 py-3 whitespace-nowrap text-slate-600">${esc(r['Date'])}</td>
       <td class="px-4 py-3 font-medium">${esc(r['Brand'])}</td>
@@ -1199,13 +1210,12 @@ function renderTable() {
       <td class="px-4 py-3 max-w-[340px]"><div class="font-medium">${esc(r['Violation Type'])}</div><div class="text-xs text-slate-500 clamp-2">${esc(r['Violation Reason'])}</div></td>
       <td class="px-4 py-3"><span class="badge ${STATUS_STYLE[r['Status']] || 'bg-slate-100'}">${esc(r['Status'])}</span>${r['KKM Feedback'] ? '<div class="text-[11px] text-emerald-700 mt-1">Replied</div>' : ''}</td>
       <td class="px-4 py-3 whitespace-nowrap text-xs">
-        <a href="${esc(safeHref(r['Post URL']))}" target="_blank" rel="noopener" class="text-blue-700 underline mr-2" onclick="event.stopPropagation()">post</a>
-        ${r['Screenshot Link'] ? `<a href="${esc(safeHref(r['Screenshot Link']))}" target="_blank" rel="noopener" class="text-blue-700 underline" onclick="event.stopPropagation()">shot</a>` : '<span class="text-slate-500">no shot</span>'}
+        <a href="${esc(safeHref(r['Post URL']))}" target="_blank" rel="noopener" class="text-blue-700 underline mr-2">post</a>
+        ${r['Screenshot Link'] ? `<a href="${esc(safeHref(r['Screenshot Link']))}" target="_blank" rel="noopener" class="text-blue-700 underline">shot</a>` : '<span class="text-slate-500">no shot</span>'}
       </td>
-    </tr>`).join('');
-  $('rows').querySelectorAll('tr[data-id]').forEach(tr => tr.onclick = () => openRow(tr.dataset.id));
-  // Phone cards: the same rows, one card each, thumb-sized targets.
-  $('cards').innerHTML = rows.map(r => `
+    </tr>`;
+// Phone cards: the same rows, one card each, thumb-sized targets.
+const cardHtml = r => `
     <button data-id="${esc(r['ID'])}" class="w-full text-left px-4 py-3 active:bg-slate-50">
       <div class="flex items-center gap-2">
         <span class="font-medium truncate">${esc(r['Brand'])}</span>
@@ -1215,9 +1225,41 @@ function renderTable() {
       <div class="text-xs text-slate-500 mt-0.5">${esc(r['Date'])} · ${esc(r['Nama Kosmetik'] || 'product not named')}${r['Jenis Aduan'] && r['Jenis Aduan'] !== 'Iklan Kosmetik' ? ' · ' + esc(r['Jenis Aduan']) : ''}${r['KKM Feedback'] ? ' · <span class="text-emerald-700">replied</span>' : ''}</div>
       <div class="text-sm mt-1 font-medium">${esc(r['Violation Type'])}</div>
       <div class="text-xs text-slate-500 clamp-2">${esc(r['Violation Reason'])}</div>
-    </button>`).join('');
-  $('cards').querySelectorAll('button[data-id]').forEach(b => b.onclick = () => openRow(b.dataset.id));
+    </button>`;
+function renderTable() {
+  $('loading').classList.add('hidden');
+  const rows = listRows = filtered();
+  const f = state.filter, key = [f.status, f.brand, f.type, f.platform, f.route, f.q].join('\u0001');
+  if (key !== listKey) { listKey = key; if (listShown !== Infinity) listShown = LIST_PAGE; }   // a new filter starts from the top
+  const accts = (state.filter.q.trim() || state.filter.type) ? new Set(rows.map(r => r['Brand'])).size : 0;
+  $('count').textContent = `${rows.length} of ${state.filter.status === 'Complete' ? completeCount() : state.rows.length}` + (accts ? ` · ${accts} account${accts === 1 ? '' : 's'}` : '');
+  $('empty').classList.toggle('hidden', rows.length > 0);
+  const page = rows.slice(0, listShown);
+  $('rows').innerHTML = page.map(rowHtml).join('');
+  $('cards').innerHTML = page.map(cardHtml).join('');
+  syncMore();
 }
+function syncMore() {
+  const left = listRows.length - Math.min(listShown, listRows.length);
+  $('more').classList.toggle('hidden', left <= 0);
+  if (left > 0) $('moreBtn').textContent = `Show ${Math.min(LIST_PAGE, left)} more · ${left} not shown yet`;
+}
+// The next window is ADDED under the rows already drawn; nothing above it is rebuilt.
+function showMore() {
+  if (listShown >= listRows.length) return;
+  const next = listRows.slice(listShown, listShown + LIST_PAGE); listShown += next.length;
+  $('rows').insertAdjacentHTML('beforeend', next.map(rowHtml).join(''));
+  $('cards').insertAdjacentHTML('beforeend', next.map(cardHtml).join(''));
+  syncMore();
+}
+$('moreBtn').onclick = showMore;
+if ('IntersectionObserver' in window) new IntersectionObserver(es => { if (es.some(e => e.isIntersecting) && state.view === 'list') showMore(); }, { rootMargin: '600px' }).observe($('more'));
+// One click handler for the whole list. A click on a link inside a row opens the link and nothing else.
+$('rows').onclick = e => { if (e.target.closest('a')) return; const tr = e.target.closest('tr[data-id]'); if (tr) openRow(tr.dataset.id); };
+$('cards').onclick = e => { const b = e.target.closest('button[data-id]'); if (b) openRow(b.dataset.id); };
+// Printing shows what is on screen, so every matching row is drawn for the print and the window comes back after it.
+window.addEventListener('beforeprint', () => { listShown = Infinity; renderTable(); });
+window.addEventListener('afterprint', () => { listShown = LIST_PAGE; renderTable(); });
 
 // ---------------------------------------------------------------------------
 // Overview (home). Figures come from the backend's `summary` (every row, archive included);
@@ -1529,16 +1571,79 @@ function driveThumb(link) {
   return m ? `https://drive.google.com/thumbnail?id=${m[1]}&sz=w1400` : link;
 }
 
+// ---------------------------------------------------------------------------
+// A click shows at once; the backend catches up behind it (Wan, 27 Nov 2026: "why status change or when click
+// button the reaction is too slow"). The Apps Script backend needs 2 seconds for an empty call and several more to
+// find and write one row in a sheet of 8,600, so a button that waited for it felt dead. Now the page changes the row,
+// the badge and the tiles itself, sends the change in the background, and puts everything back, loudly, if the
+// backend refuses it. Changes are sent one after another, in the order they were clicked.
+//   touched[id] = { row, t, pending }: the page's own copy of a row it changed, kept until a refresh that STARTED
+//   after the change has come back, so a refresh that was already on its way cannot paint the old status back.
+// ---------------------------------------------------------------------------
+const touched = {};
+let writeChain = Promise.resolve(), writesPending = 0;
+function queueWrite(fn, isChange = true) {
+  if (isChange) writesPending++;
+  const run = writeChain.then(fn);
+  writeChain = run.catch(() => {}).then(() => { if (isChange) writesPending--; });
+  return run;
+}
+window.addEventListener('beforeunload', e => { if (writesPending > 0) { e.preventDefault(); e.returnValue = ''; } });
+const isArchivedRow = r => String(r['KKM Feedback'] || '').trim() !== '';
+function bumpCounts(row, from, to) {
+  const c = state.stats && state.stats.counts;
+  if (!c || from === to || isArchivedRow(row)) return;          // a replied (archived) row is not counted under its status
+  if (c[from] > 0) c[from]--; c[to] = (c[to] || 0) + 1;
+}
+// After a refresh: rows this page changed since the refresh began keep the page's version.
+function keepLocal(started) {
+  Object.keys(touched).forEach(id => {
+    const t = touched[id];
+    if (!t.pending && t.t < started) { delete touched[id]; return; }
+    const i = state.rows.findIndex(r => r['ID'] === id);
+    if (i < 0) return;
+    const server = state.rows[i];
+    if ((server['Status'] || 'New') !== (t.row['Status'] || 'New')) bumpCounts(t.row, server['Status'] || 'New', t.row['Status'] || 'New');
+    state.rows[i] = t.row;
+  });
+}
+function touch(row, pending) { touched[row['ID']] = { row, t: Date.now(), pending }; }
+const todayMyt = () => new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
+// The status badge, date and footnote of the open drawer, without touching anything being typed in it.
+function syncDrawerStatus(row, note) {
+  if (!state.current || state.current['ID'] !== row['ID']) return;
+  state.current = Object.assign({}, state.current, { 'Status': row['Status'], 'Tarikh Melapor': row['Tarikh Melapor'], 'Updated At': row['Updated At'] });
+  const st = $('dStatus'); st.textContent = row['Status']; st.className = 'badge ' + (STATUS_STYLE[row['Status']] || '');
+  $('dTarikh').textContent = row['Tarikh Melapor'] || '— (set when marked Complete)';
+  $('dMeta').textContent = note || `Updated ${row['Updated At'] || '—'}`;
+}
+
+const opening = {};      // id -> the open call still on its way (Save waits for it: the list copy of a row is shortened)
 async function openRow(id) {
   const local = state.rows.find(r => r['ID'] === id) || (state.archived || []).find(r => r['ID'] === id);
   if (local) fillDrawer(local);
   showDrawer(true);
+  // New -> In-Progress happens server-side when a row is opened. Show it now.
+  const wasNew = !!local && (local['Status'] || 'New') === 'New';
+  if (wasNew) {
+    const shown = Object.assign({}, local, { 'Status': 'In-Progress' });
+    touch(shown, true); bumpCounts(shown, 'New', 'In-Progress'); mergeRow(shown); renderStats(); syncDrawerStatus(shown, 'Opening…');
+  }
+  const call = opening[id] = queueWrite(() => rpc('apiOpen', id), wasNew);
   try {
-    const fresh = await rpc('apiOpen', id);   // New → In-Progress happens server-side
+    const fresh = await call;
     if (!fresh || !fresh['ID']) throw new Error('the backend did not return this complaint (it may have been removed from the sheet). Press Refresh.');
-    mergeRow(fresh); fillDrawer(fresh);
-    if (local && local['Status'] === 'New' && fresh['Status'] === 'In-Progress') { toast('Status → In-Progress'); refreshStatsOnly(); }
-  } catch (e) { toast('Open failed: ' + e.message); }
+    const mine = touched[id] && touched[id].row;
+    // A status clicked while this was on its way is newer than what the open call read.
+    const row = (mine && touched[id].pending && mine['Status'] !== 'In-Progress') ? Object.assign({}, fresh, { 'Status': mine['Status'], 'Tarikh Melapor': mine['Tarikh Melapor'] || fresh['Tarikh Melapor'] }) : fresh;
+    if (wasNew && (fresh['Status'] || 'New') !== 'In-Progress' && row === fresh) bumpCounts(fresh, 'In-Progress', fresh['Status'] || 'New');
+    if (row === fresh) touch(fresh, false);
+    mergeRow(row); renderStats();
+    if (state.current && state.current['ID'] === id) fillDrawer(row, true);     // only if this row is still the one on screen
+  } catch (e) {
+    if (wasNew && touched[id] && touched[id].row['Status'] === 'In-Progress') { delete touched[id]; bumpCounts(local, 'In-Progress', 'New'); mergeRow(local); renderStats(); syncDrawerStatus(local); }
+    toast('Open failed: ' + e.message, 5000);
+  } finally { if (opening[id] === call) delete opening[id]; }
 }
 
 function mergeRow(row) {
@@ -1546,9 +1651,17 @@ function mergeRow(row) {
   if (i >= 0) state.rows[i] = row; else state.rows.unshift(row);
   renderTable();
 }
-async function refreshStatsOnly() { try { const r = await rpc('apiList', {}); state.stats = r.stats; state.rows = r.rows; renderAll(); loadArchived(); } catch (e) {} }
 
-function fillDrawer(r) {
+// The drawer's editable boxes and the column each one holds.
+const DRAWER_FIELDS = { eViolationType: 'Violation Type', eViolationReason: 'Violation Reason', eNama: 'Nama Kosmetik', eNot: 'Nombor Notifikasi', eJenis: 'Jenis Aduan', eDeskripsi: 'Deskripsi Aduan', eFeedback: 'KKM Feedback', eRemarks: 'Remarks' };
+const sameText = (a, b) => String(a == null ? '' : a).replace(/\r\n?/g, '\n') === String(b == null ? '' : b).replace(/\r\n?/g, '\n');
+// keepEdits: the full row has arrived for a drawer already on screen. Anything typed in the meantime stays; every
+// box still showing what it was filled with takes the fresh (full-length) value.
+function fillDrawer(r, keepEdits) {
+  const edits = {};
+  if (keepEdits && state.current && state.current['ID'] === r['ID']) {
+    Object.keys(DRAWER_FIELDS).forEach(id => { const k = DRAWER_FIELDS[id]; const was = k === 'Jenis Aduan' ? (state.current[k] || 'Iklan Kosmetik') : state.current[k]; if (!sameText($(id).value, was)) edits[id] = $(id).value; });
+  }
   state.current = r;
   $('dTitle').textContent = `${r['Brand']} · ${r['Platform']} · ${r['ID']}`;
   $('dSub').textContent = `Detected ${r['Date']} · source ${r['Source'] || '—'}`;
@@ -1574,6 +1687,7 @@ function fillDrawer(r) {
   $('eRemarks').value = r['Remarks'] || '';
   $('dMeta').textContent = `Updated ${r['Updated At'] || '—'}`;
   $('dossierHint').textContent = '';
+  Object.keys(edits).forEach(id => { $(id).value = edits[id]; });
   updateRouteUi();
 }
 
@@ -1587,6 +1701,8 @@ $('btnBackCosmetic').onclick = async () => { $('eJenis').value = 'Iklan Kosmetik
 $('eJenis').addEventListener('change', () => $('btnBackCosmetic').classList.toggle('hidden', $('eJenis').value === 'Iklan Kosmetik'));
 async function saveDrawer() {
   if (!state.current) return;
+  // The list holds a shortened copy of long text; wait for the full row before saving, or the short copy is what is saved.
+  if (opening[state.current['ID']]) { $('btnSave').disabled = true; try { await opening[state.current['ID']]; } catch (e) {} $('btnSave').disabled = false; if (!state.current) return; }
   const fields = {
     'Violation Type': $('eViolationType').value, 'Violation Reason': $('eViolationReason').value,
     'Nama Kosmetik': $('eNama').value, 'Nombor Notifikasi': $('eNot').value, 'Jenis Aduan': $('eJenis').value,
@@ -1594,23 +1710,36 @@ async function saveDrawer() {
     'Remarks': $('eRemarks').value
   };
   $('btnSave').disabled = true;
-  try { const r = await rpc('apiUpdateFields', state.current['ID'], fields); mergeRow(r.row); fillDrawer(r.row); toast('Saved'); }
+  try { const r = await queueWrite(() => rpc('apiUpdateFields', state.current['ID'], fields)); touch(r.row, false); mergeRow(r.row); if (state.current && state.current['ID'] === r.row['ID']) fillDrawer(r.row); toast('Saved'); }
   catch (e) { toast('Save failed: ' + e.message); }
   finally { $('btnSave').disabled = false; }
 }
 
-let statusBusy = false;
 async function setStatus(status) {
-  if (!state.current || statusBusy) return;
+  if (!state.current) return;
   if (status === 'Complete' && !confirm('Mark as Complete? This records today as Tarikh Melapor.')) return;
-  statusBusy = true;
-  const btns = document.querySelectorAll('.stBtn'); btns.forEach(b => b.disabled = true);
+  const before = state.current, id = before['ID'], from = before['Status'] || 'New', remarks = $('eRemarks').value;
+  // Shown at once.
+  const shown = Object.assign({}, before, { 'Status': status });
+  if (remarks) shown['Remarks'] = remarks;
+  if (status === 'Complete' && !before['Tarikh Melapor']) shown['Tarikh Melapor'] = todayMyt();
+  touch(shown, true); bumpCounts(shown, from, status); mergeRow(shown); renderStats(); syncDrawerStatus(shown, 'Saving…');
+  toast('Status → ' + status);
+  // Sent behind it, after any change clicked earlier.
   try {
-    const r = await rpc('apiSetStatus', state.current['ID'], status, $('eRemarks').value);
+    const r = await queueWrite(() => rpc('apiSetStatus', id, status, remarks));
     if (!r.ok) throw new Error(r.error);
-    mergeRow(r.row); fillDrawer(r.row); state.stats = r.stats; renderStats(); toast('Status → ' + status);
-  } catch (e) { toast('Status change failed: ' + e.message); }
-  finally { statusBusy = false; btns.forEach(b => b.disabled = false); }
+    if (touched[id] && touched[id].row === shown) {               // nothing newer was clicked on this row meanwhile
+      touch(r.row, false); mergeRow(r.row); syncDrawerStatus(r.row);
+      if (r.stats && writesPending <= 1) { state.stats = r.stats; }      // an older backend still sends its own count
+      renderStats();
+    }
+  } catch (e) {
+    if (touched[id] && touched[id].row === shown) {               // put it back, and say so
+      delete touched[id]; bumpCounts(shown, status, from); mergeRow(before); renderStats(); syncDrawerStatus(before);
+    }
+    toast(`Status NOT changed (still ${from}): ${e.message}`, 7000);
+  }
 }
 
 function copy(text, label) {
@@ -1926,13 +2055,14 @@ async function fillKkmForm() {
       'Nama Kosmetik': $('eNama').value, 'Nombor Notifikasi': $('eNot').value, 'Jenis Aduan': $('eJenis').value,
       'Deskripsi Aduan': $('eDeskripsi').value, 'KKM Feedback': $('eFeedback').value, 'Remarks': $('eRemarks').value
     };
-    let r = await rpc('apiUpdateFields', state.current['ID'], fields);   // what is filed is what is saved
+    const fid = state.current['ID'];
+    let r = await queueWrite(() => rpc('apiUpdateFields', fid, fields));   // what is filed is what is saved
     // Wan, 24 Oct 2026: opening the form means the complaint is being worked on, so a New row moves to
     // In-Progress here (never to Complete: Submit on the form is still his click, then Mark Complete).
     if ((r.row['Status'] || 'New') === 'New') {
-      try { r = await rpc('apiSetStatus', state.current['ID'], 'In-Progress', ''); } catch (e) { toast('Status not changed: ' + e.message); }
+      try { const was = r.row; r = await queueWrite(() => rpc('apiSetStatus', fid, 'In-Progress', '')); bumpCounts(r.row, was['Status'] || 'New', r.row['Status']); renderStats(); } catch (e) { toast('Status not changed: ' + e.message); }
     }
-    mergeRow(r.row); fillDrawer(r.row);
+    touch(r.row, false); mergeRow(r.row); fillDrawer(r.row);
     const v = kkmValues();
     const email = $('kkmEmail') ? $('kkmEmail').value : KKM_CHOOSE;
     // {Akaun} fills a form's own e-mail question with the account the form opens under.
@@ -1964,7 +2094,7 @@ async function openRouteForm() {
   try {
     const fields = { 'Violation Type': $('eViolationType').value, 'Violation Reason': $('eViolationReason').value, 'Nama Kosmetik': $('eNama').value, 'Nombor Notifikasi': $('eNot').value,
                      'Jenis Aduan': v, 'Deskripsi Aduan': $('eDeskripsi').value, 'KKM Feedback': $('eFeedback').value, 'Remarks': $('eRemarks').value };
-    const r = await rpc('apiUpdateFields', state.current['ID'], fields); mergeRow(r.row); fillDrawer(r.row);
+    const r = await queueWrite(() => rpc('apiUpdateFields', state.current['ID'], fields)); touch(r.row, false); mergeRow(r.row); fillDrawer(r.row);
     const vals = kkmValues(); let { url: u, unknown } = kkmBuildUrl(url, vals);
     if (u.length > KKM_URL_MAX) { ({ url: u, unknown } = kkmBuildUrl(url, vals, ['Deskripsi Aduan'])); copy(vals['Deskripsi Aduan'], 'Deskripsi'); }
     if (w) { w.opener = null; w.location.href = u; } else window.open(u, '_blank', 'noopener');
@@ -1975,9 +2105,9 @@ async function openRouteForm() {
 // Re-run the gate whenever a row is drawn or an input it reads changes. The tick is cleared on
 // every newly opened row: a confirmation belongs to one complaint, never carried to the next.
 const kkmFillDrawer_ = fillDrawer;
-fillDrawer = function (r) {
+fillDrawer = function (r, keepEdits) {
   const same = state.current && r && state.current['ID'] === r['ID'];
-  kkmFillDrawer_(r);
+  kkmFillDrawer_(r, keepEdits);
   if (!same && $('kkmConfirm')) $('kkmConfirm').checked = false;
   // The template (and so its account list) arrives with bootstrap, after the picker was first drawn.
   if ($('kkmEmail') && (!$('kkmEmail').options.length || kkmAllAccounts().some(a => ![...$('kkmEmail').options].some(o => o.value === a)))) kkmRenderEmails();
@@ -2511,7 +2641,12 @@ async function checkAct(h, what, card, btn) {
   } catch (e) { toast(/Unknown action/.test(e.message) ? NEEDS_BACKEND : e.message, 5000); btn.disabled = false; btn.textContent = was; }
 }
 
-setInterval(() => { if (cfg.key && $('drawer').classList.contains('translate-x-full') && $('modal').classList.contains('hidden') && $('connect').classList.contains('hidden')) refresh(true); }, 180000);
+// The list refreshes itself every 3 minutes, but not while a change is still being sent, not over an open drawer, and
+// not in a tab nobody is looking at (each refresh makes the backend read the whole sheet); a tab that comes back to the
+// front after more than 3 minutes catches up at once.
+const autoRefreshOk = () => cfg.key && !writesPending && !document.hidden && $('drawer').classList.contains('translate-x-full') && $('modal').classList.contains('hidden') && $('connect').classList.contains('hidden');
+setInterval(() => { if (autoRefreshOk()) refresh(true); }, 180000);
+document.addEventListener('visibilitychange', () => { if (autoRefreshOk() && Date.now() - lastRefreshAt > 180000) refresh(true); });
 // Platform status pills. status.json is deployed beside this page; a missing or unreadable file hides the strip
 // rather than showing anything that could read as "all live". Older than 14 h is shown as old, never as live.
 let platDetailKey = '';
