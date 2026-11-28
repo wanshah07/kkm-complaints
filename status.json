@@ -1,5 +1,5 @@
 {
- "checked_at": "2026-11-28T00:17:44Z",
+ "checked_at": "2026-11-28T03:22:13Z",
  "platforms": [
   {
    "key": "instagram",
@@ -7,7 +7,7 @@
    "state": "live",
    "detail": "Read through Apify, so no login of ours is needed. The saved login (the fallback) is not working: No working login (Instagram ended the saved login). Still reading the newest 6 posts of each account through Instagram's public embed; older posts need the session recorded again (",
    "links": 6,
-   "at": "2026-11-28T00:17:58Z"
+   "at": "2026-11-28T03:22:25Z"
   },
   {
    "key": "facebook",
@@ -15,7 +15,7 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-28T00:18:36Z"
+   "at": "2026-11-28T03:22:48Z"
   },
   {
    "key": "threads",
@@ -23,7 +23,7 @@
    "state": "live",
    "detail": "Signed in and reading posts normally.",
    "links": 40,
-   "at": "2026-11-28T00:19:48Z"
+   "at": "2026-11-28T03:24:10Z"
   },
   {
    "key": "tiktok",
@@ -46,15 +46,15 @@
    "label": "Apify",
    "links": null,
    "state": "live",
-   "at": "2026-11-28T00:19:48Z",
+   "at": "2026-11-28T03:24:10Z",
    "detail": "Apify is the main Instagram reader, no login of ours needed (0.03 of 10.00 USD used this month). Playwright is only the fallback."
   }
  ],
  "notes": [],
  "session_days_left": {
-  "instagram": 363.2,
+  "instagram": 363.1,
   "facebook": null,
-  "threads": 363.2
+  "threads": 363.1
  },
  "last_sweep": {
   "conclusion": "success",
