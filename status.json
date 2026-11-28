@@ -1,5 +1,5 @@
 {
- "checked_at": "2026-11-27T19:04:41Z",
+ "checked_at": "2026-11-28T00:17:44Z",
  "platforms": [
   {
    "key": "instagram",
@@ -7,7 +7,7 @@
    "state": "live",
    "detail": "Read through Apify, so no login of ours is needed. The saved login (the fallback) is not working: No working login (Instagram ended the saved login). Still reading the newest 6 posts of each account through Instagram's public embed; older posts need the session recorded again (",
    "links": 6,
-   "at": "2026-11-27T19:04:54Z"
+   "at": "2026-11-28T00:17:58Z"
   },
   {
    "key": "facebook",
@@ -15,7 +15,7 @@
    "state": "live",
    "detail": "Read through Meta's Ad Library, which needs no login: 4 advertisement(s) listed for the test page.",
    "links": 4,
-   "at": "2026-11-27T19:05:18Z"
+   "at": "2026-11-28T00:18:36Z"
   },
   {
    "key": "threads",
@@ -23,42 +23,42 @@
    "state": "live",
    "detail": "Signed in and reading posts normally.",
    "links": 40,
-   "at": "2026-11-27T19:06:35Z"
+   "at": "2026-11-28T00:19:48Z"
   },
   {
    "key": "tiktok",
    "label": "TikTok links",
    "links": null,
    "state": "live",
-   "at": "2026-11-27T14:01:52Z",
-   "detail": "The link checker is running (last run 2026-11-27 22:01 MYT). Works on links you paste into the Links tab."
+   "at": "2026-11-27T22:38:53Z",
+   "detail": "The link checker is running (last run 2026-11-28 06:38 MYT). Works on links you paste into the Links tab."
   },
   {
    "key": "tiktok_auto",
    "label": "TikTok accounts",
    "links": null,
    "state": "live",
-   "at": "2026-11-27T15:19:30Z",
-   "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-27 23:19 MYT). Only an account's ten newest are visible at a time."
+   "at": "2026-11-28T00:16:25Z",
+   "detail": "New videos of the accounts in the Targets tab's TikTok column are found and reviewed automatically (last run 2026-11-28 08:16 MYT). Only an account's ten newest are visible at a time."
   },
   {
    "key": "apify",
    "label": "Apify",
    "links": null,
    "state": "live",
-   "at": "2026-11-27T19:06:35Z",
+   "at": "2026-11-28T00:19:48Z",
    "detail": "Apify is the main Instagram reader, no login of ours needed (0.03 of 10.00 USD used this month). Playwright is only the fallback."
   }
  ],
  "notes": [],
  "session_days_left": {
-  "instagram": 363.5,
+  "instagram": 363.2,
   "facebook": null,
-  "threads": 363.5
+  "threads": 363.2
  },
  "last_sweep": {
   "conclusion": "success",
-  "at": "2026-11-27T04:26:42Z",
+  "at": "2026-11-27T23:38:58Z",
   "title": "KKM complaint scraper"
  },
  "overall": "live"
